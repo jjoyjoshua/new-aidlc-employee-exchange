@@ -3,99 +3,161 @@
   "requirements": {
     "REQ-001": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-001"
+      ]
     },
     "REQ-002": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-001",
+        "SCR-010"
+      ]
     },
     "REQ-003": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-002",
+        "SCR-004",
+        "SCR-005"
+      ]
     },
     "REQ-004": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-008",
+        "SCR-009"
+      ]
     },
     "REQ-005": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-001",
+        "SCR-008"
+      ]
     },
     "REQ-006": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-003"
+      ]
     },
     "REQ-007": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-003"
+      ]
     },
     "REQ-008": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-003"
+      ]
     },
     "REQ-009": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-002"
+      ]
     },
     "REQ-010": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-002"
+      ]
     },
     "REQ-011": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-005"
+      ]
     },
     "REQ-012": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-005"
+      ]
     },
     "REQ-013": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-005"
+      ]
     },
     "REQ-014": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-005"
+      ]
     },
     "REQ-015": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-006",
+        "SCR-007"
+      ]
     },
     "REQ-016": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-006",
+        "SCR-007"
+      ]
     },
     "REQ-017": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-003",
+        "SCR-006"
+      ]
     },
     "REQ-018": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-008",
+        "SCR-009",
+        "SCR-010"
+      ]
     },
     "REQ-019": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-009"
+      ]
     },
     "REQ-020": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-008"
+      ]
     },
     "REQ-021": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-008",
+        "SCR-010"
+      ]
     },
     "REQ-022": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-008",
+        "SCR-009"
+      ]
     },
     "REQ-023": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-003"
+      ]
     },
     "REQ-024": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-002",
+        "SCR-005",
+        "SCR-008"
+      ]
     },
     "REQ-025": {
       "stories": [],
@@ -103,19 +165,30 @@
     },
     "REQ-026": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-004"
+      ]
     },
     "REQ-027": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-004"
+      ]
     },
     "REQ-028": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-002",
+        "SCR-005"
+      ]
     },
     "NFR-001": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-002",
+        "SCR-003",
+        "SCR-005"
+      ]
     },
     "NFR-002": {
       "stories": [],
@@ -123,11 +196,25 @@
     },
     "NFR-003": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-001",
+        "SCR-010"
+      ]
     },
     "NFR-004": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-004",
+        "SCR-005",
+        "SCR-006",
+        "SCR-007",
+        "SCR-008",
+        "SCR-009",
+        "SCR-010"
+      ]
     },
     "NFR-005": {
       "stories": [],
@@ -135,7 +222,9 @@
     },
     "NFR-006": {
       "stories": [],
-      "screens": []
+      "screens": [
+        "SCR-004"
+      ]
     },
     "NFR-007": {
       "stories": [],
@@ -143,6 +232,275 @@
     }
   },
   "stories": {},
-  "screens": {},
+  "screens": {
+    "SCR-001": {
+      "artifact": "inception/design/screens/SCR-001-sign-in.md",
+      "stories": [],
+      "requirements": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-005",
+        "NFR-003",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05"
+      ],
+      "entry": true,
+      "links_to": [
+        "SCR-002",
+        "SCR-005",
+        "SCR-010"
+      ]
+    },
+    "SCR-002": {
+      "artifact": "inception/design/screens/SCR-002-my-bookings.md",
+      "stories": [],
+      "requirements": [
+        "REQ-003",
+        "REQ-009",
+        "REQ-010",
+        "REQ-024",
+        "REQ-028",
+        "NFR-001",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07",
+        "ST-08",
+        "ST-09",
+        "ST-10"
+      ],
+      "links_to": [
+        "SCR-003",
+        "SCR-004"
+      ]
+    },
+    "SCR-003": {
+      "artifact": "inception/design/screens/SCR-003-book-a-desk.md",
+      "stories": [],
+      "requirements": [
+        "REQ-006",
+        "REQ-007",
+        "REQ-008",
+        "REQ-017",
+        "REQ-023",
+        "NFR-001",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07",
+        "ST-08",
+        "ST-09",
+        "ST-10",
+        "ST-11",
+        "ST-12"
+      ],
+      "links_to": [
+        "SCR-002"
+      ]
+    },
+    "SCR-004": {
+      "artifact": "inception/design/screens/SCR-004-settings.md",
+      "stories": [],
+      "requirements": [
+        "REQ-003",
+        "REQ-026",
+        "REQ-027",
+        "NFR-004",
+        "NFR-006"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07"
+      ],
+      "links_to": [
+        "SCR-002"
+      ]
+    },
+    "SCR-005": {
+      "artifact": "inception/design/screens/SCR-005-all-bookings.md",
+      "stories": [],
+      "requirements": [
+        "REQ-003",
+        "REQ-011",
+        "REQ-012",
+        "REQ-013",
+        "REQ-014",
+        "REQ-024",
+        "REQ-028",
+        "NFR-001",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07",
+        "ST-08",
+        "ST-09",
+        "ST-10",
+        "ST-11"
+      ],
+      "links_to": [
+        "SCR-006",
+        "SCR-008"
+      ]
+    },
+    "SCR-006": {
+      "artifact": "inception/design/screens/SCR-006-desks.md",
+      "stories": [],
+      "requirements": [
+        "REQ-015",
+        "REQ-016",
+        "REQ-017",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07",
+        "ST-08",
+        "ST-09",
+        "ST-10"
+      ],
+      "links_to": [
+        "SCR-005",
+        "SCR-007",
+        "SCR-008"
+      ]
+    },
+    "SCR-007": {
+      "artifact": "inception/design/screens/SCR-007-desk-form.md",
+      "stories": [],
+      "requirements": [
+        "REQ-015",
+        "REQ-016",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07"
+      ],
+      "links_to": [
+        "SCR-006"
+      ]
+    },
+    "SCR-008": {
+      "artifact": "inception/design/screens/SCR-008-people.md",
+      "stories": [],
+      "requirements": [
+        "REQ-004",
+        "REQ-005",
+        "REQ-018",
+        "REQ-020",
+        "REQ-021",
+        "REQ-022",
+        "REQ-024",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07",
+        "ST-08",
+        "ST-09",
+        "ST-10",
+        "ST-11",
+        "ST-12",
+        "ST-13",
+        "ST-14"
+      ],
+      "links_to": [
+        "SCR-005",
+        "SCR-006",
+        "SCR-009"
+      ]
+    },
+    "SCR-009": {
+      "artifact": "inception/design/screens/SCR-009-user-form.md",
+      "stories": [],
+      "requirements": [
+        "REQ-004",
+        "REQ-018",
+        "REQ-019",
+        "REQ-022",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06",
+        "ST-07",
+        "ST-08"
+      ],
+      "links_to": [
+        "SCR-008"
+      ]
+    },
+    "SCR-010": {
+      "artifact": "inception/design/screens/SCR-010-set-your-password.md",
+      "stories": [],
+      "requirements": [
+        "REQ-002",
+        "REQ-018",
+        "REQ-021",
+        "NFR-003",
+        "NFR-004"
+      ],
+      "states": [
+        "ST-01",
+        "ST-02",
+        "ST-03",
+        "ST-04",
+        "ST-05",
+        "ST-06"
+      ],
+      "links_to": [
+        "SCR-002",
+        "SCR-005"
+      ]
+    }
+  },
   "lessons": []
 }
