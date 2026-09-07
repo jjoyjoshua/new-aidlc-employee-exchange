@@ -1,6 +1,139 @@
 {
   "$comment": "Traceability knowledge graph: REQ <-> US <-> tests, plus screens (US <-> SCR -> states, with flow edges: links_to[] between screens and \"entry\": true on roots), decisions (US -> ADR) and lessons-learned edges. Edited in the same PR as the artifacts it links; validated by tools/aidlc-check.mjs; traceability-matrix.md is generated from it (never hand-edited).",
-  "requirements": {},
+  "requirements": {
+    "REQ-001": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-002": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-003": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-004": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-005": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-006": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-007": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-008": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-009": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-010": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-011": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-012": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-013": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-014": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-015": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-016": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-017": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-018": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-019": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-020": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-021": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-022": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-023": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-024": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-025": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-026": {
+      "stories": [],
+      "screens": []
+    },
+    "REQ-027": {
+      "stories": [],
+      "screens": []
+    },
+    "NFR-001": {
+      "stories": [],
+      "screens": []
+    },
+    "NFR-002": {
+      "stories": [],
+      "screens": []
+    },
+    "NFR-003": {
+      "stories": [],
+      "screens": []
+    },
+    "NFR-004": {
+      "stories": [],
+      "screens": []
+    },
+    "NFR-005": {
+      "stories": [],
+      "screens": []
+    },
+    "NFR-006": {
+      "stories": [],
+      "screens": []
+    }
+  },
   "stories": {},
   "screens": {},
   "lessons": []
