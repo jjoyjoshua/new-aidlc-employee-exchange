@@ -31,9 +31,11 @@
 | REQ-025 | — | — | unscheduled |
 | REQ-026 | — | — | unscheduled |
 | REQ-027 | — | — | unscheduled |
+| REQ-028 | — | — | unscheduled |
 | NFR-001 | — | — | unscheduled |
 | NFR-002 | — | — | unscheduled |
 | NFR-003 | — | — | unscheduled |
 | NFR-004 | — | — | unscheduled |
 | NFR-005 | — | — | unscheduled |
 | NFR-006 | — | — | unscheduled |
+| NFR-007 | — | — | unscheduled |

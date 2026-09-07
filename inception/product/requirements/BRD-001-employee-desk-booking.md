@@ -17,7 +17,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | Actor    | Description                                    | Needs                                                                                                                       |
 | -------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Employee | Staff member who works hybrid and books a desk | Sign in, book/view/cancel desks; receive booking emails; optionally enable browser push for book/cancel                      |
-| Admin    | Office administrator                           | Sign in; view/cancel all bookings; manage desks and users. Whether Admins also receive booking emails is open question #10. |
+| Admin    | Office administrator                           | Sign in; view/cancel all bookings; manage desks and users. Admins do **not** receive copies of booking emails (§10, decided 2026-09-07). |
 
 ## 3. Workflows
 
@@ -35,7 +35,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 
 7. **Admin manages users:** Admin signs in → views user list → creates a user (email, role, initial credentials) → edits user details → assigns **Employee** or **Admin** role → deactivates users → resets a user's password (admin-initiated, not self-service).
 
-8. **Booking notifications (email):** When a booking becomes **Confirmed** or **Cancelled**, the system sends an email to the employee who owns the booking. For each **Confirmed** booking on a future working day, the system sends a reminder email on the previous calendar day (office local timezone).
+8. **Booking notifications (email):** When a booking becomes **Confirmed** or **Cancelled**, the system sends an email to the employee who owns the booking. For each **Confirmed** booking on a future working day, the system sends a reminder email at 08:00 office local time on the previous calendar day.
 
 9. **Booking notifications (browser push, optional):** An Employee may opt in to browser push alerts. When opted in, the system sends a push notification on book and on cancel (employee-initiated or admin-initiated cancel of that employee's booking). Day-before reminders remain email only.
 
@@ -74,6 +74,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | REQ-025 | For each **Confirmed** booking on a future working day, the system sends a reminder email to the booking owner on the calendar day immediately before the booking date (office local timezone). | Must     | 2026-08-14-notifications.md                      |
 | REQ-026 | An Employee can opt in to or opt out of browser push notifications for booking events; default is opt-out.                                                                                      | Must     | 2026-08-14-notifications.md                      |
 | REQ-027 | When an Employee has opted in to browser push, the system sends a push notification on **Confirmed** (book) and **Cancelled** events for that Employee's bookings.                              | Must     | 2026-08-14-notifications.md                      |
+| REQ-028 | When a **Confirmed** booking's date has passed in office local time without cancellation, the booking is presented to Employees and Admins, and is filterable by Admins, as **Completed**.      | Must     | PO/BA decision 2026-09-07 (open question #9)     |
 
 ## 5. Non-functional requirements
 
@@ -82,9 +83,10 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | NFR-001 | Locale/time   | All booking dates and the "today" boundary use the office local timezone.                                                  | Must     |
 | NFR-002 | Scope         | The application supports exactly one office location in this release.                                                      | Must     |
 | NFR-003 | Security      | Sign-in credentials are protected in transit (HTTPS in deployed environments).                                             | Must     |
-| NFR-004 | Usability     | Target device support (desktop-only vs mobile-responsive web): `TBD (owner: PO/client)` — see open question #4              | Should   |
+| NFR-004 | Usability     | The web UI must be usable on both mobile and desktop browsers (responsive layout); every screen is verified at 360px and 1280px viewport widths. | Must     |
 | NFR-005 | Notifications | Transactional emails (book, cancel, reminder) must be sent reliably; failed sends must be logged for operational follow-up. | Must     |
 | NFR-006 | Notifications | Browser push requires user opt-in and supported browser permission; unsupported browsers degrade gracefully (email only).   | Must     |
+| NFR-007 | Config        | The transactional email sender address and mail service are configuration values, never hard-coded; production values are `TBD (owner: IT)` and required before go-live. | Must     |
 
 ## 6. Business rules
 
@@ -121,8 +123,8 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - **Statement:** Every booking must be in exactly one status: **Confirmed** (active future or current-day reservation), **Cancelled** (voided before use), or **Completed** (the booking date has passed without cancellation). A **Confirmed** booking whose date has passed in office local time must be presented and filterable as **Completed**.
 - **Rationale:** Admin filtering and reporting depend on a shared status vocabulary agreed with the client.
 - **Examples:** Pass — past **Confirmed** booking shown as **Completed** after the date. Fail — booking remains **Confirmed** indefinitely after the date passes.
-- **Affects:** REQ-009, REQ-011, REQ-012, REQ-013
-- **Note:** whether the Confirmed → Completed transition is a stored state change or derived at read time is a design/architecture decision, not a business one. That the transition happens is required here; no functional REQ states it separately — see open question #9.
+- **Affects:** REQ-009, REQ-011, REQ-012, REQ-013, REQ-028
+- **Note:** whether the Confirmed → Completed transition is a stored state change or derived at read time is a design/architecture decision, not a business one. That it happens is now stated as **REQ-028** (decided 2026-09-07, open question #9).
 
 ### BR-001.6 Cancellation eligibility
 
@@ -147,11 +149,11 @@ Provide a web application so employees at a single hybrid office can reserve a s
 
 ### BR-001.9 Deactivate desk with future bookings
 
-- **Statement:** When an Admin deactivates a desk that has one or more **Confirmed** bookings for today or a future date, the system must block deactivation until those bookings are cancelled or the Admin explicitly cancels them as part of the deactivate action.
-- **Rationale:** Prevents employees holding reservations on desks removed from service without notice.
-- **Examples:** Pass — Admin deactivates B-03 with no future **Confirmed** bookings. Fail — Admin deactivates B-03 while a **Confirmed** booking exists for next Tuesday unless that booking is cancelled in the same flow.
+- **Statement:** When an Admin attempts to deactivate a desk that has one or more **Confirmed** bookings dated today or later, the system must reject the deactivation and report how many such bookings exist. Deactivation succeeds only once every one of those bookings has been cancelled. The system must not cancel bookings as part of the deactivate action.
+- **Rationale:** Prevents employees holding reservations on desks removed from service without notice, and forces the Admin to see who they displace before the desk disappears.
+- **Examples:** Pass — Admin deactivates B-03 with no **Confirmed** bookings dated today or later. Fail — Admin deactivates B-03 while a **Confirmed** booking exists for next Tuesday. Fail — deactivation succeeds and silently cancels that booking.
 - **Affects:** REQ-017, REQ-014
-- **Note:** this rule currently permits two different behaviours (hard block, or cancel-in-the-same-flow) and is therefore not yet pass/fail decidable on its own. Open question #6 must pick one before a story is sliced against it.
+- **Decided:** 2026-09-07 (PO/BA, open question #6) — hard block, chosen over cancelling the affected bookings inside the deactivate action.
 
 ### BR-001.10 User email uniqueness
 
@@ -183,9 +185,9 @@ Provide a web application so employees at a single hybrid office can reserve a s
 
 ### BR-001.14 Day-before reminder email
 
-- **Statement:** When a **Confirmed** booking date is a future working day (Mon–Fri, office local timezone), the system must send one reminder email on the previous calendar day; no reminder is sent for same-day bookings or for **Cancelled**/**Completed** bookings.
-- **Rationale:** Reduces no-shows; "day-before" defined in office local time per client request.
-- **Examples:** Pass — **Confirmed** booking for Wed 20 Aug; reminder sent Tue 19 Aug (office TZ). Fail — Reminder sent for a **Cancelled** booking.
+- **Statement:** When a **Confirmed** booking date is a future working day (Mon–Fri, office local timezone), the system must send one reminder email at **08:00 office local time** on the previous calendar day; no reminder is sent for same-day bookings or for **Cancelled**/**Completed** bookings.
+- **Rationale:** Reduces no-shows; the reminder lands as the working day starts, leaving the recipient a full day to cancel. Both "day-before" and 08:00 are defined in office local time (PO/BA, 2026-09-07).
+- **Examples:** Pass — **Confirmed** booking for Wed 20 Aug; reminder sent 08:00 Tue 19 Aug office time. Fail — reminder sent for a **Cancelled** booking. Fail — reminder sent at 08:00 UTC while the office is not on UTC.
 - **Affects:** REQ-025, BR-001.3, NFR-001
 
 ### BR-001.15 Browser push opt-in only
@@ -214,7 +216,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | V-06       | Cancellation only on **Confirmed** bookings for today or future dates             | BR-001.6                                                                          |
 | V-07       | Admin-only actions require **Admin** role                                         | REQ-004, REQ-011–REQ-022                                                          |
 | V-08       | Desk number must be unique on add/edit                                            | REQ-015, REQ-016, BR-001.8                                                        |
-| V-09       | Cannot deactivate desk with unresolved future **Confirmed** bookings              | REQ-017, BR-001.9                                                                 |
+| V-09       | Deactivation rejected while any **Confirmed** booking dated today or later exists on that desk | REQ-017, BR-001.9                                            |
 | V-10       | User email must be unique on create/edit                                          | REQ-018, REQ-019, BR-001.10                                                       |
 | V-11       | Cannot remove the last active **Admin**                                           | REQ-020, REQ-022, BR-001.11                                                       |
 | V-12       | Password must meet minimum length/complexity policy on create and reset           | REQ-018, REQ-021 — **min 8 chars; upper, lower, digit, special** (PO/security, 2026-08-21) |
@@ -226,20 +228,20 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - Single office location only (no multi-site routing or selection).
 - Email/password authentication only; no SSO or social login in this release.
 - Desk inventory and user accounts are maintained in-app by Admins (REQ-015–REQ-022); initial bootstrap of the first Admin account: **DbInitializer seed when no users exist** (PO/Architect, 2026-08-21).
-- Company public holidays are not yet defined in scope — until resolved, only weekend exclusion (BR-001.3) is guaranteed.
+- Company public holidays are **out of scope for this release** (decided 2026-09-07, open question #2); only the weekend exclusion (BR-001.3) applies. A desk booked on a public holiday simply goes unused.
 
 ## 9. Risks
 
 | ID       | Risk                                                                                   | Likelihood | Impact | Mitigation                                                                            |
 | -------- | -------------------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------- |
 | RISK-001 | Admin provisioning expands delivery surface (CRUD, validation, audit).                 | Medium     | Medium | UX derives the admin screens from the IA; Architect addresses data model; slice stories after design merge. |
-| RISK-002 | Holiday calendar undefined — employees may book on company holidays.                   | Medium     | Medium | Resolve open question #2; interim Mon–Fri rule documented in BR-001.3.                |
+| RISK-002 | Holidays deliberately out of scope — an employee may book a desk on a company holiday.  | Medium     | Low    | Accepted 2026-09-07: the office is closed, the desk goes unused, nothing is lost. Revisit if it becomes a nuisance in service. |
 | RISK-003 | No self-service password reset; employees depend on Admin for password help.           | Medium     | Low    | REQ-021 admin reset; self-service remains out of scope per §10.                       |
 | RISK-004 | Concurrent booking of the same desk could cause double-booking without proper locking. | Low        | High   | Address in architecture/delivery (not a BA design decision).                          |
 | RISK-005 | Admin displays new password on screen — shoulder-surfing / log exposure if mishandled. | Low        | Medium | Show once + copy; UX warning copy; no password in persistent audit log.               |
 | RISK-006 | Email delivery failures (wrong address, SMTP outage) leave users uninformed.           | Medium     | Medium | Log failures (NFR-005); operational monitoring; valid email on user create (REQ-018). |
 | RISK-007 | Browser push permission denied or unsupported — user expects alerts.                   | Medium     | Low    | Clear UX that push is optional; email always sent (BR-001.13).                        |
-| RISK-008 | Upstream discovery inputs are not in this repository, so no REQ can be traced back to the client's own words. | High | Medium | Open question #8; re-confirm the requirement set with the client, or recover the three session files. |
+| RISK-008 | Upstream discovery inputs are not in this repository, so no REQ can be traced back to the client's own words. | High | Medium | Open action (owner: Joy Joshua, raised 2026-09-07): search for the three session files; if unrecoverable, re-point every `Source` value at the handover input. Must close before Gate 2. |
 
 ## 10. Out of scope
 
@@ -252,6 +254,8 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - In-place desk swap without cancellation.
 - Multi-office or multi-location support.
 - Weekend desk booking (Saturday/Sunday).
+- Company public holiday exclusion — only Saturday and Sunday are blocked (open question #2, decided 2026-09-07).
+- Admin copies of booking, cancellation, or reminder emails — those go to the booking owner only (open question #10, decided 2026-09-07).
 - Visitor desk booking on behalf of others by Employees (one desk per employee per day only).
 
 ## 11. Open questions
@@ -259,12 +263,12 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | #   | Question                                                                                                                                                                 | Owner        | Status                                                                |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------- |
 | 1   | How is the first Admin account created before any Admin exists in the app (seed script, installer, manual database)?                                                      | PO/Architect | **Resolved** — DbInitializer seeds Admin when no users (2026-08-21)   |
-| 2   | How is the company holiday calendar defined and maintained so working-day rules exclude public holidays?                                                                  | PO/client    | Open                                                                  |
-| 3   | What time of day should the day-before reminder email be sent (office local timezone)?                                                                                    | PO/client    | Open — default: 08:00 office local                                    |
-| 4   | Must the web UI support mobile browsers in this release, or desktop-only?                                                                                                 | PO/client    | **Open — blocks UX (step 2)**; NFR-004 cannot be tested until decided |
+| 2   | How is the company holiday calendar defined and maintained so working-day rules exclude public holidays?                                                                                  | PO/client    | **Resolved** — out of scope this release; weekends only (2026-09-07) |
+| 3   | What time of day should the day-before reminder email be sent (office local timezone)?                                                                                                    | PO/client    | **Resolved** — 08:00 office local (2026-09-07)                       |
+| 4   | Must the web UI support mobile browsers in this release, or desktop-only?                                                                                                                 | PO/client    | **Resolved** — responsive: mobile and desktop (2026-09-07); NFR-004 now testable, UX unblocked |
 | 5   | Minimum password length/complexity for create and reset (V-12)?                                                                                                           | PO/security  | **Resolved** — min 8 chars; upper, lower, digit, special (2026-08-21) |
-| 6   | When deactivating a desk with future bookings, must the Admin cancel all affected bookings in one step, or block until manually cleared?                                   | PO/client    | Open — BR-001.9 currently allows both; default: block                 |
-| 7   | Approved sender address / email domain and SMTP service for transactional mail?                                                                                            | PO/IT        | Open                                                                  |
-| 8   | The three upstream discovery inputs cited in the `Source` column are not in this repository. Recover them, or re-confirm the requirement set with the client?              | PO/client    | Open — raised 2026-09-07 on handover                                   |
-| 9   | The Confirmed → Completed transition is stated in workflow 5 and BR-001.5 but has no functional REQ of its own. Promote it to a REQ so it is scheduled and tested?         | PO/BA        | Open — raised 2026-09-07; default: promote                            |
-| 10  | The actor table says Admins receive booking emails "where applicable", but REQ-023–REQ-025 send only to the booking owner. Do Admins get a copy of any booking email?      | PO/client    | Open — raised 2026-09-07; default: no Admin copy                      |
+| 6   | When deactivating a desk with future bookings, must the Admin cancel all affected bookings in one step, or block until manually cleared?                                                   | PO/client    | **Resolved** — hard block; BR-001.9 rewritten (2026-09-07)           |
+| 7   | Approved sender address / email domain and SMTP service for transactional mail?                                                                                                           | PO/IT        | **Resolved (approach)** — configuration, not hard-coded (NFR-007); production value `TBD (owner: IT)` before go-live |
+| 8   | The three upstream discovery inputs cited in the `Source` column are not in this repository. Recover them, or re-confirm the requirement set with the client?                              | Joy Joshua   | **Open action** — search for the notes; if unrecoverable, re-point `Source` at the handover input. Close before Gate 2 |
+| 9   | The Confirmed → Completed transition is stated in workflow 5 and BR-001.5 but has no functional REQ of its own. Promote it to a REQ so it is scheduled and tested?                         | PO/BA        | **Resolved** — promoted to REQ-028 (2026-09-07)                      |
+| 10  | The actor table says Admins receive booking emails "where applicable", but REQ-023–REQ-025 send only to the booking owner. Do Admins get a copy of any booking email?                      | PO/client    | **Resolved** — no Admin copies (2026-09-07)                          |
