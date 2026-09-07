@@ -1,0 +1,7 @@
+{
+  "$comment": "Traceability knowledge graph: REQ <-> US <-> tests, plus screens (US <-> SCR -> states, with flow edges: links_to[] between screens and \"entry\": true on roots), decisions (US -> ADR) and lessons-learned edges. Edited in the same PR as the artifacts it links; validated by tools/aidlc-check.mjs; traceability-matrix.md is generated from it (never hand-edited).",
+  "requirements": {},
+  "stories": {},
+  "screens": {},
+  "lessons": []
+}

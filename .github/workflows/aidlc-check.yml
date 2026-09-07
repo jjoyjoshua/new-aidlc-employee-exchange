@@ -1,0 +1,20 @@
+# AI-DLC gate validator. Make this a required status via branch protection —
+# without that, the framework is guidance, not governance.
+name: aidlc-check
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  aidlc-check:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the Gate D1 plan-tamper check verifies approved plan
+      # commits with `git show`, which a shallow clone can never reach.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tools/aidlc-check.mjs

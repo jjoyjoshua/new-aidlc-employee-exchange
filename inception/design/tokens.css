@@ -1,0 +1,105 @@
+/* Design tokens — the single source. tokens.json is GENERATED from this file
+   by `node tools/aidlc-check.mjs --write`; the designer's tool imports the JSON.
+
+   Prefixes are the export contract: --c- color · --t- font size · --lh- line
+   height · --fw- weight · --f- family · --s- spacing · --r- radius ·
+   --shadow- elevation · --control- control heights.
+   --p-* are PRIMITIVES: raw values aliased only inside this file. The design
+   tool's library binds to the semantic names, never to a primitive.
+
+   The scales are seeds: keep the step names, retune values with the designer.
+   The palette is deliberately greyscale (wireframe-grade): /ux replaces the
+   --c-* aliases with the product palette in pass 2b, both themes, leaving the
+   structural scales untouched. */
+
+:root {
+  /* primitives — greyscale ramp */
+  --p-gray-0: #ffffff;
+  --p-gray-50: #f5f5f5;
+  --p-gray-100: #eeeeee;
+  --p-gray-200: #e0e0e0;
+  --p-gray-300: #bdbdbd;
+  --p-gray-600: #616161;
+  --p-gray-800: #424242;
+  --p-gray-850: #242424;
+  --p-gray-900: #1a1a1a;
+
+  /* color — semantic aliases; components reference ONLY these */
+  --c-surface: var(--p-gray-0);
+  --c-surface-raised: var(--p-gray-50);
+  --c-surface-overlay: var(--p-gray-100);
+  --c-border: var(--p-gray-200);
+  --c-border-strong: var(--p-gray-300);
+  --c-text: var(--p-gray-900);
+  --c-text-secondary: var(--p-gray-600);
+  --c-text-disabled: var(--p-gray-300);
+  --c-action: var(--p-gray-800);
+  --c-action-label: var(--p-gray-0);
+  --c-focus-ring: var(--p-gray-900);
+
+  /* spacing — closed scale, no values between steps */
+  --s-2: 2px;   /* icon-to-label gaps */
+  --s-4: 4px;   /* tight internal spacing */
+  --s-8: 8px;   /* default internal padding */
+  --s-12: 12px;
+  --s-16: 16px; /* default gap between elements */
+  --s-24: 24px; /* section internal padding */
+  --s-32: 32px;
+  --s-48: 48px; /* between major sections */
+  --s-64: 64px; /* page-level vertical rhythm */
+  --s-80: 80px;
+
+  /* type — sizes pair with line heights; body max line length 60–80ch */
+  --f-body: system-ui, sans-serif;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --t-display: 36px;    --lh-display: 44px;
+  --t-heading-xl: 30px; --lh-heading-xl: 38px;
+  --t-heading-lg: 24px; --lh-heading-lg: 32px;
+  --t-heading: 20px;    --lh-heading: 28px;
+  --t-heading-sm: 16px; --lh-heading-sm: 24px;
+  --t-body-lg: 18px;    --lh-body-lg: 28px;
+  --t-body: 16px;       --lh-body: 24px;
+  --t-body-sm: 14px;    --lh-body-sm: 20px;
+  --t-label: 12px;      --lh-label: 16px;
+
+  /* radius */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-full: 9999px;
+
+  /* elevation */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-2: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-3: 0 10px 15px rgba(0, 0, 0, 0.1);
+
+  /* control heights */
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 48px;
+
+  /* icon sizes */
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+}
+
+/* dark theme — override only what changes; tokens.json mirrors this split */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-surface: var(--p-gray-900);
+    --c-surface-raised: var(--p-gray-850);
+    --c-surface-overlay: var(--p-gray-800);
+    --c-border: var(--p-gray-800);
+    --c-border-strong: var(--p-gray-600);
+    --c-text: var(--p-gray-50);
+    --c-text-secondary: var(--p-gray-300);
+    --c-text-disabled: var(--p-gray-600);
+    --c-action: var(--p-gray-100);
+    --c-action-label: var(--p-gray-900);
+    --c-focus-ring: var(--p-gray-50);
+  }
+}
