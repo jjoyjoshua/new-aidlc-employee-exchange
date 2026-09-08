@@ -5,7 +5,7 @@
 |                 |                                                                                                                                        |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                                  |
-| **Traces to**   | REQ-002, REQ-018, REQ-021, NFR-003, NFR-004 — **plus a new requirement pending** (see Conflicts, row 1)                                 |
+| **Traces to**   | REQ-002, REQ-018, REQ-021, REQ-029, NFR-003, NFR-004 (REQ-029 codifies the forced change — see Conflicts, row 1)                        |
 | **Surface**     | `apps/ui` `features/auth` — `/set-password`, forced after sign-in while the account's password is administrator-set                      |
 | **Persona**     | P-1 Priya on her first morning, and anyone whose password was just reset ([research](../research/BRD-001-employee-desk-booking.md))     |
 | **Primary job** | Replace the password somebody else chose for me with one only I know, and get on with booking a desk                                    |
@@ -14,7 +14,7 @@
 
 ## Purpose
 
-This screen exists because of a decision taken on 2026-09-07 (Joy Joshua, PO/BA): a password set by an administrator must be changed by its owner at first use. Until that decision, an administrator who created an account retained a working credential for it indefinitely — including after they stopped being an administrator.
+This screen exists because of a decision taken on 2026-09-07 (Joy Joshua, PO/BA), codified on 2026-09-08 as **REQ-029** with **BR-001.17** and **V-15**: a password set by an administrator must be changed by its owner at first use. Until that decision, an administrator who created an account retained a working credential for it indefinitely — including after they stopped being an administrator.
 
 It is reached on exactly two occasions, both of which mean *somebody else currently knows your password*: the first sign-in after an account is created (REQ-018), and the first sign-in after an administrator resets it (REQ-021). It is not a settings screen and it cannot be reached voluntarily — with no self-service reset in this release (BRD-001 §10), there is no route here for someone who simply wants a new password.
 
@@ -140,7 +140,7 @@ No `app-shell` on this screen — the navigation appears only once the account i
 
 | #   | Conflict / question                                                                                                                                                                                                                                                                       | Between            | Owner         | Status                                                                                                                                                                                                              |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | This entire screen rests on a decision, not on an approved requirement. BRD-001 has no requirement for a forced password change; REQ-018 and REQ-021 create administrator-set passwords and say nothing about replacing them.                                                              | design vs BRD-001  | PO/BA (`/ba`) | **Decided 2026-09-07 (Joy Joshua, PO/BA) — needs codifying.** `/ba` must add the requirement to BRD-001 before this is built, or the screen traces to a rule that exists only in this file. Listed in the PR handover |
+| 1   | This entire screen rests on a decision, not on an approved requirement. BRD-001 has no requirement for a forced password change; REQ-018 and REQ-021 create administrator-set passwords and say nothing about replacing them.                                                              | design vs BRD-001  | PO/BA (`/ba`) | **Closed 2026-09-08 — codified as REQ-029.** BRD-001 now carries REQ-029 (the forced change), BR-001.17 (the full rule, including that the administrator-set password stays valid until the change succeeds) and V-15 (the reuse refusal behind ST-03). Every state on this screen now traces to an approved requirement |
 
 ## Designer handoff
 

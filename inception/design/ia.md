@@ -75,14 +75,15 @@ Ten screens, each with a `SCR-###`. Sub-views without their own ID: the cancel-c
 | 768–1023px     | Icon-only collapsed sidebar, labels on hover and focus            |
 | < 768px        | Bottom bar with 2 items (employee) or 3 items (admin); avatar top-right |
 
-**Open question — the middle breakpoint is designed but not verified.** This table
-defines three shells; NFR-004 names only **360px and 1280px** as verification widths.
-So the 768–1023px collapsed sidebar is a design commitment no requirement tests.
-Either NFR-004 gains 768 as a third verification width, or this row is dropped and
-the sidebar collapses straight to the bottom bar at 1024. **Owner: PO/BA (`/ba`)** —
-it is a change to an approved requirement, not a design call. Until it is settled the
-768 shell is drawn once per screen (see `wireframe-rules.md`), so the decision is
-reviewable rather than theoretical.
+**Resolved 2026-09-08 (Joy Joshua, PO/BA) — NFR-004 gains 768px as a third
+verification width.** This table defines three shells, and NFR-004 previously named
+only 360px and 1280px, leaving the 768–1023px collapsed sidebar a design commitment
+no requirement tested. It now names **360px, 768px and 1280px**, so all three shells
+are verified and this row stays as designed. The decision went that way rather than
+dropping the row because the middle band already carries behaviour no other width
+exercises: the admin tables on SCR-005, SCR-006 and SCR-008 become stacked cards,
+SCR-003 shows a five-day date strip instead of seven, and SCR-004 narrows its column
+to 520px. The 768 shell is drawn once per screen (see `wireframe-rules.md`).
 
 ## Critical paths
 
@@ -202,7 +203,7 @@ The confirmed list. Each row becomes one `SCR-###` spec; `Reached from` / `Leads
 | SCR-007 | Desk form (add / edit)    | L2    | SCR-006                             | SCR-006                                        | REQ-015, REQ-016, NFR-004                                                                  |
 | SCR-008 | People                    | L1    | SCR-005, SCR-006                    | SCR-005, SCR-006, SCR-009                      | REQ-004, REQ-018, REQ-020, REQ-021, REQ-022, NFR-004                                       |
 | SCR-009 | User form (create / edit) | L2    | SCR-008                             | SCR-008                                        | REQ-004, REQ-018, REQ-019, REQ-022, NFR-004                                                |
-| SCR-010 | Set your password         | L1    | SCR-001                             | SCR-002 (Employee), SCR-005 (Admin)            | REQ-002, REQ-018, REQ-021, NFR-003, NFR-004 — **plus a new requirement pending `/ba`**     |
+| SCR-010 | Set your password         | L1    | SCR-001                             | SCR-002 (Employee), SCR-005 (Admin)            | REQ-002, REQ-018, REQ-021, REQ-029, NFR-003, NFR-004                                       |
 
 **Requirements with no screen, on purpose.** REQ-025 (day-before reminder email) and NFR-005 (send reliability, failure logging) have no user interface in this release — the reminder is a scheduled job and the failure log is an operational concern. NFR-002 (single office) and NFR-007 (sender address is configuration) are likewise screenless. They are absent from the inventory because nothing renders them, not because they were missed.
 
