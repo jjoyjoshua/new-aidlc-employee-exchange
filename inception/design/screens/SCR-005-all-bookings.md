@@ -25,7 +25,16 @@ Sign out (REQ-003) sits in the account menu of the admin shell and returns to SC
 
 ## Layout
 
-Filters above a table. Desktop is a real table — Marcus is at a desktop (A-6) comparing rows, and a card list would make him scroll to compare two days. Below 768px the same fields become stacked cards in the same order (PRIN-4).
+Filters above a table. Desktop is a real table — Marcus is at a desktop (A-6) comparing rows, and a card list would make him scroll to compare two days. Below 1024px the same fields become stacked cards in the same order (PRIN-4).
+
+**The table becomes cards below 1024px, not below 768px** (measured 2026-09-07 while
+drawing the tablet frames). At 768px with the collapsed icon-only sidebar the content
+area is 648px, and this table's own columns need more than that — so a table kept at
+768 would scroll sideways, which defeats the one reason it is a table: comparing rows
+at a glance (A-6). Portrait tablet therefore gets the card list; landscape tablet and
+desktop, at 1024 and above, keep the table.
+
+This table needs **793px**; at 768 it has 648.
 
 ```
 ┌────────────┬──────────────────────────────────────────────────────┐

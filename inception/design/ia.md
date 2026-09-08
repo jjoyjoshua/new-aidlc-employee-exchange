@@ -75,6 +75,15 @@ Ten screens, each with a `SCR-###`. Sub-views without their own ID: the cancel-c
 | 768–1023px     | Icon-only collapsed sidebar, labels on hover and focus            |
 | < 768px        | Bottom bar with 2 items (employee) or 3 items (admin); avatar top-right |
 
+**Open question — the middle breakpoint is designed but not verified.** This table
+defines three shells; NFR-004 names only **360px and 1280px** as verification widths.
+So the 768–1023px collapsed sidebar is a design commitment no requirement tests.
+Either NFR-004 gains 768 as a third verification width, or this row is dropped and
+the sidebar collapses straight to the bottom bar at 1024. **Owner: PO/BA (`/ba`)** —
+it is a change to an approved requirement, not a design call. Until it is settled the
+768 shell is drawn once per screen (see `wireframe-rules.md`), so the decision is
+reviewable rather than theoretical.
+
 ## Critical paths
 
 One diagram per job-to-be-done. Every screen in the inventory appears in at least one path.
