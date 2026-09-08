@@ -5,7 +5,7 @@
 |                 |                                                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                               |
-| **Traces to**   | REQ-003, REQ-026, REQ-027, NFR-004, NFR-006                                                                         |
+| **Traces to**   | REQ-003, REQ-026, REQ-027, NFR-004, NFR-006, NFR-008                                                                         |
 | **Surface**     | `apps/ui` `features/account` — `/settings`, reached from the account menu in the employee shell                     |
 | **Persona**     | P-1 Priya ([research](../research/BRD-001-employee-desk-booking.md))                                                |
 | **Primary job** | Turn browser alerts on (or off again), and understand what I'll actually receive either way                          |

@@ -32,7 +32,7 @@
       button is also the brand green — without the offset the ring is 1.00:1
       against it and vanishes on the most important control on the screen.
 
-   Colour is never the only signal (NFR-003). The pale state fills sit close
+   Colour is never the only signal (NFR-008). The pale state fills sit close
    together and closer still under colour-blind simulation — available vs
    blocked fill is ΔE 9.5 normally and ΔE 2.2 under deuteranopia. So the state
    is carried by the ICON and the LABEL; the coloured border is the second cue;
@@ -171,7 +171,7 @@
   /* ---- color: desk + booking states ------------------------------------ */
   /* Roles onto the families above, so a status toast and an available desk
      cannot drift apart. Every one of these carries an icon in its spec — see
-     the NFR-003 note in the file header. */
+     the NFR-008 note in the file header. */
   --c-state-available-fill: var(--c-success-fill);
   --c-state-available-border: var(--c-success-border);
   --c-state-available-ink: var(--c-success-ink);

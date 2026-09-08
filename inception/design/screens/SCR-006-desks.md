@@ -5,7 +5,7 @@
 |                 |                                                                                                                       |
 | --------------- | --------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                 |
-| **Traces to**   | REQ-015, REQ-016, REQ-017, NFR-004                                                                                    |
+| **Traces to**   | REQ-015, REQ-016, REQ-017, NFR-004, NFR-008                                                                                    |
 | **Surface**     | `apps/ui` `features/admin-desks` — `/admin/desks`                                                                     |
 | **Persona**     | P-2 Marcus ([research](../research/BRD-001-employee-desk-booking.md))                                                 |
 | **Primary job** | Keep the bookable desk list matching the actual office — add desks, correct numbers, and retire desks safely           |
@@ -142,7 +142,7 @@ Ten. Six of them belong to deactivation, which is the only destructive act on th
 
 - **Keyboard:** the table is a table, so column headers are announced per cell — "Booked ahead, 3 upcoming" is meaningless without its header. Tab reaches **Edit** then the overflow control on each row; the overflow opens with Enter and closes with Escape, returning focus to its trigger. **Add desk** is reachable from the page header before the table, so a keyboard user with 100 desks does not tab through the list to add one
 - **Focus:** visible ring on every control (`--c-focus-ring`). Dialog opening traps focus; dismissal returns it to the originating overflow control. In ST-06, focus moves to the refusal text — not to **See those 3 bookings** — because the number is the point and a focused button invites Enter before reading
-- **Non-colour signalling:** **Active** and **Inactive** each carry an icon **and** the word (NFR-003 of the design standard). The blocked refusal carries an icon and states the count in text — it is never "the amber dialog"
+- **Non-colour signalling:** **Active** and **Inactive** each carry an icon **and** the word (NFR-008). The blocked refusal carries an icon and states the count in text — it is never "the amber dialog"
 - **Announcements:** the summary line is a live region, so an activation or deactivation announces the new counts. ST-06's refusal is assertive and its accessible name leads with the number of affected bookings, so a screen-reader user hears the cost first. Toasts in ST-09 and ST-10 are polite live regions
 - **At 360px:** rows become cards in field order (desk, status, booked ahead, actions), with **Edit** and the overflow as full-width controls. The blocked refusal is a bottom sheet, and its **See those 3 bookings** action is full-width — it is the whole purpose of the sheet (NFR-004)
 

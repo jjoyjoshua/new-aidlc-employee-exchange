@@ -5,7 +5,7 @@
 |                 |                                                                                                                       |
 | --------------- | --------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                 |
-| **Traces to**   | REQ-003, REQ-009, REQ-010, REQ-024, REQ-028, NFR-001, NFR-004                                                         |
+| **Traces to**   | REQ-003, REQ-009, REQ-010, REQ-024, REQ-028, NFR-001, NFR-004, NFR-008                                                         |
 | **Surface**     | `apps/ui` `features/bookings` — `/` for a signed-in Employee (the employee shell's home)                              |
 | **Persona**     | P-1 Priya ([research](../research/BRD-001-employee-desk-booking.md))                                                  |
 | **Primary job** | Know whether I have a desk on the days I'm coming in — and give one back the moment my plans change                   |
@@ -148,7 +148,7 @@ Ten states. Four of them are the cancel interaction, which is the only thing on 
 
 - **Keyboard:** the list is a list, not a grid — tab reaches each row's **Cancel** in document order, then the **Book a desk** action, then the Past bookings toggle. Enter and Space both activate. Nothing here needs a pointer
 - **Focus:** visible ring on every control (`--c-focus-ring`). Opening the dialog moves focus to it and traps it there; dismissing returns focus to the row's **Cancel** control; a successful cancellation moves focus to the confirmation and then to **Book a desk**, because the row that held focus no longer exists
-- **Non-colour signalling:** Confirmed, Completed and Cancelled each carry an icon **and** the word (NFR-003 of the design standard). Today's booking is distinguished by a **TODAY** label and a raised surface, not by being a different colour. A cancelled row in history is not "the grey one" — it says Cancelled
+- **Non-colour signalling:** Confirmed, Completed and Cancelled each carry an icon **and** the word (NFR-008). Today's booking is distinguished by a **TODAY** label and a raised surface, not by being a different colour. A cancelled row in history is not "the grey one" — it says Cancelled
 - **Announcements:** the list announces its item count when it loads ("3 upcoming bookings"). The dialog is announced with the desk and date in its accessible name, so a screen-reader user knows which booking they are about to release without re-reading the row. Success and failure are live regions. Skeletons are hidden from assistive technology, with a single "loading your bookings" announcement instead
 - **Touch:** row actions are at least 44×44px. **Cancel** sits at the row's trailing edge on desktop and on its own line at 360px — never crowded against the row's tap target for opening nothing (rows are not themselves clickable; there is no detail view to open)
 

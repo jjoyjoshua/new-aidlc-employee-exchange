@@ -5,7 +5,7 @@
 |                 |                                                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                    |
-| **Traces to**   | REQ-001, REQ-002, REQ-005, NFR-003, NFR-004                                                                              |
+| **Traces to**   | REQ-001, REQ-002, REQ-005, NFR-003, NFR-004, NFR-008                                                                              |
 | **Surface**     | `apps/ui` `features/auth` — `/sign-in`, and the redirect target for any unauthenticated request                            |
 | **Persona**     | P-1 Priya and P-2 Marcus ([research](../research/BRD-001-employee-desk-booking.md)) — the only screen both roles share    |
 | **Primary job** | Get into the product with the email and password I have, and understand what to do if they don't work                     |
@@ -60,7 +60,7 @@ Single centred column, one card. No marketing, no illustration, no second column
 ### ST-02 Field validation error
 
 - **When** submit is attempted with an empty field, or an email that is not a plausible address — caught in the browser, before any request
-- **Shows** the message beneath the offending field, the field marked with an icon and a border change (never colour alone — NFR-003 of the design standard, and the a11y note below); other fields untouched; the button still enabled
+- **Shows** the message beneath the offending field, the field marked with an icon and a border change (never colour alone — NFR-008, and the a11y note below); other fields untouched; the button still enabled
 - **Can do** correct the field and resubmit. Focus moves to the first field with an error
 
 ### ST-03 Submitting
