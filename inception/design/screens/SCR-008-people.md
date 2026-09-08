@@ -5,7 +5,7 @@
 |                 |                                                                                                                              |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                        |
-| **Traces to**   | REQ-004, REQ-005, REQ-018, REQ-020, REQ-021, REQ-022, REQ-024, NFR-004                                                                         |
+| **Traces to**   | REQ-004, REQ-005, REQ-018, REQ-020, REQ-021, REQ-022, REQ-024, NFR-004, NFR-008                                                                         |
 | **Surface**     | `apps/ui` `features/admin-users` — `/admin/people`                                                                           |
 | **Persona**     | P-2 Marcus ([research](../research/BRD-001-employee-desk-booking.md))                                                        |
 | **Primary job** | Keep accounts matching the people who actually work here — add starters, change roles, switch leavers off, rescue passwords    |
@@ -174,7 +174,7 @@ Fourteen. Two rule refusals (ST-07, ST-09), one credential display, two shapes o
 
 - **Keyboard:** search first, then the table, then each row's overflow. The table is a table, so headers are announced per cell — a bare "Employee" tells a screen-reader user nothing without its **Role** header. Overflow menus open with Enter, close with Escape, and return focus to their trigger
 - **Focus:** visible ring on every control (`--c-focus-ring`). Dialogs trap focus and return it to the originating overflow. In ST-07 and ST-09 focus goes to the refusal text, not to **Make someone an admin** — the explanation is the point, and a focused button invites Enter before reading. In ST-11 focus goes to the password field itself so a screen-reader user hears the credential before the instructions, and the trap is strict: no outside click, no Escape, only **Done**
-- **Non-colour signalling:** **Active** and **Deactivated** carry an icon **and** the word; roles are words, never a colour or a badge shape alone (NFR-003 of the design standard). The last-admin refusals carry an icon and state the count in text
+- **Non-colour signalling:** **Active** and **Deactivated** carry an icon **and** the word; roles are words, never a colour or a badge shape alone (NFR-008). The last-admin refusals carry an icon and state the count in text
 - **Announcements:** the summary line is a live region, so a role change announces the new admin count — the safeguard-relevant fact. ST-07 and ST-09 are assertive and lead with the account name and the word "only". ST-11's dialog is announced with its full warning before the password is read, so nobody hears a credential without hearing that it is shown once. **Copy** announces *"Copied"* rather than only changing an icon
 - **The credential moment (ST-11):** the password is rendered in a monospaced face with unambiguous glyph shapes — Marcus will read it aloud, and `1`/`l`/`I` and `0`/`O` confusion turns one reset into two. It is never placed in a URL, a toast, or anything that outlives the dialog
 - **At 360px:** rows become cards in field order; the ST-11 sheet gives the password its own full-width line above **Copy**, never truncated or requiring a horizontal scroll to read (NFR-004)

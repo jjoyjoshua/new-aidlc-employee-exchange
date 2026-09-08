@@ -5,7 +5,7 @@
 |                 |                                                                                                                                        |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                                  |
-| **Traces to**   | REQ-002, REQ-018, REQ-021, REQ-029, NFR-003, NFR-004 (REQ-029 codifies the forced change — see Conflicts, row 1)                        |
+| **Traces to**   | REQ-002, REQ-018, REQ-021, REQ-029, NFR-003, NFR-004, NFR-008 (REQ-029 codifies the forced change — see Conflicts, row 1)                        |
 | **Surface**     | `apps/ui` `features/auth` — `/set-password`, forced after sign-in while the account's password is administrator-set                      |
 | **Persona**     | P-1 Priya on her first morning, and anyone whose password was just reset ([research](../research/BRD-001-employee-desk-booking.md))     |
 | **Primary job** | Replace the password somebody else chose for me with one only I know, and get on with booking a desk                                    |

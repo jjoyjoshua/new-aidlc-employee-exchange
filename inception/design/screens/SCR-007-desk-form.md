@@ -5,7 +5,7 @@
 |                 |                                                                                                                    |
 | --------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                              |
-| **Traces to**   | REQ-015, REQ-016, NFR-004                                                                                          |
+| **Traces to**   | REQ-015, REQ-016, NFR-004, NFR-008                                                                                          |
 | **Surface**     | `apps/ui` `features/admin-desks` — `/admin/desks/new` and `/admin/desks/:id/edit`                                   |
 | **Persona**     | P-2 Marcus ([research](../research/BRD-001-employee-desk-booking.md))                                              |
 | **Primary job** | Give a desk a number that is unique and that employees will recognise on the actual furniture                        |

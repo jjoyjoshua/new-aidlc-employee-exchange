@@ -134,7 +134,7 @@ measurably fails, so none of them is a preference:
 - **Every state carries its icon and its label.** The pale state fills are ΔE
   9.5 apart normally and ΔE 2.2 under deuteranopia — indistinguishable. The
   icon is the signal, the coloured border the second cue, the fill the third
-  and weakest (NFR-003). A frame where only the fill changes between two states
+  and weakest (NFR-008). A frame where only the fill changes between two states
   is a frame that has not drawn the state.
 
 **One value in the palette is not the supplied one.** The red family sits at

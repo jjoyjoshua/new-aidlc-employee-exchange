@@ -5,7 +5,7 @@
 |                 |                                                                                                                                        |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                                  |
-| **Traces to**   | REQ-003, REQ-011, REQ-012, REQ-013, REQ-014, REQ-024, REQ-028, NFR-001, NFR-004                                                        |
+| **Traces to**   | REQ-003, REQ-011, REQ-012, REQ-013, REQ-014, REQ-024, REQ-028, NFR-001, NFR-004, NFR-008                                                        |
 | **Surface**     | `apps/ui` `features/admin-bookings` — `/admin` for a signed-in Admin (the admin shell's home)                                           |
 | **Persona**     | P-2 Marcus ([research](../research/BRD-001-employee-desk-booking.md))                                                                  |
 | **Primary job** | See who has booked what, find a particular booking fast, and cancel one on an employee's behalf without touching the wrong person's day |
@@ -151,7 +151,7 @@ Eleven. The cancel-on-behalf interaction accounts for five, and it is the only d
 
 - **Keyboard:** filters first in document order, then the table. The table is a table — a screen reader announces column headers per cell, which is why this is not a list of divs. Tab reaches each row's **Cancel**; rows with no action are skipped as tab stops but still fully readable. **Show more** is the last stop
 - **Focus:** visible ring on every control (`--c-focus-ring`). A filter change keeps focus on the filter, never jumping to the refreshed table. Opening the dialog traps focus; dismissal returns it to the row's control; after ST-11 focus returns to that same row, which still exists precisely so focus has somewhere to land
-- **Non-colour signalling:** Confirmed, Cancelled and Completed each carry an icon **and** the word (REQ-028, and NFR-003 of the design standard). A non-cancellable row shows an em dash with a text reason, not a greyed-out button — greying is a colour signal and a disabled button invites clicking
+- **Non-colour signalling:** Confirmed, Cancelled and Completed each carry an icon **and** the word (REQ-028, and NFR-008). A non-cancellable row shows an em dash with a text reason, not a greyed-out button — greying is a colour signal and a disabled button invites clicking
 - **Announcements:** the count line is a live region, so a filter change announces *"24 bookings, from Monday 7 September, all statuses"* — the answer before the rows. The dialog's accessible name carries the employee, desk and date, so a screen-reader user is never one keystroke from cancelling an unnamed booking. ST-10 and ST-11 are assertive
 - **Table at 360px:** cards, one per booking, fields in table order (date, desk, employee, status, action). Never a horizontally scrolling table — NFR-004 requires this screen to work at 360px, and a five-column table at that width is a table nobody can read
 - **Timezone:** office-local throughout, stated once in the header (NFR-001)
