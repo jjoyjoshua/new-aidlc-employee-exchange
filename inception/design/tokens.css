@@ -24,6 +24,10 @@
   --p-gray-850: #242424;
   --p-gray-900: #1a1a1a;
 
+  /* primitives — scrim (the only non-opaque values; a modal needs one) */
+  --p-black-40: rgba(0, 0, 0, 0.4);
+  --p-black-60: rgba(0, 0, 0, 0.6);
+
   /* color — semantic aliases; components reference ONLY these */
   --c-surface: var(--p-gray-0);
   --c-surface-raised: var(--p-gray-50);
@@ -36,6 +40,7 @@
   --c-action: var(--p-gray-800);
   --c-action-label: var(--p-gray-0);
   --c-focus-ring: var(--p-gray-900);
+  --c-scrim: var(--p-black-40);
 
   /* spacing — closed scale, no values between steps */
   --s-2: 2px;   /* icon-to-label gaps */
@@ -51,6 +56,8 @@
 
   /* type — sizes pair with line heights; body max line length 60–80ch */
   --f-body: system-ui, sans-serif;
+  /* monospace: for a credential that must be read aloud accurately (SCR-008 ST-11) */
+  --f-mono: ui-monospace, "Roboto Mono", "SFMono-Regular", Menlo, monospace;
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-semibold: 600;
@@ -64,6 +71,7 @@
   --t-body: 16px;       --lh-body: 24px;
   --t-body-sm: 14px;    --lh-body-sm: 20px;
   --t-label: 12px;      --lh-label: 16px;
+  --t-mono: 20px;       --lh-mono: 28px;
 
   /* radius */
   --r-sm: 4px;
@@ -101,5 +109,6 @@
     --c-action: var(--p-gray-100);
     --c-action-label: var(--p-gray-900);
     --c-focus-ring: var(--p-gray-50);
+    --c-scrim: var(--p-black-60);
   }
 }

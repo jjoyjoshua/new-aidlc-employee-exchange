@@ -57,6 +57,12 @@ Date control on top, desk list beneath, confirm action anchored at the bottom on
 └────────────┴──────────────────────────────────────────┘
 ```
 
+**At 768px the strip shows five days, not seven** (decided 2026-09-07 while drawing
+the tablet frame). Seven 76px chips plus both paging arrows need exactly the width
+available, which left the trailing arrow clipped against the card edge. Five days
+plus two arrows fits with room, and the arrows page to the rest — the week is still
+Monday to Sunday, only the window onto it is narrower.
+
 **The date control is two controls.** A 7-day horizontal strip covers the range A-1 predicts people actually use, and a calendar behind **Pick another date** covers the rest of the 30 days without letting a rare need dictate the common layout. If A-1 fails validation, the fix is to swap their prominence — the states below do not change.
 
 **Zones are the desk-number prefix**, grouped and labelled *Zone A*, *Zone B*. Since 2026-09-07 (Joy Joshua, PO/BA) a desk number must be one upper-case letter, a hyphen and two digits (SCR-007), so every desk carries a zone letter and the grouping cannot be broken by an oddly-named desk. What is still untested is whether those letters mean anything *physically* to employees — research assumption A-4. If they do not, the labels are merely uninformative rather than wrong, and naming real areas would need a new field on each desk.

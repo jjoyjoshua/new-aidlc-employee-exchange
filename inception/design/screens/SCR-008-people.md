@@ -53,7 +53,16 @@ A table with a search field — unlike the desk list, an office's people list gr
 
 The summary line counts admins explicitly — *"2 admins"* — because that number is the one BR-001.11 protects. When it reads **1 admin**, Marcus can see the safeguard coming before he trips it (PRIN-2).
 
-Below 768px each row becomes a card in the same field order, with the row actions as full-width controls (PRIN-4).
+Below 1024px each row becomes a card in the same field order, with the row actions as full-width controls (PRIN-4).
+
+**The table becomes cards below 1024px, not below 768px** (measured 2026-09-07 while
+drawing the tablet frames). At 768px with the collapsed icon-only sidebar the content
+area is 648px, and this table's own columns need more than that — so a table kept at
+768 would scroll sideways, which defeats the one reason it is a table: comparing rows
+at a glance (A-6). Portrait tablet therefore gets the card list; landscape tablet and
+desktop, at 1024 and above, keep the table.
+
+This table needs **854px** — the widest of the three; at 768 it has 648.
 
 ## States
 

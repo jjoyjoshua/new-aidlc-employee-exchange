@@ -47,7 +47,16 @@ A single table with one status column and row-level actions. There is no filter 
 
 **The "Booked ahead" column is the design's answer to BR-001.9.** It shows the count of Confirmed bookings dated today or later on each desk — the exact number that will block a deactivation. Marcus can therefore see the block coming before he triggers it, rather than discovering it in an error dialog (PRIN-2 applied to an administrator). ST-06 still exists, because the count can change between the page loading and the button being pressed, but it becomes the rare case instead of the normal one.
 
-Below 768px each row becomes a card in the same field order (PRIN-4), with **Edit** and the overflow action as full-width controls rather than a cramped icon row.
+Below 1024px each row becomes a card in the same field order (PRIN-4), with **Edit** and the overflow action as full-width controls rather than a cramped icon row.
+
+**The table becomes cards below 1024px, not below 768px** (measured 2026-09-07 while
+drawing the tablet frames). At 768px with the collapsed icon-only sidebar the content
+area is 648px, and this table's own columns need more than that — so a table kept at
+768 would scroll sideways, which defeats the one reason it is a table: comparing rows
+at a glance (A-6). Portrait tablet therefore gets the card list; landscape tablet and
+desktop, at 1024 and above, keep the table.
+
+This table needs **672px**; at 768 it has 648.
 
 ## States
 

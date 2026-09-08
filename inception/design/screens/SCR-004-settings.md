@@ -29,6 +29,10 @@ Sign out (REQ-003) is available here as well as in the account menu — on a pho
 
 One narrow column, two sections, no tabs. This screen holds one control and expects to grow slowly.
 
+The column is capped — 640px on desktop, **520px at 768** — because "narrow" is the
+point. Left to fill the tablet content area it becomes full-bleed, and the toggle
+drifts a card's width away from the label it belongs to.
+
 ```
 ┌────────────┬──────────────────────────────────────────┐
 │            │  Settings                                │
