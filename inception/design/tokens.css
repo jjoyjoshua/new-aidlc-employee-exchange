@@ -114,6 +114,10 @@
   --p-red-950: #2d1317; /* dark fill */
   --p-red-500: #c44556; /* dark border */
   --p-red-300: #e26f7e; /* dark ink */
+  --p-red-700: #8f2533; /* derived 2b: solid destructive hover — white 8.47:1 */
+  --p-red-800: #7d1f2b; /* derived 2b: solid destructive pressed — white 9.99:1 */
+  --p-red-200: #e9919c; /* derived 2b: dark-theme destructive hover */
+  --p-red-150: #eeaab3; /* derived 2b: dark-theme destructive pressed */
 
   /* ---- primitives: scrim (warm — never rgba(0,0,0,x) over beige) ------- */
   --p-scrim-warm-40: rgba(34, 30, 24, 0.4);
@@ -168,6 +172,32 @@
   --c-danger-border: var(--p-red-600);
   --c-danger-ink: var(--p-red-900);
 
+  /* ---- color: destructive action --------------------------------------
+     A SOLID destructive button. Decided 2026-09-08 by the designer, closing the
+     open question on SCR-002 and SCR-003 — one dialog, one answer.
+
+     Note what this is NOT. It is not `--c-danger-border` pressed into service as
+     a fill; that is the exact move naming rule 2 forbids. This is a role named for
+     the job it does — an action FILL — which happens to alias the same primitive
+     the danger border uses. That is the distinction the rule protects: a token is
+     defined by what its NAME commits it to, not by which hex it lands on. Change
+     the border and this does not follow; they are separate promises.
+
+     No new hue enters the palette: the fill is the crimson already here (red-600,
+     hue ~352), so blocked, cancelled and destructive stay one family. White on it
+     is 7.18:1 — hover 8.47:1, pressed 9.99:1 — all clear of AA for the 16px medium
+     label, and the label is never the only signal (NFR-008): the word says "Cancel".
+
+     Focus needs the offset here more than anywhere. The ring is forest-600 and this
+     fill is red-600: 1.34:1 against each other, which is invisible. Naming rule 3
+     already solves it — the ring plus a --bw-2 gap in the surface colour (white on
+     red-600 is 7.18:1) — and the Button Focus variant is built that way. A solid
+     destructive button WITHOUT that offset has no visible focus state at all. */
+  --c-danger-action: var(--p-red-600);
+  --c-danger-action-hover: var(--p-red-700);
+  --c-danger-action-pressed: var(--p-red-800);
+  --c-danger-action-label: var(--p-white);
+
   /* ---- color: desk + booking states ------------------------------------ */
   /* Roles onto the families above, so a status toast and an available desk
      cannot drift apart. Every one of these carries an icon in its spec — see
@@ -184,6 +214,27 @@
   --c-state-inactive-fill: var(--c-danger-fill); /* an inactive/blocked desk (BR-001.7) */
   --c-state-inactive-border: var(--c-danger-border);
   --c-state-inactive-ink: var(--c-danger-ink);
+
+  /* Booking lifecycle, as distinct from desk availability. A desk is
+     available/taken/yours/blocked; a BOOKING is confirmed, completed or
+     cancelled (REQ-028), and SCR-002 shows all three in one list. These are
+     roles onto the families above — no new colour enters the palette — added
+     2026-09-08 while drawing SCR-002, because the section is named "desk +
+     booking states" and the booking half of it was missing.
+     Confirmed reads green because it is live and good; completed is deliberately
+     the quiet FILL rather than the taken-desk role, which is named for a desk and
+     must not be borrowed for a booking; cancelled joins blocked on red.
+     Each carries its own icon and word — check-circle / clock / calendar-x — so
+     the chips differ by shape and text before they differ by colour (NFR-008). */
+  --c-state-confirmed-fill: var(--c-success-fill);
+  --c-state-confirmed-border: var(--c-success-border);
+  --c-state-confirmed-ink: var(--c-success-ink);
+  --c-state-completed-fill: var(--c-fill-subtle);
+  --c-state-completed-border: transparent; /* a past booking is quiet; the clock icon is the signal */
+  --c-state-completed-ink: var(--c-text-on-fill);
+  --c-state-cancelled-fill: var(--c-danger-fill);
+  --c-state-cancelled-border: var(--c-danger-border);
+  --c-state-cancelled-ink: var(--c-danger-ink);
 
   /* ---- color: focus — naming rule 3 ------------------------------------ */
   --c-focus-ring: var(--p-forest-600);
@@ -314,6 +365,13 @@
     --c-danger-border: var(--p-red-500);
     --c-danger-ink: var(--p-red-300);
 
+    /* destructive action — inverts like the brand action does: a light fill with a
+       dark label. red-950 on red-300 is 5.59:1 (hover 7.39:1, pressed 9.07:1). */
+    --c-danger-action: var(--p-red-300);
+    --c-danger-action-hover: var(--p-red-200);
+    --c-danger-action-pressed: var(--p-red-150);
+    --c-danger-action-label: var(--p-red-950);
+
     /* desk + booking states.
        The available/inactive roles alias the status families, and CSS resolves
        that at use time — but tokens.json resolves it at GENERATION time, so an
@@ -330,6 +388,14 @@
     --c-state-inactive-fill: var(--c-danger-fill);
     --c-state-inactive-border: var(--c-danger-border);
     --c-state-inactive-ink: var(--c-danger-ink);
+    --c-state-confirmed-fill: var(--c-success-fill);
+    --c-state-confirmed-border: var(--c-success-border);
+    --c-state-confirmed-ink: var(--c-success-ink);
+    --c-state-completed-fill: var(--c-fill-subtle);
+    --c-state-completed-ink: var(--c-text-on-fill);
+    --c-state-cancelled-fill: var(--c-danger-fill);
+    --c-state-cancelled-border: var(--c-danger-border);
+    --c-state-cancelled-ink: var(--c-danger-ink);
 
     /* focus */
     --c-focus-ring: var(--p-forest-200);

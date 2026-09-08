@@ -48,6 +48,25 @@ Apply the grid before placing any content. Nothing sits outside the columns.
 
 A persistent sidebar sits in columns 1–2; main content in 3–12.
 
+**A frame named `· 1280` is 1440px wide.** The width in a frame name is the *content*
+width it verifies, not the frame's own size — the desktop row above is the frame,
+and the approved wireframe frames measure 1440 exactly. Corrected 2026-09-08 after
+the first hi-fi build derived its own numbers instead of reading these ones.
+
+The shell, measured off the approved frames rather than re-derived:
+
+| Frame | Sidebar | Content region | Content padding | Inner column |
+| ----- | ------- | -------------- | --------------- | ------------ |
+| 1440 (named `· 1280`) | 240 | 1200 | 48 | **1104** |
+| 768 | 72 | 696 | 24 | **648** |
+| 360 | — (56px top bar) | 360 | 16 | **328** |
+
+The sidebar is full-bleed to the frame's left edge, and it is **240px — not the
+column-grid width**. Deriving it from columns 1–2 gives 180px and a 1020px content
+column instead, and that mistake is easy to make because the arithmetic is
+self-consistent and *looks* right. The inner column is what components are
+measured against: **1104 / 648 / 328**.
+
 Mobile is 360px, not a roomier 390px, because that is the width every screen
 spec names for verification and PRIN-4 designs to. A layout that survives 360
 survives 390; the reverse is not true.
@@ -69,6 +88,42 @@ SCR-006 and SCR-008 switch to their card layout below **1024**, not below 768.
 Check a new table against 648px before assuming it survives the middle
 breakpoint.
 
+## The sidebar carries content, not just navigation
+
+Three things belong in it that a styling pass can quietly lose, because none of
+them is a colour:
+
+- the **product lockup** — at 360 there is no rail, so it moves to the 56px top bar
+- the **short nav labels** the wireframes settled on: *Bookings*, *Book*, *Desks*,
+  *People*. Not *My bookings* or *Book a desk*, which wrap at 240px
+- the **account menu at the foot** — Sign out, plus Settings for employees only.
+  [`ia.md`](./ia.md) states this: the account menu sits at the foot of the sidebar
+  on desktop and behind an avatar in the top bar on mobile. Admin rails carry no
+  Settings item, because REQ-004 keeps the two areas apart
+
+The first hi-fi build dropped the lockup and the whole account menu, kept the long
+labels, and sized the rail at 180px. It validated clean — no hardcoded colour, every
+state numbered — and still looked wrong, because a token audit cannot see missing
+content. **Read the approved wireframe before rebuilding a shell in colour.**
+
+The active item never relies on colour: a 3px indicator bar (shape), a
+medium-weight label (weight), and a `--c-fill-subtle` pill. Three cues, of which
+the fill is the weakest.
+
+**That indicator is absolutely positioned, and every indicator should be.** As a
+layout child the 3px bar consumed 3px of the row, which pushed the collapsed
+icon 2px off centre on the active item only, and left active and inactive rows in
+the expanded rail 3px out of alignment with each other. Both are the kind of fault
+you see before you can name — the rail simply looks untidy. An indicator marks a
+row; it does not take part in its layout. Fixed 2026-09-08.
+
+**Icons rank navigation; text carries account actions.** The account menu at the
+foot is text-only, on 36px rows. Icons on those rows put three icon sizes in a
+240px column — a 32px avatar, 20px nav glyphs, 16px menu glyphs — which reads as
+clutter rather than as hierarchy, and 20px rows with no vertical padding left the
+labels touching each other. `Icon / settings` and `Icon / sign-out` stay in the
+library for the mobile account menu, which is not drawn yet.
+
 ## Spacing
 
 All spacing from the `--s-*` scale in `tokens.css` — no in-between values.
@@ -88,11 +143,18 @@ button label is `body` at medium weight while a field value is `body` at regular
 ```text
 display/semibold  heading-xl/semibold  heading-lg/semibold  heading/semibold
 heading-sm/medium  body-lg/regular  body/regular  body/medium
-body-sm/regular  body-sm/medium  label/medium  mono/regular
+body-sm/regular  body-sm/medium  label/medium  label/caps  mono/regular
 ```
 
 Each style binds all four properties to variables — family, weight, size, line
 height — so the typeface is one variable, not one edit per text node.
+
+`label/caps` is `label/medium` plus 8% tracking, and the tracking has to live in
+the STYLE. Uppercase micro-labels — the zone headings on SCR-003, an eyebrow line
+— are cramped at `--t-label` without it, and setting letter spacing on the text
+node instead **silently detaches the style**, which is exactly how 38 zone labels
+ended up carrying loose font settings in the first build of the hi-fi file.
+Added 2026-09-08.
 
 `mono/regular` exists for one job — a credential that must be read aloud
 accurately (SCR-008 ST-11). It binds `fontFamily/mono` (`--f-mono`), so the
@@ -119,7 +181,7 @@ forest + clay, landed 2026-09-08), and only ever through the semantic `--c-*`
 names. Colour is never painted onto a frame directly: if a value is not in
 `tokens.json`, it is not in the design.
 
-Four rules the palette carries with it. Each exists because the alternative
+Seven rules the palette carries with it. Each exists because the alternative
 measurably fails, so none of them is a preference:
 
 - **A field's edge is `--c-border-control`, not `--c-border`.** The quiet beige
@@ -136,6 +198,48 @@ measurably fails, so none of them is a preference:
   icon is the signal, the coloured border the second cue, the fill the third
   and weakest (NFR-008). A frame where only the fill changes between two states
   is a frame that has not drawn the state.
+
+- **A card on the page ground uses `--c-border-strong`, not `--c-border`.** The
+  page and a card differ by **1.07:1** — beige-50 against white — so the card's
+  edge is doing effectively all of the separating, and at `--c-border`'s 1.50:1 it
+  apologises. `--c-border-strong` (beige-400) gives **2.07:1** and is already named
+  "decorative emphasis divider", which is precisely this job; a card container is
+  not a control boundary, so WCAG 1.4.11's 3:1 does not apply to it. Cards carry
+  `shadow/1` as well — the token exists for "cards, rows" and was going unused on
+  every product card. Two things deliberately do NOT change: **dividers inside a
+  card** stay on `--c-border`, because bumping those too reads as stripes; and
+  anything already separated by something else — the date picker and dialog on a
+  shadow, the alert and toast on a status colour — keeps `--c-border`. Resolved
+  2026-09-08 by the designer after comparing three treatments side by side (the
+  comparison board is kept in the hi-fi file as the record).
+
+- **`--c-text-disabled` is a LIGHT-ground token.** `tokens.css` documents it at
+  2.69:1, and that is its ratio on **white**. Put it on `--c-fill-disabled`
+  (beige-400, a mid-tone) and it collapses to **1.30:1** — which is what the first
+  hi-fi build did to the disabled confirm action: the worst contrast in the file,
+  on a label that is an *instruction* ("Select a desk"), and a slab that read at
+  1.94:1 against the page, giving the one element you cannot press more visual
+  weight than any card edge. So a disabled control **retreats to a quiet fill plus
+  a `--c-border-strong` edge** and never sits on a mid-tone fill: its disabledness
+  is carried by the absent brand colour, not by making its label unreadable. The
+  more legible `--c-text-muted` is unavailable over a fill (rule 1 above), and
+  `--c-text-on-fill` at 8.69:1 reads as enabled — so **2.37:1 is the honest
+  ceiling**, which is acceptable: WCAG 1.4.3 exempts inactive controls, and it is
+  in family with the other disabled variants at 2.52–2.69:1. Geometry does not
+  change, so "no layout shift" between disabled, enabled and busy still holds.
+  `--c-fill-disabled` is consequently unused by Button — it still serves disabled
+  fields and toggles on the form screens. Resolved 2026-09-08.
+
+- **A destructive action is SOLID crimson, and it is its own role.** Added 2026-09-08,
+  closing the open question on SCR-002 and SCR-003. `--c-danger-action` /
+  `-hover` / `-pressed` / `-label` fill a destructive button; the
+  `--c-danger-fill/-border/-ink` family stays what it always was — a status *chip*.
+  The fill is `red-600`, the crimson already in the palette, so **no new hue arrived**
+  and blocked, cancelled and destructive remain one family; white on it is 7.18:1. The point
+  of the separate name is that `--c-danger-border` must never be used as a fill — the
+  two roles may alias the same primitive today and are still different promises. Focus keeps
+  its `--bw-2` offset: the forest ring on this fill is **1.34:1**, so a solid
+  destructive button without the offset has no visible focus state at all.
 
 **One value in the palette is not the supplied one.** The red family sits at
 hue ~352 rather than the supplied ~11, decided 2026-09-08: at the original hue,
@@ -156,6 +260,22 @@ Every container is auto-layout; nothing is manually positioned.
 
 Standard nesting: page frame (FILL) → layout wrapper (FILL, grid-constrained)
 → section (FILL) → card (HUG) → header/body (FILL), footer actions (HUG).
+
+## A list is one card, not a card per row
+
+A zone, a table, any run of rows: **one card, rows divided by 1px `--c-border`
+dividers.** The screen spec's layout sketch draws it that way — the box encloses
+all of a zone's rows — and the reason is not decorative. Give every row its own
+bordered white card and the page ground survives only as the 8px gutters between
+them, which reads as grout rather than as a ground; the warm surface never gets
+to do its job, and the palette gets blamed for a layout mistake. The first hi-fi
+build of SCR-003 made exactly this error, and it is invisible to a token audit —
+every colour was a token, every state was numbered, and it still looked wrong.
+
+A row inside a card therefore carries no border, no radius and no fill at rest.
+Its selected state is a left bar plus its indicator plus its chip; its taken state
+is the icon, the muted number and the chip. The card supplies the white and the
+edge.
 
 ## Popups are drawn over the screen they open from
 
@@ -181,6 +301,69 @@ only thing telling a phone user they are on top of something, not inside it.
 Change the chrome once and every frame follows. A popup assembled by hand in
 each frame drifts by the third state.
 
+## A component can lie about its own size
+
+Three faults from the SCR-002 build, all of which validated clean and looked wrong. Each
+is invisible to a token audit, because none of them is a colour.
+
+**The visible button is a CHILD of the button.** `Button`'s root is a transparent
+wrapper around a `Surface` that hugs its label. Resize the instance and the box grows
+while the painted surface stays put — a 296px-wide instance still showing an 85px pill, and
+a 48px height override that never reaches the thing you can see. So resizing a button is
+always **two** moves: set the instance, then set its `Surface` to `FILL` on the axis you
+changed.
+
+**And do NOT fix that in the component.** Setting `Surface` to `FILL` on all 24 variants
+looks like the tidy fix and is a regression: a button whose surface fills can no longer be
+sized by its own label, so every hug button in the file — `Cancel A-01 for this date`,
+`Pick a different date` — stops tracking its text. Hug is the default because it is
+right; stretching is the exception and belongs on the instance that wants it.
+
+**Cloning a variant drops its text property references.** `componentPropertyReferences`
+does not survive `clone()`. The clone keeps the property *definition*, so setting the
+property on an instance succeeds silently and changes nothing — the new variant goes on
+showing the set's default copy. Four Dialog variants shipped that way for ten minutes: the
+frames said "Cancel this booking?" while the instance property said "Cancel your desk?".
+After cloning a variant, re-attach every text reference and read one instance back.
+
+**A text property means the INSTANCE owns the copy.** Once a variant's text node is bound
+to a `Title#` property, whatever characters you typed into the variant are ignored in
+favour of the property's default. A new context added to `Empty state` therefore appears
+carrying the *first* context's words until the frame sets them. Variant-level copy is a
+placeholder; the frame is where the words are decided.
+
+## Section headings align with the content column, not with the card
+
+A section heading — `Upcoming`, `Past bookings` — sits at the **left edge of the
+content column**, flush with the card beneath it, and a disclosure chevron sits at that
+column's right edge. So the `Accordion header` carries **no horizontal padding**: it was
+built with 16px and the two headings on SCR-002 then disagreed with each other by 16px,
+which reads as a wobble long before you can name it. Vertical padding stays, because the
+header is a control and needs its 44px.
+
+Row text is inset 16px by the row; the heading above the card is not. That difference is
+correct and deliberate — the heading labels the card, it is not inside it.
+
+## A booking is not a desk
+
+The state tokens divide into two families that are easy to conflate and must not be:
+`--c-state-available/taken/mine/inactive-*` describe a **desk**, and
+`--c-state-confirmed/completed/cancelled-*` describe a **booking** (REQ-028). Added
+2026-09-08 for SCR-002, which shows all three booking statuses in one list; they alias
+families the palette already had, so **no new colour entered it**.
+
+Borrowing across the two is the same category of mistake as using a border colour as a
+fill. `--c-state-taken-*` is named for a taken desk; a *completed booking* that borrows
+it inherits a meaning nobody intended the first time the taken-desk treatment changes.
+Completed uses the quiet `--c-fill-subtle` instead, with no border, and its clock icon
+does the work.
+
+**The active item in the bottom bar is a property, not an override.** `Bottom bar` shipped
+with Book hardcoded as the active tab, which made every SCR-002 mobile frame wrong until it
+gained a `Tab` axis — the same shape as the Sidebar's `Nav`. A screen selects its own
+active item. Ten frames each overriding two icon colours and a bar's visibility is ten
+chances to miss one.
+
 ## Recurring page patterns
 
 Empty, error, loading, and page-header are designed once and reused — a screen
@@ -202,6 +385,27 @@ State=Hover`) so a spec can reference a variant unambiguously.
 | **Synced by** | `/ux` through the Figma connector, from the specs in `screens/` |
 | **Direction** | One-way. The repo is upstream; the file is redrawn from the spec, never the reverse |
 | **Contents** | 180 frames — all 10 screens, all 90 `ST-##` states, each at 1280 and 360 |
+
+**A second file holds the design system and the hi-fi frames.** Created
+2026-09-08. The wireframe file above only ever carried a greyscale palette —
+eleven grey primitives behind twelve colour roles, enough to prove structure —
+and the pass-2b product palette is 53 primitives behind 52 roles. Rather than
+recolour a file whose whole point is that a grey frame cannot argue about brand,
+`HF /` frames and the full token library live separately.
+
+| | |
+| --- | --- |
+| **File** | Employee Desk Booking — Design System & Mockups (Figma, Trigent-IBC team) |
+| **URL** | https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn |
+| **Synced by** | `/ux` through the Figma connector, from `tokens.css` and the specs in `screens/` |
+| **Direction** | One-way, as above. The spec PR is what gets approved; a frame never is |
+| **Contents** | 170 variables (57 primitives · 65 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 21 icons, 22 components — including the `Nav × Density` Sidebar set that covers the admin screens too — and 66 `HF /` frames: SCR-003 (12 states) and SCR-002 (10 states), each at 1440 (`· 1280`), 768 and 360 |
+
+**Eight screens have no** `HF /` **frames yet.** SCR-003 was drawn first because it is
+the only screen where clay "yours" and blocked red appear in the same desk list, which
+makes it the real test of the pass-2b palette. SCR-002 followed it because the two share
+the cancel dialog, so drawing them together settles that component once (2026-09-08).
+
 
 The file carries the token set as Figma variables — a `Color` collection with
 **Light** and **Dark** modes aliased to a hidden `Primitives` greyscale ramp, and
