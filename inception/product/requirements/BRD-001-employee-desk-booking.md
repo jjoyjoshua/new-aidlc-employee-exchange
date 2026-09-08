@@ -5,7 +5,7 @@
 |                  |                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Author**       | BA persona (AI draft) with Joy Joshua (PO/BA)                                                                                                                       |
-| **Source input** | `inception/product/inputs/2026-09-07-desk-booking-brd-handover.md` (verbatim raw material). Upstream inputs cited in the `Source` column are not present here — see open question #8. |
+| **Source input** | `inception/product/inputs/2026-09-07-desk-booking-brd-handover.md` (verbatim raw material) and `inception/product/inputs/2026-09-08-ba-pending-items.md` (this revision's request, verbatim). Upstream inputs cited in the `Source` column are not present here — see open question #8. |
 | **Related**      | EPIC-001 (filled when stories are drafted after design approval)                                                                                                     |
 
 ## 1. Business goal
@@ -16,7 +16,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 
 | Actor    | Description                                    | Needs                                                                                                                       |
 | -------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Employee | Staff member who works hybrid and books a desk | Sign in, book/view/cancel desks; receive booking emails; optionally enable browser push for book/cancel                      |
+| Employee | Staff member who works hybrid and books a desk | Sign in, replacing an administrator-set password with one of their own at first use (REQ-029); book/view/cancel desks; receive booking emails; optionally enable browser push for book/cancel                      |
 | Admin    | Office administrator                           | Sign in; view/cancel all bookings; manage desks and users. Admins do **not** receive copies of booking emails (§10, decided 2026-09-07). |
 
 ## 3. Workflows
@@ -38,6 +38,8 @@ Provide a web application so employees at a single hybrid office can reserve a s
 8. **Booking notifications (email):** When a booking becomes **Confirmed** or **Cancelled**, the system sends an email to the employee who owns the booking. For each **Confirmed** booking on a future working day, the system sends a reminder email at 08:00 office local time on the previous calendar day.
 
 9. **Booking notifications (browser push, optional):** An Employee may opt in to browser push alerts. When opted in, the system sends a push notification on book and on cancel (employee-initiated or admin-initiated cancel of that employee's booking). Day-before reminders remain email only.
+
+10. **First sign-in on an administrator-set password:** A user whose password was set by an Admin — at account creation or by an admin reset — signs in with it → the system requires a new password of the user's own choosing before anything else is reachable → on success the administrator-set password stops working and the user continues to workflow 1 (Employee) or workflow 4 (Admin). This step precedes workflows 1 and 4 for such accounts; it cannot be reached voluntarily.
 
 ## 4. Functional requirements
 
@@ -75,6 +77,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | REQ-026 | An Employee can opt in to or opt out of browser push notifications for booking events; default is opt-out.                                                                                      | Must     | 2026-08-14-notifications.md                      |
 | REQ-027 | When an Employee has opted in to browser push, the system sends a push notification on **Confirmed** (book) and **Cancelled** events for that Employee's bookings.                              | Must     | 2026-08-14-notifications.md                      |
 | REQ-028 | When a **Confirmed** booking's date has passed in office local time without cancellation, the booking is presented to Employees and Admins, and is filterable by Admins, as **Completed**.      | Must     | PO/BA decision 2026-09-07 (open question #9)     |
+| REQ-029 | A user whose current password was set by an Admin — at account creation (REQ-018) or by an admin reset (REQ-021) — must replace it with a password of their own choosing at the next successful sign-in, before any other application function is reachable.       | Must     | PO/BA decision 2026-09-07 (SCR-010 conflict #1); 2026-09-08-ba-pending-items.md |
 
 ## 5. Non-functional requirements
 
@@ -83,10 +86,12 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | NFR-001 | Locale/time   | All booking dates and the "today" boundary use the office local timezone.                                                  | Must     |
 | NFR-002 | Scope         | The application supports exactly one office location in this release.                                                      | Must     |
 | NFR-003 | Security      | Sign-in credentials are protected in transit (HTTPS in deployed environments).                                             | Must     |
-| NFR-004 | Usability     | The web UI must be usable on both mobile and desktop browsers (responsive layout); every screen is verified at 360px and 1280px viewport widths. | Must     |
+| NFR-004 | Usability     | The web UI must be usable on both mobile and desktop browsers (responsive layout); every screen is verified at **360px, 768px and 1280px** viewport widths, with no horizontal page scrolling at any of the three. | Must     |
 | NFR-005 | Notifications | Transactional emails (book, cancel, reminder) must be sent reliably; failed sends must be logged for operational follow-up. | Must     |
 | NFR-006 | Notifications | Browser push requires user opt-in and supported browser permission; unsupported browsers degrade gracefully (email only).   | Must     |
 | NFR-007 | Config        | The transactional email sender address and mail service are configuration values, never hard-coded; production values are `TBD (owner: IT)` and required before go-live. | Must     |
+
+> **NFR-004 verification widths.** The three widths are the three responsive shells defined in the [information architecture](../../design/ia.md): 360px exercises the bottom-bar shell, 768px the collapsed icon-only sidebar, and 1280px the persistent sidebar. 768px was added on 2026-09-08 (open question #11) because the middle shell carries layout behaviour no other width tests — the admin tables on SCR-005, SCR-006 and SCR-008 become stacked cards, SCR-003 shows a five-day date strip instead of seven, and SCR-004 narrows its content column to 520px. Verified at 360px and 1280px only, those commitments would ship untested.
 
 ## 6. Business rules
 
@@ -204,6 +209,13 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - **Examples:** Pass — Reminder email sent; no push for reminder. Fail — Push notification for day-before reminder.
 - **Affects:** REQ-025, REQ-027
 
+### BR-001.17 Forced password change on an administrator-set password
+
+- **Statement:** An account whose current password was set by an Admin — at creation (REQ-018) or by reset (REQ-021) — must be marked as administrator-set. On the next successful sign-in of such an account, the system must require a new password before granting access to any other function. The new password must satisfy V-12 and must not equal the administrator-set password. On success the mark clears and the administrator-set password stops working immediately. Until it succeeds the administrator-set password remains valid, so signing out or abandoning the step cannot lock the account holder out.
+- **Rationale:** REQ-018 and REQ-021 leave the Admin who set the password holding a working credential for another person's account indefinitely — including after they cease to be an Admin. With no self-service reset in this release (§10), the forced change at first use is the only point at which the account holder takes sole possession of their credential.
+- **Examples:** Pass — a new starter signs in with the password their Admin gave them, is required to choose a new one, and then reaches their bookings. Pass — that user signs out without choosing one; the administrator-set password still works next time and the change is required again. Fail — a user with an administrator-set password reaches any other screen without changing it. Fail — a new password is accepted when it equals the administrator-set one. Fail — the administrator-set password still signs the user in after a successful change.
+- **Affects:** REQ-002, REQ-018, REQ-021, REQ-029, V-12
+
 ## 7. Validations
 
 | Validation | Rule                                                                              | Related                                                                           |
@@ -222,6 +234,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | V-12       | Password must meet minimum length/complexity policy on create and reset           | REQ-018, REQ-021 — **min 8 chars; upper, lower, digit, special** (PO/security, 2026-08-21) |
 | V-13       | Email notifications include desk number and booking date                          | REQ-023, REQ-024, REQ-025                                                         |
 | V-14       | Push notifications only when user opt-in flag is true                             | REQ-026, REQ-027, BR-001.15                                                       |
+| V-15       | Forced password change: the new password meets V-12 **and** must not equal the administrator-set password | REQ-029, BR-001.17                                     |
 
 ## 8. Constraints
 
@@ -238,10 +251,11 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | RISK-002 | Holidays deliberately out of scope — an employee may book a desk on a company holiday.  | Medium     | Low    | Accepted 2026-09-07: the office is closed, the desk goes unused, nothing is lost. Revisit if it becomes a nuisance in service. |
 | RISK-003 | No self-service password reset; employees depend on Admin for password help.           | Medium     | Low    | REQ-021 admin reset; self-service remains out of scope per §10.                       |
 | RISK-004 | Concurrent booking of the same desk could cause double-booking without proper locking. | Low        | High   | Address in architecture/delivery (not a BA design decision).                          |
-| RISK-005 | Admin displays new password on screen — shoulder-surfing / log exposure if mishandled. | Low        | Medium | Show once + copy; UX warning copy; no password in persistent audit log.               |
+| RISK-005 | Admin displays new password on screen — shoulder-surfing / log exposure if mishandled. | Low        | Medium | Show once + copy; UX warning copy; no password in persistent audit log; the forced change (REQ-029) closes the window at the owner's next sign-in.               |
 | RISK-006 | Email delivery failures (wrong address, SMTP outage) leave users uninformed.           | Medium     | Medium | Log failures (NFR-005); operational monitoring; valid email on user create (REQ-018). |
 | RISK-007 | Browser push permission denied or unsupported — user expects alerts.                   | Medium     | Low    | Clear UX that push is optional; email always sent (BR-001.13).                        |
 | RISK-008 | Upstream discovery inputs are not in this repository, so no REQ can be traced back to the client's own words. | High | Medium | Open action (owner: Joy Joshua, raised 2026-09-07): search for the three session files; if unrecoverable, re-point every `Source` value at the handover input. Must close before Gate 2. |
+| RISK-009 | The forced password change (REQ-029) stands between a new starter and the product, so a failure there blocks all access on someone's first morning. | Low | Medium | BR-001.17 keeps the administrator-set password valid until the change succeeds and leaves sign-out available, so an outage cannot strand a user (SCR-010 ST-06). |
 
 ## 10. Out of scope
 
@@ -256,6 +270,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - Weekend desk booking (Saturday/Sunday).
 - Company public holiday exclusion — only Saturday and Sunday are blocked (open question #2, decided 2026-09-07).
 - Admin copies of booking, cancellation, or reminder emails — those go to the booking owner only (open question #10, decided 2026-09-07).
+- **Voluntary** password change — a "change my password" option for a user who simply wants a new one. The only password change in this release is the forced one on an administrator-set credential (REQ-029); offering a voluntary route would reintroduce the self-service reset excluded above (raised by SCR-010, 2026-09-08).
 - Visitor desk booking on behalf of others by Employees (one desk per employee per day only).
 
 ## 11. Open questions
@@ -272,3 +287,5 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | 8   | The three upstream discovery inputs cited in the `Source` column are not in this repository. Recover them, or re-confirm the requirement set with the client?                              | Joy Joshua   | **Open action** — search for the notes; if unrecoverable, re-point `Source` at the handover input. Close before Gate 2 |
 | 9   | The Confirmed → Completed transition is stated in workflow 5 and BR-001.5 but has no functional REQ of its own. Promote it to a REQ so it is scheduled and tested?                         | PO/BA        | **Resolved** — promoted to REQ-028 (2026-09-07)                      |
 | 10  | The actor table says Admins receive booking emails "where applicable", but REQ-023–REQ-025 send only to the booking owner. Do Admins get a copy of any booking email?                      | PO/client    | **Resolved** — no Admin copies (2026-09-07)                          |
+| 11  | The information architecture defines three responsive shells (≥1024px, 768–1023px, <768px), but NFR-004 named only 360px and 1280px as verification widths — leaving the middle shell designed and untested. Add 768px, or drop the shell?                     | PO/BA        | **Resolved** — NFR-004 gains **768px** as a third verification width (2026-09-08); the 768–1023px collapsed sidebar stays as designed |
+| 12  | SCR-010 (Set your password) rests on the 2026-09-07 decision that an administrator-set password must be replaced by its owner at first use, but BRD-001 carried no requirement for it. Codify it?                                                              | PO/BA        | **Resolved** — promoted to **REQ-029**, with BR-001.17 and V-15 (2026-09-08) |
