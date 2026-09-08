@@ -127,4 +127,4 @@ The session decision also removes the one control this screen was holding open, 
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-001 · Sign in / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Five states, and draw each at **360px and 1280px** — NFR-004 names both as verification widths, so a frame at one width is half a state.
+Five states, and draw each at **360px, 768px and 1280px** — NFR-004 names all three as verification widths, so a frame at one width is a third of a state.

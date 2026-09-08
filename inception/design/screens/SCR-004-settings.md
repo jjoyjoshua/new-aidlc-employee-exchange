@@ -155,4 +155,4 @@ Nowhere on this screen is there a bell icon, a notification count, or an inbox. 
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-004 · Settings / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Seven states at **360px and 1280px** (NFR-004). The `toggle` component needs four variants drawn here — on, off, busy, disabled — and ST-06 needs none of them, which is the point of that state.
+Seven states at **360px, 768px and 1280px** (NFR-004). The `toggle` component needs four variants drawn here — on, off, busy, disabled — and ST-06 needs none of them, which is the point of that state.

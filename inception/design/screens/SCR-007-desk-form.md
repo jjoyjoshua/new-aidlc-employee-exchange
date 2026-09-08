@@ -140,4 +140,4 @@ Both rows resolved 2026-09-07. Row 1 adds a rule to BRD-001 and is listed in the
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-007 · Desk form / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Seven states. Draw the modal at **1280px** and the full-screen form at **360px** (NFR-004) — including one 360px frame with the on-screen keyboard raised, since that is where the confirming action is most at risk of being covered.
+Seven states. Draw the modal at **1280px** and **768px** (it is a modal at and above 768px) and the full-screen form at **360px** (NFR-004) — including one 360px frame with the on-screen keyboard raised, since that is where the confirming action is most at risk of being covered.

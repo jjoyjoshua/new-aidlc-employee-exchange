@@ -201,4 +201,4 @@ All three rows resolved 2026-09-07. None changes BRD-001.
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-003 · Book a desk / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Twelve states at **360px and 1280px** (NFR-004). Draw ST-03 as a close-up of the date control in both its refusal cases — it is the one state that is about a component, not a page. ST-01 is the frame everything else varies from; get the zone grouping and the bottom-anchored confirm right there first.
+Twelve states at **360px, 768px and 1280px** (NFR-004). Draw ST-03 as a close-up of the date control in both its refusal cases — it is the one state that is about a component, not a page. ST-01 is the frame everything else varies from; get the zone grouping and the bottom-anchored confirm right there first.
