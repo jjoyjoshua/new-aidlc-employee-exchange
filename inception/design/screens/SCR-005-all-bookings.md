@@ -184,4 +184,4 @@ All three rows resolved 2026-09-07. Row 1 widens a requirement and is listed in 
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-005 · All bookings / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Eleven states at **360px and 1280px** (NFR-004) — and this is the screen where the two widths differ most, since the table becomes cards. ST-07 is a row-level state: draw it as a close-up of two rows, one cancellable and one not, rather than a whole page. ST-08 – ST-10 are one dialog in three conditions.
+Eleven states at **360px, 768px and 1280px** (NFR-004) — and this is the screen where the widths differ most, since the table becomes cards. ST-07 is a row-level state: draw it as a close-up of two rows, one cancellable and one not, rather than a whole page. ST-08 – ST-10 are one dialog in three conditions.

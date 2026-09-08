@@ -3,44 +3,194 @@
 
    Prefixes are the export contract: --c- color · --t- font size · --lh- line
    height · --fw- weight · --f- family · --s- spacing · --r- radius ·
-   --shadow- elevation · --control- control heights.
+   --shadow- elevation · --control- control heights · --bw- border widths ·
+   --icon- icon sizes.
    --p-* are PRIMITIVES: raw values aliased only inside this file. The design
    tool's library binds to the semantic names, never to a primitive.
 
-   The scales are seeds: keep the step names, retune values with the designer.
-   The palette is deliberately greyscale (wireframe-grade): /ux replaces the
-   --c-* aliases with the product palette in pass 2b, both themes, leaving the
-   structural scales untouched. */
+   PASS 2b — the product palette (warm neutral + forest + clay), supplied by the
+   designer 2026-09-08 and mapped here. The structural scales (spacing, type,
+   radius, control, icon) are unchanged from 2a on purpose: 2b settles how it
+   looks, not what is on the screen.
+
+   Three naming rules this file depends on, all load-bearing:
+
+   1. `--c-fill-*` are FILLS, not surfaces. The supplied rule is "beige-100 and
+      beige-200 are fills only"; body text on them fails AA (ink-500 on
+      beige-100 is 4.33:1), so text over a fill uses `--c-text-on-fill`
+      (ink-700, 8.69:1), never `--c-text-muted`. The name keeps that rule
+      enforceable rather than remembered — and it keeps aidlc-check from
+      pairing muted text against a fill it must never sit on.
+   2. `--c-border` / `--c-border-strong` are DECORATIVE dividers, below 3:1 by
+      design — the palette's quiet edges. Any boundary that identifies a
+      control — a text field, a select, a checkbox — uses `--c-border-control`,
+      which clears WCAG 1.4.11 (3:1) on every surface a form actually sits on.
+      A field outlined in --c-border is a field whose edge some people cannot
+      see. Affects SCR-001, SCR-007, SCR-009, SCR-010.
+   3. Focus is TWO parts: `--c-focus-ring` plus a `--bw-2` `--c-focus-ring-offset`
+      gap in the surface colour. The ring is the brand green and the primary
+      button is also the brand green — without the offset the ring is 1.00:1
+      against it and vanishes on the most important control on the screen.
+
+   Colour is never the only signal (NFR-003). The pale state fills sit close
+   together and closer still under colour-blind simulation — available vs
+   blocked fill is ΔE 9.5 normally and ΔE 2.2 under deuteranopia. So the state
+   is carried by the ICON and the LABEL; the coloured border is the second cue;
+   the fill is the third and weakest. Never ship a state whose only difference
+   is its fill. */
 
 :root {
-  /* primitives — greyscale ramp */
-  --p-gray-0: #ffffff;
-  --p-gray-50: #f5f5f5;
-  --p-gray-100: #eeeeee;
-  --p-gray-200: #e0e0e0;
-  --p-gray-300: #bdbdbd;
-  --p-gray-600: #616161;
-  --p-gray-800: #424242;
-  --p-gray-850: #242424;
-  --p-gray-900: #1a1a1a;
+  /* ---- primitives: warm neutral ramp (surfaces + fills) ---------------- */
+  --p-white: #ffffff;
+  --p-beige-50: #faf7f2;
+  --p-beige-100: #f5f0e8;
+  --p-beige-200: #ebe4d8;
+  --p-beige-300: #dcd2c2;
+  --p-beige-400: #c3b29a;
+  --p-beige-500: #a18762; /* derived 2b: the perceivable control border — 3.19:1 on the page, 3.41:1 on a card */
+  --p-beige-600: #8c7a63;
+  --p-beige-700: #736452; /* derived 2b: text on a beige-200 fill (4.52:1); beige-600 was 3.27:1 and failed */
 
-  /* primitives — scrim (the only non-opaque values; a modal needs one) */
-  --p-black-40: rgba(0, 0, 0, 0.4);
-  --p-black-60: rgba(0, 0, 0, 0.6);
+  /* ---- primitives: warm ink (text) — never pure black ------------------ */
+  --p-ink-900: #221e18;
+  --p-ink-700: #4a4239;
+  --p-ink-500: #7a6f62;
+  --p-ink-400: #a89c8c; /* disabled only — 2.69:1, which WCAG 1.4.3 exempts for inactive controls */
 
-  /* color — semantic aliases; components reference ONLY these */
-  --c-surface: var(--p-gray-0);
-  --c-surface-raised: var(--p-gray-50);
-  --c-surface-overlay: var(--p-gray-100);
-  --c-border: var(--p-gray-200);
-  --c-border-strong: var(--p-gray-300);
-  --c-text: var(--p-gray-900);
-  --c-text-secondary: var(--p-gray-600);
-  --c-text-disabled: var(--p-gray-300);
-  --c-action: var(--p-gray-800);
-  --c-action-label: var(--p-gray-0);
-  --c-focus-ring: var(--p-gray-900);
-  --c-scrim: var(--p-black-40);
+  /* ---- primitives: umber ramp (dark-theme surfaces, fills, ink) -------- */
+  /* Derived 2b: the supplied palette is light-only, so the dark counterpart is
+     a warm ramp on the ink hue. A grey dark theme under a beige light theme
+     reads as two different products. */
+  --p-umber-950: #17140f; /* dark page */
+  --p-umber-900: #201c16; /* dark card */
+  --p-umber-870: #252017; /* dark subtle fill */
+  --p-umber-840: #2a251d; /* dark overlay */
+  --p-umber-800: #302a22; /* dark muted fill / taken desk */
+  --p-umber-740: #3c352a; /* dark divider */
+  --p-umber-560: #6b6151; /* dark disabled text */
+  --p-umber-480: #806d4d; /* dark control border + strong divider — clears 3:1 on all four dark surfaces, overlay included */
+  --p-umber-350: #a59781; /* dark muted text + taken ink */
+  --p-umber-150: #d9cfbe; /* dark secondary text */
+
+  /* ---- primitives: brand — forest -------------------------------------- */
+  --p-forest-150: #96d7bc; /* dark pressed */
+  --p-forest-200: #7ccbaa; /* dark hover + dark focus ring */
+  --p-forest-300: #5fbf97; /* dark action fill */
+  --p-forest-100: #c8ddd2; /* second line on a forest-600 fill */
+  --p-forest-600: #1f4d3a; /* primary action, selected date pill */
+  --p-forest-700: #183c2d; /* hover */
+  --p-forest-800: #122d22; /* pressed */
+  --p-forest-950: #092519; /* label on a light-forest fill (dark theme) */
+
+  /* ---- primitives: clay — "yours". Reserved, never a CTA --------------- */
+  --p-clay-200: #df9677; /* dark hover */
+  --p-clay-300: #d8805a; /* dark "yours" */
+  --p-clay-500: #b2542c;
+  --p-clay-600: #924524; /* hover, and "yours" as text over a fill */
+
+  /* ---- primitives: status ---------------------------------------------- */
+  /* -50 is the light fill, -600 the border, -900 the ink on that fill.
+     -950/-400/-300/-500 are the dark-theme counterparts, derived in 2b. */
+  --p-green-50: #e6f0ea;
+  --p-green-600: #2e7d5b;
+  --p-green-900: #1f4d3a;
+  --p-green-950: #12281f; /* dark fill */
+  --p-green-400: #399b71; /* dark ink */
+  --p-amber-50: #f7ebd4;
+  --p-amber-600: #a87519;
+  --p-amber-900: #6b4a0f;
+  --p-amber-950: #2d220d; /* dark fill */
+  --p-amber-400: #c08a22; /* dark ink */
+  /* The red family sits at hue ~352 (crimson), not at the supplied hue ~11.
+     Decided 2026-09-08 by the designer: at hue 11 the blocked/cancelled red was
+     ΔE 13.6 from clay "yours" — and ΔE 7.7 under colour-blind simulation — while
+     both appear in the same desk list on SCR-003. Shifting the STATUS colour
+     rather than the BRAND clay doubles the separation to ΔE 26.8 (10.2
+     colour-blind) and leaves clay-500 exactly as specified. Both themes use the
+     same hue so light and dark cannot drift. */
+  --p-red-50: #f6e9eb;
+  --p-red-600: #a12b3b;
+  --p-red-900: #6b1924;
+  --p-red-950: #2d1317; /* dark fill */
+  --p-red-500: #c44556; /* dark border */
+  --p-red-300: #e26f7e; /* dark ink */
+
+  /* ---- primitives: scrim (warm — never rgba(0,0,0,x) over beige) ------- */
+  --p-scrim-warm-40: rgba(34, 30, 24, 0.4);
+  --p-scrim-warm-70: rgba(9, 8, 6, 0.7);
+
+  /* ---- color: surfaces ------------------------------------------------- */
+  /* raised and overlay are both white by design: a bottom sheet is separated
+     from the card beneath it by elevation (--shadow-sheet), not by hue. */
+  --c-surface: var(--p-beige-50); /* the page */
+  --c-surface-raised: var(--p-white); /* cards, top and bottom bars */
+  --c-surface-overlay: var(--p-white); /* dialog, bottom sheet */
+
+  /* ---- color: fills — naming rule 1; these never carry body text ------- */
+  --c-fill-subtle: var(--p-beige-100); /* inactive chips, quiet blocks */
+  --c-fill-muted: var(--p-beige-200); /* taken desk, dividers on white */
+  --c-fill-disabled: var(--p-beige-400);
+
+  /* ---- color: borders — naming rule 2 ---------------------------------- */
+  --c-border: var(--p-beige-300); /* decorative divider — the minimum on white */
+  --c-border-strong: var(--p-beige-400); /* decorative emphasis divider */
+  --c-border-control: var(--p-beige-500); /* form control boundary — clears 3:1 */
+
+  /* ---- color: text ----------------------------------------------------- */
+  --c-text: var(--p-ink-900);
+  --c-text-secondary: var(--p-ink-700);
+  --c-text-muted: var(--p-ink-500); /* metadata, placeholders, zone labels */
+  --c-text-disabled: var(--p-ink-400);
+  --c-text-on-fill: var(--p-ink-700); /* the only text token valid over --c-fill-* */
+
+  /* ---- color: brand action --------------------------------------------- */
+  --c-action: var(--p-forest-600);
+  --c-action-hover: var(--p-forest-700);
+  --c-action-pressed: var(--p-forest-800);
+  --c-action-label: var(--p-white);
+  --c-action-label-secondary: var(--p-forest-100);
+  --c-selected: var(--p-forest-600); /* selected date pill */
+
+  /* ---- color: "yours" — clay. Not a CTA, not a link, not a button ------ */
+  --c-mine: var(--p-clay-500);
+  --c-mine-hover: var(--p-clay-600);
+  --c-mine-label: var(--p-white);
+  --c-mine-on-fill: var(--p-clay-600); /* "yours" as text over a --c-fill-* (clay-500 is 4.41:1 there) */
+
+  /* ---- color: status families (fill + border + ink) -------------------- */
+  --c-success-fill: var(--p-green-50);
+  --c-success-border: var(--p-green-600);
+  --c-success-ink: var(--p-green-900);
+  --c-warning-fill: var(--p-amber-50);
+  --c-warning-border: var(--p-amber-600);
+  --c-warning-ink: var(--p-amber-900);
+  --c-danger-fill: var(--p-red-50);
+  --c-danger-border: var(--p-red-600);
+  --c-danger-ink: var(--p-red-900);
+
+  /* ---- color: desk + booking states ------------------------------------ */
+  /* Roles onto the families above, so a status toast and an available desk
+     cannot drift apart. Every one of these carries an icon in its spec — see
+     the NFR-003 note in the file header. */
+  --c-state-available-fill: var(--c-success-fill);
+  --c-state-available-border: var(--c-success-border);
+  --c-state-available-ink: var(--c-success-ink);
+  --c-state-taken-fill: var(--p-beige-200);
+  --c-state-taken-border: transparent; /* the ABSENCE of a border is the cue; the person icon is the signal */
+  --c-state-taken-ink: var(--p-beige-700);
+  --c-state-mine-fill: var(--p-clay-500);
+  --c-state-mine-border: transparent;
+  --c-state-mine-ink: var(--p-white);
+  --c-state-inactive-fill: var(--c-danger-fill); /* an inactive/blocked desk (BR-001.7) */
+  --c-state-inactive-border: var(--c-danger-border);
+  --c-state-inactive-ink: var(--c-danger-ink);
+
+  /* ---- color: focus — naming rule 3 ------------------------------------ */
+  --c-focus-ring: var(--p-forest-600);
+  --c-focus-ring-offset: var(--p-white);
+
+  /* ---- color: scrim ---------------------------------------------------- */
+  --c-scrim: var(--p-scrim-warm-40);
 
   /* spacing — closed scale, no values between steps */
   --s-2: 2px;   /* icon-to-label gaps */
@@ -55,7 +205,13 @@
   --s-80: 80px;
 
   /* type — sizes pair with line heights; body max line length 60–80ch */
-  --f-body: system-ui, sans-serif;
+  /* Inter, chosen 2026-09-08 by the designer. It was already what the Figma
+     frames stood in for `system-ui`, so naming it makes the design file and the
+     product agree instead of only looking like they do. Large x-height and open
+     apertures hold up at --t-label (12px), which the admin tables lean on.
+     system-ui stays as the fallback: if the webfont fails, the product renders
+     in the platform face rather than in a default serif. */
+  --f-body: Inter, system-ui, sans-serif;
   /* monospace: for a credential that must be read aloud accurately (SCR-008 ST-11) */
   --f-mono: ui-monospace, "Roboto Mono", "SFMono-Regular", Menlo, monospace;
   --fw-regular: 400;
@@ -79,15 +235,20 @@
   --r-lg: 12px;
   --r-full: 9999px;
 
-  /* elevation */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-2: 0 4px 6px rgba(0, 0, 0, 0.07);
-  --shadow-3: 0 10px 15px rgba(0, 0, 0, 0.1);
+  /* elevation — warm-tinted; never rgba(0,0,0,x) over beige */
+  --shadow-1: 0 1px 2px rgba(34, 30, 24, 0.06);
+  --shadow-2: 0 2px 8px rgba(34, 30, 24, 0.08);
+  --shadow-3: 0 8px 24px rgba(34, 30, 24, 0.12);
+  --shadow-sheet: 0 -4px 24px rgba(34, 30, 24, 0.1); /* bottom sheet, casts upward */
 
   /* control heights */
   --control-sm: 32px;
   --control-md: 40px;
   --control-lg: 48px;
+
+  /* border widths — state borders are 1px, not hairlines: sunlight legibility */
+  --bw-1: 1px;
+  --bw-2: 2px; /* focus ring and its offset */
 
   /* icon sizes */
   --icon-sm: 16px;
@@ -95,20 +256,93 @@
   --icon-lg: 24px;
 }
 
-/* dark theme — override only what changes; tokens.json mirrors this split */
+/* dark theme — override only what changes; tokens.json mirrors this split.
+   Derived in 2b from the supplied light-only palette, on the warm ink hue.
+   Two inversions worth knowing about:
+   - The action fill goes LIGHT (forest-300) with a dark label, because a
+     forest-600 button on a near-black page is 1.5:1 against it and disappears.
+     Hover and pressed therefore go progressively LIGHTER, not darker.
+   - Danger shifts cool (red-500/red-300, hue ~358) so it cannot be confused
+     with clay "yours". Held at the brand hue the two were ΔE 13.7 apart — the
+     same colour to most eyes — and they appear in the same desk list. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --c-surface: var(--p-gray-900);
-    --c-surface-raised: var(--p-gray-850);
-    --c-surface-overlay: var(--p-gray-800);
-    --c-border: var(--p-gray-800);
-    --c-border-strong: var(--p-gray-600);
-    --c-text: var(--p-gray-50);
-    --c-text-secondary: var(--p-gray-300);
-    --c-text-disabled: var(--p-gray-600);
-    --c-action: var(--p-gray-100);
-    --c-action-label: var(--p-gray-900);
-    --c-focus-ring: var(--p-gray-50);
-    --c-scrim: var(--p-black-60);
+    /* surfaces */
+    --c-surface: var(--p-umber-950);
+    --c-surface-raised: var(--p-umber-900);
+    --c-surface-overlay: var(--p-umber-840);
+
+    /* fills */
+    --c-fill-subtle: var(--p-umber-870);
+    --c-fill-muted: var(--p-umber-800);
+    --c-fill-disabled: var(--p-umber-740);
+
+    /* borders */
+    --c-border: var(--p-umber-740);
+    --c-border-strong: var(--p-umber-480);
+    --c-border-control: var(--p-umber-480);
+
+    /* text */
+    --c-text: var(--p-beige-50);
+    --c-text-secondary: var(--p-umber-150);
+    --c-text-muted: var(--p-umber-350);
+    --c-text-disabled: var(--p-umber-560);
+    --c-text-on-fill: var(--p-umber-150);
+
+    /* brand action — light fill, dark label, lighter on hover and press */
+    --c-action: var(--p-forest-300);
+    --c-action-hover: var(--p-forest-200);
+    --c-action-pressed: var(--p-forest-150);
+    --c-action-label: var(--p-forest-950);
+    --c-action-label-secondary: var(--p-forest-700); /* forest-600 was 4.30:1 on the forest-300 fill */
+    --c-selected: var(--p-forest-300);
+
+    /* "yours" */
+    --c-mine: var(--p-clay-300);
+    --c-mine-hover: var(--p-clay-200);
+    --c-mine-label: var(--p-ink-900);
+    --c-mine-on-fill: var(--p-clay-300);
+
+    /* status */
+    --c-success-fill: var(--p-green-950);
+    --c-success-border: var(--p-green-600);
+    --c-success-ink: var(--p-green-400);
+    --c-warning-fill: var(--p-amber-950);
+    --c-warning-border: var(--p-amber-600);
+    --c-warning-ink: var(--p-amber-400);
+    --c-danger-fill: var(--p-red-950);
+    --c-danger-border: var(--p-red-500);
+    --c-danger-ink: var(--p-red-300);
+
+    /* desk + booking states.
+       The available/inactive roles alias the status families, and CSS resolves
+       that at use time — but tokens.json resolves it at GENERATION time, so an
+       alias left un-overridden here exports the LIGHT green into the dark set
+       and the designer's tool draws an available desk in light-theme mint on a
+       near-black page. Restating them keeps the export honest. */
+    --c-state-available-fill: var(--c-success-fill);
+    --c-state-available-border: var(--c-success-border);
+    --c-state-available-ink: var(--c-success-ink);
+    --c-state-taken-fill: var(--p-umber-800);
+    --c-state-taken-ink: var(--p-umber-350);
+    --c-state-mine-fill: var(--p-clay-300);
+    --c-state-mine-ink: var(--p-ink-900);
+    --c-state-inactive-fill: var(--c-danger-fill);
+    --c-state-inactive-border: var(--c-danger-border);
+    --c-state-inactive-ink: var(--c-danger-ink);
+
+    /* focus */
+    --c-focus-ring: var(--p-forest-200);
+    --c-focus-ring-offset: var(--p-umber-950);
+
+    /* scrim */
+    --c-scrim: var(--p-scrim-warm-70);
+
+    /* elevation — shadows barely read on a dark page; depth comes from the
+       surface ramp above, so these stay subtle rather than getting heavier */
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.36);
+    --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.44);
+    --shadow-sheet: 0 -4px 24px rgba(0, 0, 0, 0.4);
   }
 }

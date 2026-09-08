@@ -173,4 +173,4 @@ All three rows resolved 2026-09-07. Row 3 is a clarification `/ba` should record
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-006 · Desks / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Ten states at **360px and 1280px** (NFR-004). **ST-06 is the most important frame on this screen** — it is the one BRD-001 spent an open question deciding, and the count, the reason and the route out all have to fit in a bottom sheet at 360px. Draw that one first.
+Ten states at **360px, 768px and 1280px** (NFR-004). **ST-06 is the most important frame on this screen** — it is the one BRD-001 spent an open question deciding, and the count, the reason and the route out all have to fit in a bottom sheet at 360px. Draw that one first.

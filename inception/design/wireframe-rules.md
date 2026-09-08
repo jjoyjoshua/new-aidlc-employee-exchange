@@ -12,20 +12,26 @@ WF / SCR-### · <Screen name> / ST-## <State name> · <width>     (wireframe)
 HF / SCR-### · <Screen name> / ST-## <State name> · <width>     (hi-fi)
 ```
 
-Two frames per `ST-##` in the spec — one at each verification width, `· 1280`
-and `· 360` (NFR-004 names both, and every screen spec repeats it: a frame at
-one width is half a state). The numbering is the checklist. A frame whose name
-matches no spec state is an orphan; a state missing either width is undrawn
-work hiding.
+**Three frames per `ST-##` in the spec — one at each verification width, `· 360`,
+`· 768` and `· 1280`.** NFR-004 names all three (revised 2026-09-08, BRD-001
+open question #11), and every screen spec repeats them: a frame at one width is
+a third of a state. The numbering is the checklist. A frame whose name matches
+no spec state is an orphan; a state missing any width is undrawn work hiding.
 
-**`· 768` is the exception: one frame per screen, not per state.** NFR-004 does
-not name 768 as a verification width, but `ia.md` defines a distinct shell there
-(icon-only collapsed sidebar), and an undrawn shell is a shell nobody has checked.
-So each screen gets a single 768 frame — its default state, the one that exercises
-the layout hardest — and that is enough to prove the shell and catch a layout that
-breaks. Drawing all 90 states a third time would cost 90 frames to verify a width
-no requirement asks for. If NFR-004 gains 768 (see the open question in `ia.md`),
-this becomes two frames per state and the coverage rule changes with it.
+**768 used to be the exception, and is not any more.** While NFR-004 named only
+360 and 1280, drawing all 90 states a third time would have cost 90 frames to
+verify a width no requirement asked for — so each screen got a single 768 frame
+of its default state, enough to prove the collapsed-sidebar shell `ia.md`
+defines there. NFR-004 now names 768 as a verification width, which makes the
+middle shell a commitment rather than a courtesy, and this rule changed with it
+exactly as it said it would.
+
+**What that costs, concretely.** 90 states × 3 widths = **270 frames**. 190
+exist (90 states at 360 and 1280, plus the 10 screen-level 768 frames). The 10
+already drawn are each a default state at 768, so they stand as-is; **80 new 768
+frames** are outstanding — the non-default states of every screen. Until those
+exist, the middle shell is verified for ten default states and nothing else,
+and NFR-004 is a claim rather than a checked fact.
 
 The width suffix is the last segment, after the state name, so frames sort by
 screen, then state, then width — which is the order a reviewer reads them in.
@@ -98,14 +104,45 @@ which are family-specific strings — Inter spells it `Semi Bold`, most other
 families spell it `SemiBold`. Change both together or the heavier weights fall
 back silently.
 
-**`--f-body` is unresolved.** `tokens.css` declares `system-ui, sans-serif`;
-design tools have no `system-ui`, so the frames stand Inter in its place. Which
-typeface the product actually ships is a styling decision, open for pass 2b.
+**`--f-body` is Inter** — resolved 2026-09-08 in pass 2b. `tokens.css` declares
+`Inter, system-ui, sans-serif`. The frames had been standing Inter in for an
+unresolved `system-ui`; naming it means the frames and the product now agree
+rather than merely resembling each other. Set Inter explicitly on every text
+style — it is no longer a stand-in, so a frame left on the tool's default face
+is now wrong rather than provisional.
 
-## Wireframes are greyscale
+## Wireframes are greyscale; hi-fi frames use the 2b palette
 
-Wireframes use only the greyscale `--c-*` set from `tokens.css`. Brand colour
-arrives in pass 2b, on tokens — never painted onto a frame first.
+`WF /` frames stay greyscale — they prove structure, and a grey frame cannot
+argue about brand. `HF /` frames use the pass-2b palette (warm neutral +
+forest + clay, landed 2026-09-08), and only ever through the semantic `--c-*`
+names. Colour is never painted onto a frame directly: if a value is not in
+`tokens.json`, it is not in the design.
+
+Four rules the palette carries with it. Each exists because the alternative
+measurably fails, so none of them is a preference:
+
+- **A field's edge is `--c-border-control`, not `--c-border`.** The quiet beige
+  borders are decorative dividers at 1.5:1 — fine between rows, not as the
+  boundary of a text input, which WCAG 1.4.11 requires at 3:1. Affects every
+  form frame: SCR-001, SCR-007, SCR-009, SCR-010.
+- **Focus is a ring plus a `--bw-2` offset gap in `--c-focus-ring-offset`.** The
+  ring is brand green and so is the primary button — drawn without the offset
+  gap, the ring is 1.00:1 against that button and simply is not there.
+- **Text over a `--c-fill-*` is `--c-text-on-fill`.** `--c-text-muted` on the
+  subtle fill is 4.33:1 and fails. The fills are fills, never surfaces.
+- **Every state carries its icon and its label.** The pale state fills are ΔE
+  9.5 apart normally and ΔE 2.2 under deuteranopia — indistinguishable. The
+  icon is the signal, the coloured border the second cue, the fill the third
+  and weakest (NFR-003). A frame where only the fill changes between two states
+  is a frame that has not drawn the state.
+
+**One value in the palette is not the supplied one.** The red family sits at
+hue ~352 rather than the supplied ~11, decided 2026-09-08: at the original hue,
+blocked/cancelled red was ΔE 13.6 from clay "yours" — ΔE 7.7 under colour-blind
+simulation — and the two appear in the same desk list on SCR-003. The status
+colour moved so the brand colour would not have to. Clay `#B2542C` is exactly
+as specified.
 
 ## Layout discipline
 

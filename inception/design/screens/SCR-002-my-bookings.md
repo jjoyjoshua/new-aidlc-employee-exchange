@@ -178,4 +178,4 @@ Both resolved 2026-09-07; neither changes BRD-001.
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-002 · My bookings / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Ten states at **360px and 1280px** (NFR-004). ST-07 – ST-09 are the same dialog in three conditions — draw the sheet at 360px and the modal at 1280px; the shell behind it does not need redrawing each time.
+Ten states at **360px, 768px and 1280px** (NFR-004). ST-07 – ST-09 are the same dialog in three conditions — draw the sheet at 360px and the modal at 1280px; the shell behind it does not need redrawing each time.

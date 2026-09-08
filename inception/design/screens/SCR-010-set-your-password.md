@@ -146,4 +146,4 @@ No `app-shell` on this screen — the navigation appears only once the account i
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-010 · Set your password / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Six states at **360px and 1280px** (NFR-004), including one 360px frame with the keyboard raised and the checklist still visible. The card matches SCR-001's — draw it from that frame so the arrival reads as continuous.
+Six states at **360px, 768px and 1280px** (NFR-004), including one 360px frame with the keyboard raised and the checklist still visible. The card matches SCR-001's — draw it from that frame so the arrival reads as continuous.
