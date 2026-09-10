@@ -31,6 +31,8 @@ There is no way past this screen other than through it, and no navigation shell 
 
 Single centred column, one card, matching SCR-001 so the transition reads as one continuous arrival rather than a new place.
 
+**The card is 400px at both 768 and 1280, centred on both axes** — the same fixed card as SCR-001, for the reason stated there (decided 2026-09-10 by the designer). Same width, same radius, same edge, same position: someone who has just signed in should feel the *contents* of the card change, not the card. At 360 the card is the page, on the 328px inner column.
+
 ```
 ┌─────────────────────────────────────┐
 │         Desk Booking                │
@@ -59,7 +61,10 @@ Single centred column, one card, matching SCR-001 so the transition reads as one
 │  │ — if you forget this, your    │  │  losing it costs an
 │  │ office admin has to reset it. │  │  admin conversation
 │  └───────────────────────────────┘  │
-└─────────────────────────────────────┘
+│                                     │
+│            Sign out                 │  quiet text link, OUTSIDE the card:
+│                                     │  available (see ST-06), not part
+└─────────────────────────────────────┘  of the task
 ```
 
 The closing warning is the one piece of copy on this screen that people will remember, and it is the truthful consequence of BRD-001 §10. Someone choosing a password they will forget deserves to know now, not in three weeks.
@@ -69,13 +74,14 @@ The closing warning is the one piece of copy on this screen that people will rem
 ### ST-01 Default
 
 - **When** the screen loads after a sign-in with an administrator-set password
-- **Shows** the explanation of why this screen appeared; a **New password** field (focused) with a show/hide control and all four policy rules from V-12 listed as an unmet checklist; a **Confirm new password** field; an enabled **Save and continue**; and the no-self-service-reset warning
+- **Shows** the explanation of why this screen appeared; a **New password** field (focused) with a show/hide control and all four policy rules from V-12 listed as an unmet checklist — **in its pending look: a hollow `○` marker and `--c-text-muted` text, never error styling**, because nothing is wrong yet and four rules in red on an untouched form say that something is; a **Confirm new password** field; an enabled **Save and continue**; and the no-self-service-reset warning
 - **Can do** type a password, toggle visibility, submit
 
 ### ST-02 Rules not met
 
 - **When** submit is attempted with a password missing one or more of the four V-12 rules, with either field empty, or with the two entries not matching — caught in the browser before any request
-- **Shows** unmet rules still marked unmet in the checklist rather than collapsed into one message, so the remaining work is visible at a glance; a mismatch is reported beneath the confirm field as *"These don't match."* Each marked field carries an icon and a border change, never colour alone
+- **Shows** the unmet rules still listed rather than collapsed into one message, so the remaining work stays visible at a glance — but **now in their blocking look**: the hollow `○` becomes the error icon, the text takes `--c-danger-ink`, and the field's edge changes with it. Rules already satisfied keep their met `✓` and do not move. A mismatch is reported beneath the confirm field as *"These don't match."* Each marked field carries an icon and a border change, never colour alone
+- **Note (added 2026-09-10):** the checklist therefore has **three** looks, not two — met, pending, and blocking. The spec previously said the unmet rules stay "marked unmet", which would have made a refused submit *pixel-identical* to the state before it: the user presses Save, nothing changes, and the screen reads as broken. Pending and blocking differ by icon and by text, so the change is legible without colour vision
 - **Can do** correct and resubmit. Focus moves to the first field needing attention
 
 ### ST-03 Same as the password you were given
@@ -94,6 +100,7 @@ The closing warning is the one piece of copy on this screen that people will rem
 
 - **When** the password is changed
 - **Shows** the screen gives way to the app — SCR-002 for an Employee, SCR-005 for an Admin — carrying a brief confirmation: *"Password saved. This is the one to use from now on."* The old administrator-set password stops working immediately, which the confirmation implies rather than belabours
+- **Drawn as** the destination screen carrying the toast, not as this screen. Same treatment as SCR-003 ST-11, which has the identical shape and was built that way. **The employee path (SCR-002) is what gets drawn**; the admin path lands on SCR-005, which has no `HF /` frames yet, and building the whole admin shell in colour to host one toast belongs to SCR-005's own build rather than this one. Carried into the handoff below so it is picked up there
 - **Can do** get on with the thing they signed in to do
 
 ### ST-06 Save failed
@@ -112,12 +119,14 @@ The closing warning is the one piece of copy on this screen that people will rem
 | `button`           | **Save and continue**                                                    | ST-01 – ST-06               |
 | `alert`            | `error` for the reuse refusal and for a failed save                      | ST-03, ST-06                |
 | `spinner`          | Inline busy indicator inside the button                                  | ST-04                       |
+| `toast`            | The confirmation carried onto the destination screen                     | ST-05                       |
+| `button` (ghost)   | **Sign out**, beneath the card and outside it                            | ST-01 – ST-06               |
 
 No `app-shell` on this screen — the navigation appears only once the account is the holder's own.
 
 ## Interaction and accessibility
 
-- **Keyboard:** new password → show/hide → confirm → **Save and continue**. Enter submits from either field. Four tab stops
+- **Keyboard:** new password → show/hide → confirm → **Save and continue** → **Sign out**. Enter submits from either field. **Five** tab stops. **Sign out** is last on purpose: it is an escape hatch, not a step, and it must never sit between the fields and the action that completes them
 - **Focus:** visible ring on every control (`--c-focus-ring`). After ST-02 focus goes to the first field needing attention; after ST-03 to the new-password field, which has been cleared
 - **Non-colour signalling:** **each policy rule shows a met/unmet icon and stays readable as text** — a checklist told apart only by green and grey ticks is unusable for a colour-blind user, and this one stands between them and the product. Invalid fields carry icons and text messages, not just borders
 - **Announcements:** the checklist is a live region announcing each rule as it is satisfied (*"A number: met"*), so a screen-reader user knows when they are done without re-reading five lines. ST-03 and ST-06 are assertive. The heading is announced on arrival, so the reason for the unexpected screen is the first thing heard
@@ -135,6 +144,8 @@ No `app-shell` on this screen — the navigation appears only once the account i
 | The no-self-service-reset warning is on this screen, not only on SCR-001         | This is the one moment someone is actively choosing a password. SCR-001's version of this message is for people who have already forgotten; this one is for people about to                                  | Leaving it to SCR-001. Consistent, and it arrives after it can help                                                                                        |
 | Sign-out available, and the temporary password keeps working                     | An outage on ST-06, or an interruption, must not strand someone outside the product. The temporary password is still the credential of record until this screen succeeds                                     | Invalidating the old password on arrival. Tidier, and it can lock a new starter out on their first morning                                                  |
 | No password field on SCR-009's edit mode, and no route here voluntarily           | Changing a password on purpose is self-service, which BRD-001 §10 puts out of scope. This screen is forced, or it is not reached                                                                            | A "change my password" link on SCR-004. Useful, and it quietly adds the self-service reset that was explicitly excluded — **worth raising as a change request if wanted** |
+| **Sign out** is a quiet text link *beneath* the card, not inside it                | Decided 2026-09-10. The spec has always promised sign-out here — it is what stops an outage on ST-06 stranding a new starter outside the product on their first morning — but no layout and no component ever gave it a home, so the frame could not have kept the promise. Outside the card it is reachable without competing with **Save and continue**, and its position says what it is: a way out, not a step | Inside the card beneath the primary action (two actions in one card, one of which abandons the task); a top-bar sign-out (there is no shell on this screen, and adding one contradicts "the shell appears only once the account is the holder's own") |
+| The policy checklist has three looks — met, pending, blocking                       | Pending and blocking cannot be the same, or a refused submit changes nothing on screen and the button reads as dead. Pending and *error* cannot be the same either, or a form nobody has touched yet appears to have four faults in it. The distinction is carried by icon and by text, so it survives without colour vision (NFR-008)                                                                        | Two looks only, as originally written. Fewer variants on `policy-checklist`, and one of the two failure modes above is then guaranteed |
 
 ## Conflicts and open questions
 
@@ -146,4 +157,8 @@ No `app-shell` on this screen — the navigation appears only once the account i
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-010 · Set your password / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Six states at **360px, 768px and 1280px** (NFR-004), including one 360px frame with the keyboard raised and the checklist still visible. The card matches SCR-001's — draw it from that frame so the arrival reads as continuous.
+Six states at **360px, 768px and 1280px** (NFR-004), including one extra 360px frame with the keyboard raised and the checklist still visible. **19 frames.** The card matches SCR-001's — draw it from that frame so the arrival reads as continuous.
+
+**No new colour role is needed** (checked 2026-09-10). The checklist's three looks are already covered: met on `--c-success-*`, pending on `--c-text-muted`, blocking on `--c-danger-ink` — the danger family used here as a status, so it keeps `--c-border` rather than `--c-border-strong`. Field edges are `--c-border-control`; focus is the ring plus its `--bw-2` offset gap; the card takes `--c-border-strong` and `shadow/1` on the page ground; ST-04's in-button spinner takes the **button's label colour**, never a text colour.
+
+Two things to carry into a later build rather than this one: **ST-05's admin path**, which lands on SCR-005 and should be drawn when that screen is built; and `policy-checklist` itself, which is **built here first and inherited by SCR-009** — so build it as a component with a met/pending/blocking axis, not as three hand-assembled lists.
