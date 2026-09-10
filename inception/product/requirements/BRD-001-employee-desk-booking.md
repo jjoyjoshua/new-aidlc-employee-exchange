@@ -5,7 +5,7 @@
 |                  |                                                                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Author**       | BA persona (AI draft) with Joy Joshua (PO/BA)                                                                                                                       |
-| **Source input** | `inception/product/inputs/2026-09-07-desk-booking-brd-handover.md` (verbatim raw material), `inception/product/inputs/2026-09-08-ba-pending-items.md` (the REQ-029 / NFR-004 revision, verbatim) and `inception/product/inputs/2026-09-08-nfr-008-accessibility.md` (the NFR-008 change request, verbatim). Upstream inputs cited in the `Source` column are not present here — see open question #8. |
+| **Source input** | `inception/product/inputs/2026-09-07-desk-booking-brd-handover.md` (verbatim raw material), `inception/product/inputs/2026-09-08-ba-pending-items.md` (the REQ-029 / NFR-004 revision, verbatim), `inception/product/inputs/2026-09-08-nfr-008-accessibility.md` (the NFR-008 change request, verbatim) and `inception/product/inputs/2026-09-10-uncodified-design-decisions.md` (the REQ-030–REQ-036 / NFR-009 codification sweep, with every decision quoted verbatim from the approved screen spec that carried it). Upstream inputs cited in the `Source` column are not present here — see open question #8. |
 | **Related**      | EPIC-001 (filled when stories are drafted after design approval)                                                                                                     |
 
 ## 1. Business goal
@@ -27,13 +27,13 @@ Provide a web application so employees at a single hybrid office can reserve a s
 
 3. **Employee changes desk:** Employee cancels the existing booking for that date → books a different available desk for the same date (no direct desk swap on an existing booking).
 
-4. **Admin monitors bookings:** Admin signs in → views all bookings → filters by date and/or status → can cancel a **Confirmed** booking on behalf of an employee for today or a future date.
+4. **Admin monitors bookings:** Admin signs in → views all bookings → filters by date, status and/or desk (REQ-031) → can cancel a **Confirmed** booking on behalf of an employee for today or a future date.
 
 5. **Booking completes:** When a **Confirmed** booking date passes in office local time without cancellation, status becomes **Completed**.
 
-6. **Admin manages desks:** Admin signs in → views desk inventory → adds a desk with a unique number → edits desk number (when allowed) → activates or deactivates desks → inactive desks are excluded from employee booking availability.
+6. **Admin manages desks:** Admin signs in → views desk inventory with the number of upcoming bookings on each desk (BR-001.9) → adds a desk with a unique number in the enforced format (BR-001.4) → edits a desk number, permitted even while the desk is booked and without notifying the holders (BR-001.19) → activates or deactivates desks → inactive desks are excluded from employee booking availability.
 
-7. **Admin manages users:** Admin signs in → views user list → creates a user (email, role, initial credentials) → edits user details → assigns **Employee** or **Admin** role → deactivates users → resets a user's password (admin-initiated, not self-service).
+7. **Admin manages users:** Admin signs in → views user list, finding an account by name or email (REQ-032) → creates a user (email, role, initial credentials) → edits user details → assigns **Employee** or **Admin** role → deactivates users, which also cancels that user's **Confirmed** bookings dated today or later in the same act (REQ-030, BR-001.18) → resets a user's password (admin-initiated, not self-service).
 
 8. **Booking notifications (email):** When a booking becomes **Confirmed** or **Cancelled**, the system sends an email to the employee who owns the booking. For each **Confirmed** booking on a future working day, the system sends a reminder email at 08:00 office local time on the previous calendar day.
 
@@ -57,14 +57,14 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | REQ-006 | An Employee can select a booking date from today through 30 calendar days ahead, calculated in the office local timezone.                                                                       | Must     | 2026-08-13-client-discussion.md                  |
 | REQ-007 | For a selected date, an Employee can view desk availability where each desk is identified by a unique desk number (e.g. A-01, B-02).                                                            | Must     | 2026-08-13-client-discussion.md, PO/BA interview |
 | REQ-008 | An Employee can book exactly one available desk for one selected date.                                                                                                                         | Must     | 2026-08-13-client-discussion.md                  |
-| REQ-009 | An Employee can view a list of their own bookings, including past and future dates.                                                                                                            | Must     | 2026-08-13-client-discussion.md                  |
+| REQ-009 | An Employee can view a list of their own bookings, including past and future dates. Past bookings are shown for the **last 30 days**, with an explicit control to load older ones; nothing is hidden, only paged (amended 2026-09-10, SCR-002 row 1). | Must     | 2026-08-13-client-discussion.md; PO/BA decision 2026-09-07 (SCR-002 row 1) |
 | REQ-010 | An Employee can cancel their own booking for today or a future date; past bookings cannot be cancelled by the Employee.                                                                         | Must     | 2026-08-13-client-discussion.md, PO/BA interview |
-| REQ-011 | An Admin can view all bookings across employees.                                                                                                                                               | Must     | 2026-08-13-client-discussion.md                  |
+| REQ-011 | An Admin can view all bookings across employees, returned in pages of **50** with an explicit control to load more. There is no date floor — every booking ever made stays reachable (amended 2026-09-10, SCR-005 row 3). | Must     | 2026-08-13-client-discussion.md; PO/BA decision 2026-09-07 (SCR-005 row 3) |
 | REQ-012 | An Admin can filter all bookings by date.                                                                                                                                                      | Must     | 2026-08-13-client-discussion.md                  |
 | REQ-013 | An Admin can filter all bookings by status (**Confirmed**, **Cancelled**, or **Completed**).                                                                                                   | Must     | 2026-08-13-client-discussion.md, PO/BA interview |
 | REQ-014 | An Admin can cancel an Employee's booking on their behalf for today or a future date; past bookings cannot be cancelled by the Admin.                                                           | Must     | 2026-08-13-client-discussion.md, PO/BA interview |
 | REQ-015 | An Admin can add a new desk identified by a unique desk number.                                                                                                                                | Must     | 2026-08-14-admin-provisioning.md                 |
-| REQ-016 | An Admin can edit an existing desk's desk number, subject to uniqueness validation.                                                                                                            | Must     | 2026-08-14-admin-provisioning.md                 |
+| REQ-016 | An Admin can edit an existing desk's desk number, subject to uniqueness (BR-001.8) and format (BR-001.4) validation. The edit is permitted while the desk holds **Confirmed** bookings, and the holders are not notified (BR-001.19). | Must     | 2026-08-14-admin-provisioning.md; PO/BA decision 2026-09-07 (SCR-006 row 3) |
 | REQ-017 | An Admin can activate or deactivate a desk; **Inactive** desks must not appear in employee booking availability.                                                                               | Must     | 2026-08-14-admin-provisioning.md                 |
 | REQ-018 | An Admin can create a user account with email, name, role (**Employee** or **Admin**), and an initial password set by the Admin.                                                                | Must     | 2026-08-14-admin-provisioning.md                 |
 | REQ-019 | An Admin can edit a user's name and email.                                                                                                                                                     | Must     | 2026-08-14-admin-provisioning.md                 |
@@ -75,9 +75,16 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | REQ-024 | When a booking becomes **Cancelled**, the system sends a cancellation email to the booking owner at their account email address.                                                                | Must     | 2026-08-14-notifications.md                      |
 | REQ-025 | For each **Confirmed** booking on a future working day, the system sends a reminder email to the booking owner on the calendar day immediately before the booking date (office local timezone). | Must     | 2026-08-14-notifications.md                      |
 | REQ-026 | An Employee can opt in to or opt out of browser push notifications for booking events; default is opt-out.                                                                                      | Must     | 2026-08-14-notifications.md                      |
-| REQ-027 | When an Employee has opted in to browser push, the system sends a push notification on **Confirmed** (book) and **Cancelled** events for that Employee's bookings.                              | Must     | 2026-08-14-notifications.md                      |
+| REQ-027 | When an Employee has opted in to browser push, the system sends a push notification on **Confirmed** (book) and **Cancelled** events for that Employee's bookings. Where the Employee did not perform the cancellation, the notification names the actor (BR-001.20). | Must     | 2026-08-14-notifications.md; PO/BA decision 2026-09-07 (SCR-004 row 1, SCR-008 row 4) |
 | REQ-028 | When a **Confirmed** booking's date has passed in office local time without cancellation, the booking is presented to Employees and Admins, and is filterable by Admins, as **Completed**.      | Must     | PO/BA decision 2026-09-07 (open question #9)     |
 | REQ-029 | A user whose current password was set by an Admin — at account creation (REQ-018) or by an admin reset (REQ-021) — must replace it with a password of their own choosing at the next successful sign-in, before any other application function is reachable.       | Must     | PO/BA decision 2026-09-07 (SCR-010 conflict #1); 2026-09-08-ba-pending-items.md |
+| REQ-030 | When an Admin deactivates a user account, the system cancels that user's **Confirmed** bookings dated today or later as part of the same action, and sends the cancellation email (REQ-024) for each one. The Admin is shown the affected bookings and their count before confirming. | Must     | PO/BA decision 2026-09-07 (SCR-008 row 1); 2026-09-10-uncodified-design-decisions.md |
+| REQ-031 | An Admin can filter all bookings by desk, alone or combined with the date (REQ-012) and status (REQ-013) filters.                                                                              | Must     | PO/BA decision 2026-09-07 (SCR-005 row 1); 2026-09-10-uncodified-design-decisions.md |
+| REQ-032 | An Admin can find an account in the user list by searching on name or email.                                                                                                                  | Must     | Approved design SCR-008 (search field, ST-03, ST-16); 2026-09-10-uncodified-design-decisions.md |
+| REQ-033 | When creating a user, an Admin can have the system generate an initial password that satisfies V-12 and excludes visually ambiguous characters (`1`/`l`/`I`, `0`/`O`).                          | Should   | Approved design SCR-009 (**Suggest a password**); 2026-09-10-uncodified-design-decisions.md |
+| REQ-034 | On the booking screen, the desk an Employee most recently booked is indicated as such among the available desks for the selected date. It is not preselected.                                   | Could    | PO/BA acceptance 2026-09-07 (SCR-003 structural decisions); 2026-09-10-uncodified-design-decisions.md |
+| REQ-035 | When every active desk is taken for the selected date, the system offers the next two working days that have at least one desk free, as direct selections.                                      | Could    | PO/BA decision 2026-09-07 (SCR-003 row 3); 2026-09-10-uncodified-design-decisions.md |
+| REQ-036 | A booking list refreshes when the browser window or tab regains focus, so a booking cancelled elsewhere (REQ-010, REQ-014, REQ-030) stops being displayed as **Confirmed**.                     | Should   | PO/BA decision 2026-09-07 (SCR-002 row 2); 2026-09-10-uncodified-design-decisions.md |
 
 ## 5. Non-functional requirements
 
@@ -91,8 +98,11 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | NFR-006 | Notifications | Browser push requires user opt-in and supported browser permission; unsupported browsers degrade gracefully (email only).   | Must     |
 | NFR-007 | Config        | The transactional email sender address and mail service are configuration values, never hard-coded; production values are `TBD (owner: IT)` and required before go-live. | Must     |
 | NFR-008 | Accessibility | Colour is never the only signal: every status pair carries an icon or a label, never colour alone. Keyboard operability and visible focus are specified per screen, not assumed. Text-on-surface token pairs meet WCAG AA 4.5:1 in both themes. | Must     |
+| NFR-009 | Security      | A signed-in session lasts **30 days** and is extended by use. No re-authentication is required inside that window, so cancelling a booking is never gated behind a password prompt. Signing out (REQ-003) ends the session immediately. | Must     |
 
 > **NFR-008 wording and number.** The text is the AI-DLC framework's own rule, carried over verbatim from `ai/roles/ux.md`, `ai/templates/screen-spec.md`, `ai/quality/review-checklist.md` and the design README (PO decision 2026-09-08, [issue #7](https://github.com/jjoyjoshua/new-aidlc-employee-exchange/issues/7)). Two deliberate departures: **the number** — the framework calls this rule NFR-003 throughout, which here is the HTTPS requirement, and that collision is what caused seven screen specs to cite a "design standard" document that does not exist; and **the contrast figure** — the framework commits to 4.5:1 text-on-surface, which `aidlc-check` enforces, so the 3:1 `--c-border-control` token added in design pass 2b for form-field boundaries (WCAG 1.4.11) exceeds this requirement rather than being obliged by it. All ten approved screens already comply; this records the rule they comply with, and changes no screen, state, or flow. Full provenance: [`inputs/2026-09-08-nfr-008-accessibility.md`](../inputs/2026-09-08-nfr-008-accessibility.md).
+
+> **NFR-009 accepted risk.** Decided 2026-09-07 (Joy Joshua, PO/BA) while resolving SCR-001 open question 2, and codified 2026-09-10. A 30-day rolling session is chosen for a low-sensitivity internal tool, and specifically so that a password prompt never stands between an employee and cancelling a booking — the act that frees a desk for a colleague. The accepted risk, stated at the time: a lost unlocked phone can book and cancel desks until the session is signed out. There is no "remember me" control, because the default already is remember-me (SCR-001 structural decisions).
 
 > **NFR-004 verification widths.** The three widths are the three responsive shells defined in the [information architecture](../../design/ia.md): 360px exercises the bottom-bar shell, 768px the collapsed icon-only sidebar, and 1280px the persistent sidebar. 768px was added on 2026-09-08 (open question #11) because the middle shell carries layout behaviour no other width tests — the admin tables on SCR-005, SCR-006 and SCR-008 become stacked cards, SCR-003 shows a five-day date strip instead of seven, and SCR-004 narrows its content column to 520px. Verified at 360px and 1280px only, those commitments would ship untested.
 
@@ -119,12 +129,13 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - **Examples:** Pass — booking created for a Wednesday. Fail — booking attempted for a Saturday within the +30-day window.
 - **Affects:** REQ-006, REQ-008
 
-### BR-001.4 Unique desk numbers
+### BR-001.4 Desk number format and uniqueness
 
-- **Statement:** When desks are presented for booking, each desk must display a unique identifier in the form of an alphanumeric desk number (e.g. A-01, B-02, C-05).
-- **Rationale:** Employees choose a specific desk; labels must be unambiguous.
-- **Examples:** Pass — availability list shows "A-01" and "B-02" as distinct selectable desks. Fail — two desks share the same displayed number.
-- **Affects:** REQ-007, REQ-008
+- **Statement:** Every desk must carry a unique desk number matching exactly **one upper-case letter, a hyphen, and two digits** — `^[A-Z]-\d{2}$`, four characters, `A-01` through `Z-99`. Lower case is accepted on input and normalised upward, so `a-01` is stored as `A-01` while `a-1` is refused. The number is the identifier displayed wherever a desk is presented for booking.
+- **Rationale:** Employees choose a specific desk, so labels must be unambiguous. The letter is also the grouping the booking screen uses to divide 30–100 desks into zones, so a free-text label makes that grouping unreliable — one desk named `Window seat 3` and a zone is meaningless. A fixed four characters lets every desk column and desk row be sized once.
+- **Examples:** Pass — `A-01` and `B-02` shown as distinct selectable desks. Pass — an Admin types `a-07`, which is stored and displayed as `A-07`. Fail — two desks share the same displayed number. Fail — a desk is created as `Window seat 3`, or as `A-1`, or as `AA-01`.
+- **Affects:** REQ-007, REQ-008, REQ-015, REQ-016
+- **Decided:** 2026-09-07 (Joy Joshua, PO/BA, SCR-007 open questions 1 and 2), codified here 2026-09-10. The accepted limits are **26 zones, 99 desks per zone, and no non-conforming desk label**. Before this the rule gave `A-01` only as an example, and the format the approved design enforces traced to nothing approved.
 
 ### BR-001.5 Booking status lifecycle
 
@@ -148,16 +159,16 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - **Examples:** Pass — Employee availability list shows only **Active** desks. Fail — Employee books an **Inactive** desk.
 - **Affects:** REQ-007, REQ-008, REQ-017
 
-### BR-001.8 Desk number uniqueness on create and edit
+### BR-001.8 Desk number validity on create and edit
 
-- **Statement:** When an Admin adds or edits a desk, the system must reject duplicate desk numbers (case-normalized comparison per implementation).
-- **Rationale:** BR-001.4 requires unambiguous desk identifiers.
-- **Examples:** Pass — Admin adds A-12 when A-12 does not exist. Fail — Admin adds A-12 when A-12 already exists.
+- **Statement:** When an Admin adds or edits a desk, the system must reject a desk number that does not match the BR-001.4 format, and must reject a duplicate desk number. Duplicate comparison is case-normalized and ignores surrounding whitespace, so `a-01`, `A-01 ` and `A-01` are one desk, not three.
+- **Rationale:** BR-001.4 requires unambiguous desk identifiers. Because case is normalized, a collision the Admin cannot see on screen must be explained rather than merely refused.
+- **Examples:** Pass — Admin adds A-12 when A-12 does not exist. Fail — Admin adds A-12 when A-12 already exists. Fail — Admin adds `a-12` when `A-12` already exists. Fail — Admin adds `Window seat 3`.
 - **Affects:** REQ-015, REQ-016, BR-001.4
 
 ### BR-001.9 Deactivate desk with future bookings
 
-- **Statement:** When an Admin attempts to deactivate a desk that has one or more **Confirmed** bookings dated today or later, the system must reject the deactivation and report how many such bookings exist. Deactivation succeeds only once every one of those bookings has been cancelled. The system must not cancel bookings as part of the deactivate action.
+- **Statement:** When an Admin attempts to deactivate a desk that has one or more **Confirmed** bookings dated today or later, the system must reject the deactivation and report how many such bookings exist. Deactivation succeeds only once every one of those bookings has been cancelled. The system must not cancel bookings as part of the deactivate action. That same count must be visible against each desk in the inventory **before** a deactivation is attempted, so the block is predictable rather than discovered (added 2026-09-10; SCR-006 row 1).
 - **Rationale:** Prevents employees holding reservations on desks removed from service without notice, and forces the Admin to see who they displace before the desk disappears.
 - **Examples:** Pass — Admin deactivates B-03 with no **Confirmed** bookings dated today or later. Fail — Admin deactivates B-03 while a **Confirmed** booking exists for next Tuesday. Fail — deactivation succeeds and silently cancels that booking.
 - **Affects:** REQ-017, REQ-014
@@ -219,6 +230,32 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - **Examples:** Pass — a new starter signs in with the password their Admin gave them, is required to choose a new one, and then reaches their bookings. Pass — that user signs out without choosing one; the administrator-set password still works next time and the change is required again. Fail — a user with an administrator-set password reaches any other screen without changing it. Fail — a new password is accepted when it equals the administrator-set one. Fail — the administrator-set password still signs the user in after a successful change.
 - **Affects:** REQ-002, REQ-018, REQ-021, REQ-029, V-12
 
+### BR-001.18 User deactivation cancels that user's upcoming bookings
+
+- **Statement:** When an Admin deactivates a user account, the system must, in the same action, cancel every **Confirmed** booking that user holds dated today or later, and send the cancellation email (REQ-024) for each. Before confirming, the Admin must be shown those bookings and their count. Deactivation is never blocked by them, and there is no way to deactivate the account without cancelling them. Past bookings are retained.
+- **Rationale:** REQ-005 stops a deactivated user signing in, and REQ-010 requires signing in to cancel — so without this rule a leaver's desks stay reserved and empty until an Admin happens to notice. Access must be revoked immediately, and the desks cannot wait for someone to remember them.
+- **Examples:** Pass — Dana Silva holds three **Confirmed** bookings from today onward; the Admin is shown all three, confirms, the account is deactivated, all three become **Cancelled** and Dana is emailed about each. Pass — a user with no upcoming bookings is deactivated with no cancellations. Fail — the account is deactivated and the three bookings remain **Confirmed**. Fail — the bookings are cancelled without the Admin having been shown them first. Fail — deactivation is refused because the user holds bookings.
+- **Affects:** REQ-020, REQ-005, REQ-024, REQ-030, BR-001.6, BR-001.13
+- **Decided:** 2026-09-07 (Joy Joshua, PO/BA, SCR-008 open question 1), codified here 2026-09-10.
+- **Note:** this is deliberately the **opposite shape** from BR-001.9, where deactivating a *desk* is hard-blocked and must not cancel anything. The difference is that a desk can wait and a revoked account cannot. Both shapes are intentional; neither is a precedent for the other.
+
+### BR-001.19 Renaming a desk that holds bookings
+
+- **Statement:** When an Admin edits a desk number, the system must permit the change even if the desk holds **Confirmed** bookings dated today or later, must not notify the employees holding them, and must show the Admin how many people hold the desk — and that they will not be told — before the change is saved.
+- **Rationale:** The common case is fixing a typo, and a hard block would leave a wrong label unfixable until every booking on it had passed. No transactional email exists for inventory changes (REQ-023–REQ-025 cover bookings), and adding a fourth was rejected. The warning is the most the system can honestly do.
+- **Examples:** Pass — A-01 holds three bookings; the Admin is warned, renames it to A-09, and the change saves with no email sent. Fail — the rename is refused because bookings exist. Fail — the rename saves with no warning shown. Fail — the three holders are emailed about the rename.
+- **Affects:** REQ-016, REQ-023, REQ-024, REQ-025
+- **Decided:** 2026-09-07 (Joy Joshua, PO/BA, SCR-006 open question 3), codified here 2026-09-10.
+
+### BR-001.20 A cancellation the Employee did not perform names the actor
+
+- **Statement:** When a booking is cancelled by anyone other than its owner — an Admin cancelling on their behalf (REQ-014), or the cascade from deactivating their account (BR-001.18) — the browser push notification (REQ-027) must state that the office admin cancelled it, rather than reporting the cancellation without a cause.
+- **Rationale:** A push reading "Your booking was cancelled" when the employee did not cancel it is alarming, unexplained, and generates support messages.
+- **Examples:** Pass — *"Your desk for Tue 9 Sep was cancelled by your office admin."* Fail — *"Your booking was cancelled."* sent for an admin-initiated cancellation.
+- **Affects:** REQ-027, REQ-014, REQ-030, BR-001.15, BR-001.18
+- **Decided:** 2026-09-07 (Joy Joshua, PO/BA, SCR-004 open question 1 and SCR-008 open question 4), codified here 2026-09-10.
+- **Scope limit:** this rule covers the **push** channel only, because that is what was decided. Whether the cancellation **email** (REQ-024) also names the actor is **open question #14** — and it reaches more people, since push defaults to off (REQ-026).
+
 ## 7. Validations
 
 | Validation | Rule                                                                              | Related                                                                           |
@@ -230,7 +267,7 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | V-05       | Employee must not already hold a **Confirmed** booking for the same date          | BR-001.1                                                                          |
 | V-06       | Cancellation only on **Confirmed** bookings for today or future dates             | BR-001.6                                                                          |
 | V-07       | Admin-only actions require **Admin** role                                         | REQ-004, REQ-011–REQ-022                                                          |
-| V-08       | Desk number must be unique on add/edit                                            | REQ-015, REQ-016, BR-001.8                                                        |
+| V-08       | Desk number must be unique on add/edit, compared case-normalized and whitespace-trimmed | REQ-015, REQ-016, BR-001.8                                                  |
 | V-09       | Deactivation rejected while any **Confirmed** booking dated today or later exists on that desk | REQ-017, BR-001.9                                            |
 | V-10       | User email must be unique on create/edit                                          | REQ-018, REQ-019, BR-001.10                                                       |
 | V-11       | Cannot remove the last active **Admin**                                           | REQ-020, REQ-022, BR-001.11                                                       |
@@ -238,6 +275,9 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | V-13       | Email notifications include desk number and booking date                          | REQ-023, REQ-024, REQ-025                                                         |
 | V-14       | Push notifications only when user opt-in flag is true                             | REQ-026, REQ-027, BR-001.15                                                       |
 | V-15       | Forced password change: the new password meets V-12 **and** must not equal the administrator-set password | REQ-029, BR-001.17                                     |
+| V-16       | Desk number must match `^[A-Z]-\d{2}$` on add/edit — exactly 4 characters; lower case is normalised upward before validation | REQ-015, REQ-016, BR-001.4, BR-001.8            |
+| V-17       | User deactivation must cancel every **Confirmed** booking held by that user dated today or later, and must not proceed until the Admin has been shown them | REQ-020, REQ-030, BR-001.18                              |
+| V-18       | A generated initial password must satisfy V-12 and must exclude the characters `1`, `l`, `I`, `0` and `O` | REQ-033, V-12                                                     |
 
 ## 8. Constraints
 
@@ -259,6 +299,9 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | RISK-007 | Browser push permission denied or unsupported — user expects alerts.                   | Medium     | Low    | Clear UX that push is optional; email always sent (BR-001.13).                        |
 | RISK-008 | Upstream discovery inputs are not in this repository, so no REQ can be traced back to the client's own words. | High | Medium | Open action (owner: Joy Joshua, raised 2026-09-07): search for the three session files; if unrecoverable, re-point every `Source` value at the handover input. Must close before Gate 2. |
 | RISK-009 | The forced password change (REQ-029) stands between a new starter and the product, so a failure there blocks all access on someone's first morning. | Low | Medium | BR-001.17 keeps the administrator-set password valid until the change succeeds and leaves sign-out available, so an outage cannot strand a user (SCR-010 ST-06). |
+| RISK-010 | A 30-day session extended by use (NFR-009) means a lost unlocked device can book and cancel desks until the session is ended. | Low | Low | Accepted 2026-09-07 as the price of keeping a password prompt out of the cancellation path. Low-sensitivity data; sign-out (REQ-003) ends the session; an Admin can deactivate the account (REQ-020), which also releases their desks (BR-001.18). |
+| RISK-011 | Deactivating a user (BR-001.18) cancels their bookings irreversibly — reactivating the account does not restore them. A mis-clicked deactivation costs someone their week's desks. | Low | Medium | The Admin is shown the affected bookings individually, not just a count, and the confirming action carries the count in its own label (SCR-008 ST-06). BR-001.11 additionally blocks the most damaging case, deactivating the last Admin. Re-booking is self-service (REQ-008) provided desks remain free. |
+| RISK-012 | A desk renamed while booked (BR-001.19) sends the holder to a desk number that no longer exists, with no notification. | Medium | Low | Accepted 2026-09-07: the common case is a typo correction, and a fourth transactional email was rejected. The Admin sees the holder count and the no-notification warning before saving (SCR-007 ST-02). Revisit if renames of booked desks prove common in service. |
 
 ## 10. Out of scope
 
@@ -275,6 +318,9 @@ Provide a web application so employees at a single hybrid office can reserve a s
 - Admin copies of booking, cancellation, or reminder emails — those go to the booking owner only (open question #10, decided 2026-09-07).
 - **Voluntary** password change — a "change my password" option for a user who simply wants a new one. The only password change in this release is the forced one on an administrator-set credential (REQ-029); offering a voluntary route would reintroduce the self-service reset excluded above (raised by SCR-010, 2026-09-08).
 - Visitor desk booking on behalf of others by Employees (one desk per employee per day only).
+- **Desk booking by Admin accounts.** REQ-004 gives each user exactly one role and REQ-006–REQ-008 grant booking to an Employee, so an Admin has no way to reserve a seat and the admin shell carries no booking screen. Decided 2026-09-07 (Joy Joshua, PO/BA, SCR-005 open question 2) and recorded here 2026-09-10 so the gap is not rediscovered as a bug. An Admin who also needs a desk needs a second, Employee-role account.
+- **Notifying employees when a desk they hold is renamed** (BR-001.19) — rejected as a fourth transactional email.
+- **Search or filtering on the desk inventory** — 30–100 desks sorted by number is scannable (SCR-006 open question 2, 2026-09-07). Revisit past roughly 100 desks.
 
 ## 11. Open questions
 
@@ -293,3 +339,4 @@ Provide a web application so employees at a single hybrid office can reserve a s
 | 11  | The information architecture defines three responsive shells (≥1024px, 768–1023px, <768px), but NFR-004 named only 360px and 1280px as verification widths — leaving the middle shell designed and untested. Add 768px, or drop the shell?                     | PO/BA        | **Resolved** — NFR-004 gains **768px** as a third verification width (2026-09-08); the 768–1023px collapsed sidebar stays as designed |
 | 12  | SCR-010 (Set your password) rests on the 2026-09-07 decision that an administrator-set password must be replaced by its owner at first use, but BRD-001 carried no requirement for it. Codify it?                                                              | PO/BA        | **Resolved** — promoted to **REQ-029**, with BR-001.17 and V-15 (2026-09-08) |
 | 13  | All ten approved screen specs are designed against a non-colour-signalling rule they cite as "NFR-003 of the design standard" — but no design standard document exists in this repository, and BRD-001's NFR-003 is the HTTPS requirement. The accessibility commitment the design rests on traces to nothing approved. Codify it?                    | PO/BA        | **Resolved** — promoted to **NFR-008** (2026-09-08), using the AI-DLC framework's own wording per PO decision on [issue #7](https://github.com/jjoyjoshua/new-aidlc-employee-exchange/issues/7). Numbered 008 because the framework's NFR-003 is taken here. Surfaced while reverting six wrong NFR-003 screen edges introduced by PR #6 |
+| 14  | BR-001.20 makes the **push** alert name the office admin when someone else cancelled an employee's booking. Nothing was decided about the cancellation **email** (REQ-024), which reaches every employee rather than only those who opted in to push (REQ-026 defaults to off). Should the email name the actor too, on both the admin-cancel path (REQ-014) and the deactivation cascade (BR-001.18)? | PO/BA        | **Open** — raised 2026-09-10 by the cross-screen consistency sweep. Default if unanswered: the email keeps its current single wording and only push names the actor, which means most employees get the unexplained version. No screen shows email copy, so this does not block design; it does block writing the email template |
