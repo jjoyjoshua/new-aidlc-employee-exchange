@@ -58,6 +58,24 @@ desktop, at 1024 and above, keep the table.
 
 This table needs **672px**; at 768 it has 648.
 
+**Both row actions are explicit at every width — there is no overflow menu.** This
+file previously specified **Edit** plus an overflow holding **Deactivate**, and the
+greyscale frames drew it that way at 1280 while showing **Deactivate** as a plain
+button on the cards. That made the same destructive act cost two clicks on a desktop
+and one on a phone, which is the wrong way round and was not a decision anyone took.
+This screen has exactly two row actions and they fit at 1280 with room to spare, so
+both are shown at all three widths. Deactivation is still confirmed by a dialog, so
+the protection sits where it belongs rather than in a hidden menu. Decided 2026-09-10
+by the designer during the hi-fi build. **SCR-008 keeps its overflow**, because it
+carries four actions and they genuinely do not fit — an overflow appears when the
+action set outgrows the row, not as a house style.
+
+**Row shapes by width.** At 1280 a real table row on the 140 / 160 / 240 column grid,
+actions right-aligned. At 768 one line — desk, chip, booked-ahead, then the two
+actions right-aligned — which matches SCR-002 and SCR-005 at that width. At 360 the
+fields stack in table order and the two actions sit side by side as equal halves, per
+the wireframe rule that card row actions are never full-width stacked buttons.
+
 ## States
 
 Ten. Six of them belong to deactivation, which is the only destructive act on this screen and the one BRD-001 spent an open question deciding.
@@ -65,7 +83,7 @@ Ten. Six of them belong to deactivation, which is the only destructive act on th
 ### ST-01 Default
 
 - **When** desks are loaded and at least one exists
-- **Shows** a summary line — *"40 desks · 38 active, 2 inactive"* — then every desk sorted by number: desk number, a status chip reading **Active** or **Inactive** (icon plus word), the upcoming-bookings count, and row actions **Edit** plus an overflow holding **Deactivate** (or **Activate**). The **Add desk** action sits in the page header
+- **Shows** a summary line — *"40 desks · 38 active, 2 inactive"* — then every desk sorted by number: desk number, a status chip reading **Active** or **Inactive** (icon plus word), the upcoming-bookings count, and both row actions shown plainly — **Edit** and **Deactivate** (or **Activate** on an inactive desk). The **Add desk** action sits in the page header
 - **Can do** add a desk (→ SCR-007), edit a desk (→ SCR-007), deactivate or activate a desk, navigate
 
 ### ST-02 Loading
@@ -129,22 +147,22 @@ Ten. Six of them belong to deactivation, which is the only destructive act on th
 | `app-shell`      | Admin sidebar / bottom bar, page header with **Add desk**, account menu                         | ST-01 – ST-10                   |
 | `result-summary` | *"40 desks · 38 active, 2 inactive"*                                                            | ST-01, ST-05 – ST-10            |
 | `data-table`     | Desk · Status · Booked ahead · actions — stacked cards below 768px                               | ST-01, ST-05 – ST-10            |
-| `status-chip`    | **Active** / **Inactive** — icon **and** word, never colour alone                                | ST-01, ST-05 – ST-10            |
-| `menu`           | Row overflow holding **Deactivate** / **Activate**                                               | ST-01, ST-09, ST-10             |
+| `status-chip`    | **Active** (check-circle, green) / **Inactive** (block icon, quiet neutral) — icon **and** word, never colour alone | ST-01, ST-05 – ST-10            |
+| ~~`menu`~~       | **Not used.** The row overflow was dropped 2026-09-10 — both actions are explicit at every width (see Layout). `Icon button` stays in the library for SCR-008, which carries four row actions | —                               |
 | `button`         | **Add desk**; row **Edit**; **Try again**; dialog actions                                        | ST-01 – ST-10                   |
-| `empty-state`    | First-run, naming what depends on it                                                             | ST-03                           |
-| `alert`          | Load failure (`error`); in-dialog failure (`error`); the blocked refusal (`warning`)             | ST-04, ST-06, ST-08, ST-10      |
-| `skeleton-row`   | Loading placeholders at real row height                                                          | ST-02                           |
-| `dialog`         | Deactivate confirmation and its blocked variant — modal ≥768px, bottom sheet below               | ST-05 – ST-08                   |
+| `empty-state`    | First-run, naming what depends on it. Its own admin context, separate from the employee "no desks" one, because only this one carries **Add desk** | ST-03                           |
+| `alert`          | Load failure (`error`); in-dialog failure (`error`). **Not** the blocked refusal — see the structural decision on ST-06 | ST-04, ST-08                    |
+| `skeleton-row`   | Loading placeholders at the real row height, on **this** table's column grid — deliberately a separate component from SCR-005's, because a skeleton only stops the table jumping if its columns match | ST-02                           |
+| `dialog`         | Deactivate confirmation, and a new `State=Blocked` for the refusal — modal ≥768px, bottom sheet below | ST-05 – ST-08                   |
 | `toast`          | Transient confirmations stating the effect on bookability                                        | ST-09, ST-10                    |
 
 ## Interaction and accessibility
 
-- **Keyboard:** the table is a table, so column headers are announced per cell — "Booked ahead, 3 upcoming" is meaningless without its header. Tab reaches **Edit** then the overflow control on each row; the overflow opens with Enter and closes with Escape, returning focus to its trigger. **Add desk** is reachable from the page header before the table, so a keyboard user with 100 desks does not tab through the list to add one
-- **Focus:** visible ring on every control (`--c-focus-ring`). Dialog opening traps focus; dismissal returns it to the originating overflow control. In ST-06, focus moves to the refusal text — not to **See those 3 bookings** — because the number is the point and a focused button invites Enter before reading
+- **Keyboard:** the table is a table, so column headers are announced per cell — "Booked ahead, 3 upcoming" is meaningless without its header. Tab reaches **Edit** then **Deactivate** (or **Activate**) on each row — two stops, both labelled, with no menu to open and no icon-only control to guess at. **Add desk** is reachable from the page header before the table, so a keyboard user with 100 desks does not tab through the list to add one
+- **Focus:** visible ring on every control (`--c-focus-ring`). Dialog opening traps focus; dismissal returns it to the row action that opened it. In ST-06, focus moves to the refusal text — not to **See those 3 bookings** — because the number is the point and a focused button invites Enter before reading
 - **Non-colour signalling:** **Active** and **Inactive** each carry an icon **and** the word (NFR-008). The blocked refusal carries an icon and states the count in text — it is never "the amber dialog"
 - **Announcements:** the summary line is a live region, so an activation or deactivation announces the new counts. ST-06's refusal is assertive and its accessible name leads with the number of affected bookings, so a screen-reader user hears the cost first. Toasts in ST-09 and ST-10 are polite live regions
-- **At 360px:** rows become cards in field order (desk, status, booked ahead, actions), with **Edit** and the overflow as full-width controls. The blocked refusal is a bottom sheet, and its **See those 3 bookings** action is full-width — it is the whole purpose of the sheet (NFR-004)
+- **At 360px:** rows become cards in field order (desk, status, booked ahead, actions), with **Edit** and **Deactivate** side by side as equal halves — never full-width stacked buttons. The blocked refusal is a bottom sheet, and its **See those 3 bookings** action takes the width while **Close** hugs — it is the whole purpose of the sheet (NFR-004)
 
 ## Structural decisions
 
@@ -158,6 +176,11 @@ Ten. Six of them belong to deactivation, which is the only destructive act on th
 | No filter bar, no search at this size                                                                      | 30–100 desks sorted by number is scannable, and the letter prefix already groups them visually. A filter over a fully visible list is a control that only costs a click                                                                                                                | A status filter and search from the start. Future-proof, and it clutters the screen for the office we actually have. **See open question 2 for the threshold**                                                                        |
 | The deactivated row stays in place (ST-09)                                                                 | Confirmation should be visible where the action happened. A row that disappears from a list with no filter applied is unexplained                                                                                                                                                      | Moving inactive desks to a separate section. Tidier, and it hides the desk immediately after the one moment Marcus wants to see it                                                                                                     |
 | Add and edit open SCR-007 rather than an inline row editor                                                  | A desk number is subject to uniqueness validation on both create and edit (BR-001.8), so the form has real failure states — duplicate, format, save failure — that an inline field cannot host legibly. Those states are numbered on SCR-007 instead of hiding inside this screen      | Inline editing in the row. Fewer screens, and five validation states crammed into a table cell                                                                                                                                        |
+| Both row actions explicit at every width; no overflow menu (2026-09-10)                                  | Two actions fit at 1280 with room over, and hiding the destructive one behind a menu at 1280 while showing it plainly at 360 made the same act cost two clicks on a desktop and one on a phone. It also removed an undrawn state — reaching **Deactivate** at 1280 went through an open menu that no `ST-##` numbered. The dialog still guards the act | The overflow at 1280, as this file and the greyscale frames had it. Keeps a destructive action tucked away, and it costs a component, a numbered state, and a keyboard detour on the width with the most room. **SCR-008 keeps its overflow: four actions genuinely do not fit** |
+| **Inactive** is a quiet neutral chip, not red (2026-09-10)                                               | `--c-state-inactive-*` aliased the danger family, so the first build drew it in alarm red. On the inventory two of forty desks are inactive because an administrator chose that — red reads as a fault and spends the red family on a deliberate act. The role was re-pointed in `tokens.css` to the quiet fill, so the change lives in the palette rather than on the chip. The block icon and the word still carry the state (NFR-008), and nothing already approved used the role: SCR-003 never shows an inactive desk, because BR-001.7 removes it from availability | Keeping the red the token specified. Faithful to the palette as written, and it makes a routine administrative state look like an error. **As a pass-2b palette change this is the product team's to confirm, and this PR is where they do it** |
+| The blocked refusal IS the dialog, not an alert inside one (2026-09-10)                                  | The components table called for a `warning` alert in ST-06, but the refusal already needs a title, the count, the reason and the route — put that in an alert inside a dialog and the dialog title has to repeat it. So the dialog carries the message directly, with a warning icon in its header as the non-colour signal and the count in the body text. This is what the greyscale frame drew | An alert block nested in the dialog, as the components table specified. Consistent with ST-08's error region, and it says the same thing twice in one card |
+| ST-05 and its failure states are drawn on **A-02**, not B-07 (2026-09-10)                                | This file's ST-05 and ST-09 copy names B-07, a desk that appears nowhere in this screen's own list. ST-05's precondition is a desk with no upcoming bookings, and A-02 is exactly that in the list as drawn, so the frames use it. Same class of slip SCR-002 recorded for its dialog copy | Adding B-07 to the list to match the copy. Faithful to the sentence, and it puts a desk in the inventory purely to satisfy a caption |
+| The header keeps **Add desk** in ST-03 alongside the empty state's own button (2026-09-10)               | "**Add desk** as the only action" describes the empty state component — it has one action where other contexts have two — not the whole screen. Removing shell furniture for a single state is a worse inconsistency than two routes to the same place, and the empty-state button is the prominent one | Hiding the header action on ST-03. One primary instead of two, and the header action then appears and disappears for reasons a user cannot see. **ST-04 does hide it, and that one is in the spec, for a stated reason: BR-001.8** |
 
 ## Conflicts and open questions
 
@@ -173,4 +196,43 @@ All three rows resolved 2026-09-07. Row 3 is a clarification `/ba` should record
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-006 · Desks / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Ten states at **360px, 768px and 1280px** (NFR-004). **ST-06 is the most important frame on this screen** — it is the one BRD-001 spent an open question deciding, and the count, the reason and the route out all have to fit in a bottom sheet at 360px. Draw that one first.
+**The hi-fi frames for this screen exist.** All ten states are drawn at 360, 768 and
+1280 in *Employee Desk Booking — Design System & Mockups*
+(<https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn>) — **30 frames** — named
+`HF / SCR-006 · Desks / ST-## <state> · <width>`, on the pass-2b palette as Figma
+variables in both themes. Every colour and every text style is a token — audited:
+**0 raw paints out of 2,303, and 0 unstyled text nodes out of 754** — so the dark theme
+is a mode switch rather than a redraw, which was rendered and checked. Neither the
+frames nor the Figma file is what gets approved; this spec's PR is.
+
+**ST-06 was drawn first**, as this handoff asked. At 360 the refusal is a bottom sheet
+carrying the desk, the count, the reason and the route, with **See those 3 bookings**
+taking the width and **Close** hugging — it fits without scrolling.
+
+Built for this screen, and reusable: **`Icon / plus`** and **`Icon / more`** (the
+library had neither), **`Status chip`** gained `Active` and `Inactive`, **`Page header`**
+gained `Desktop action` / `Mobile action` variants carrying a primary action where
+SCR-005 carries a timezone, **`Icon button`** (a square 48px control built from
+`Type=Secondary` so it sits flush beside **Edit**), **`Desk row`** (table / card / card
+compact × active / inactive), **`Desk table header`**, **`Desk skeleton row`**, an
+**`Empty state`** admin context, and a **`Dialog` `State=Blocked`** for the refusal.
+
+**`Icon button` is not used by this screen** — the overflow was dropped here — and is
+kept deliberately for SCR-008, whose row carries four actions. If People also ends up
+without an overflow, delete it: a component no screen lists is speculative library.
+
+Two faults found while building, both invisible to a token audit:
+
+1. **An icon swapped into a button keeps its own master's stroke colour.** The plus in
+   **Add desk** arrived bound to `--c-text-secondary` and was all but invisible on the
+   forest fill. An icon inside a button has to take that button's *label* colour, and
+   the swap does not do it for you. Now bound to `--c-action-label`.
+2. **Resizing a component set that has auto-layout can push a variant out of its own
+   frame**, which silently ejects it. Same failure as the SCR-005 build, reached a
+   different way: there it was two sets overlapping, here it was shrinking one set
+   after appending to it. Both are in `wireframe-rules.md` now.
+
+**One thing the frames do not draw.** ST-10 mentions that an activation failure surfaces
+as an inline alert with the row reverted, sharing ST-08's error region. That is the same
+card as ST-08 with the copy swapped, so it has no frame of its own — as this spec
+already says.

@@ -211,9 +211,20 @@
   --c-state-mine-fill: var(--p-clay-500);
   --c-state-mine-border: transparent;
   --c-state-mine-ink: var(--p-white);
-  --c-state-inactive-fill: var(--c-danger-fill); /* an inactive/blocked desk (BR-001.7) */
-  --c-state-inactive-border: var(--c-danger-border);
-  --c-state-inactive-ink: var(--c-danger-ink);
+  /* An inactive desk (BR-001.7). Re-pointed 2026-09-10 from the danger family to
+     the quiet fill, by the designer, while drawing SCR-006. It had been red because
+     "inactive/blocked" reads like a fault — but on the desk inventory two of forty
+     desks are inactive because an administrator chose that, and alarm red overstates
+     a deliberate act and spends the red family on it. The block icon and the word
+     carry the state (NFR-008), so nothing is lost by making the fill quiet. This is
+     the same treatment as a completed booking and DELIBERATELY a separate role: a
+     desk is not a booking, and the two must be able to diverge again without one
+     edit changing the other. Nothing already approved used this role — SCR-003 never
+     shows an inactive desk, because BR-001.7 removes it from availability entirely.
+     PENDING product-team approval — this is a pass-2b palette change. */
+  --c-state-inactive-fill: var(--c-fill-subtle);
+  --c-state-inactive-border: transparent; /* the block icon is the signal, as with taken and completed */
+  --c-state-inactive-ink: var(--c-text-on-fill);
 
   /* Booking lifecycle, as distinct from desk availability. A desk is
      available/taken/yours/blocked; a BOOKING is confirmed, completed or
@@ -404,9 +415,8 @@
     --c-state-taken-ink: var(--p-umber-350);
     --c-state-mine-fill: var(--p-clay-300);
     --c-state-mine-ink: var(--p-ink-900);
-    --c-state-inactive-fill: var(--c-danger-fill);
-    --c-state-inactive-border: var(--c-danger-border);
-    --c-state-inactive-ink: var(--c-danger-ink);
+    --c-state-inactive-fill: var(--c-fill-subtle);
+    --c-state-inactive-ink: var(--c-text-on-fill);
     --c-state-confirmed-fill: var(--c-success-fill);
     --c-state-confirmed-border: var(--c-success-border);
     --c-state-confirmed-ink: var(--c-success-ink);

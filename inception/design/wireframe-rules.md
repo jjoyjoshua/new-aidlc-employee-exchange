@@ -150,6 +150,19 @@ clutter rather than as hierarchy, and 20px rows with no vertical padding left th
 labels touching each other. `Icon / settings` and `Icon / sign-out` stay in the
 library for the mobile account menu, which is not drawn yet.
 
+## The icon set is closed until a screen needs one
+
+Two were added 2026-09-10 for SCR-006, because the library genuinely had neither and
+both are load-bearing: **`Icon / plus`** (the leading mark on **Add desk** / **Add
+person**) and **`Icon / more`** (the row overflow on SCR-008). Both are geometry only —
+stroked paths, round caps, colour from the stroke token, no literal hex — and both were
+cloned from an existing icon rather than drawn fresh, so weight, caps and joins match
+the set without anyone having to remember what they were.
+
+`Icon / more` is three dots drawn as one stroked path with round caps and a zero-height
+bounding box. That is legitimate and it renders correctly, but it means the vector has
+`height = 0`: centre it by hand and do not assume a resize will position it.
+
 ## Spacing
 
 All spacing from the `--s-*` scale in `tokens.css` — no in-between values.
@@ -361,6 +374,56 @@ latter and pushed two of its variants out of bounds. So:
 - re-appending an ejected component to the set works and restores the variant, but
   **its text property references do not come back** — rebind them, then read one
   instance to confirm, per the `clone()` note below
+
+**There is a second way in, and it looks safer than it is: shrinking the set itself.**
+Found 2026-09-10 on the SCR-006 build. Many of these sets have auto-layout, so the set
+positions its own variants and ignores coordinates you assign them. Append a variant,
+then `resize()` the set to what you *think* it needs, and auto-layout has already laid
+the variants out past that width — the last one ends up outside the frame, renders as a
+1×1 image, and is one edit away from being ejected. The `Status chip` set lost its new
+`Inactive` variant to exactly this and it took a blank screenshot to notice.
+
+So on any set with auto-layout, **do not size it by hand — let it hug**:
+`primaryAxisSizingMode = "AUTO"; counterAxisSizingMode = "AUTO"`. Only compute bounds
+yourself when `layoutMode` is `"NONE"`. And a blank or 1×1 render of a node that reports
+a sensible width is the signature of this fault, not of a broken component.
+
+## An icon swapped into a button keeps the wrong colour
+
+Found 2026-09-10 on **Add desk**. `Button` colours its icon by binding the *nested*
+vector to the same token as its label — `--c-action-label` on Primary,
+`--c-text-secondary` on Secondary. Swap the icon through the `Icon` instance-swap
+property and the new icon arrives carrying **its own master's** stroke, which for every
+icon in this library is `--c-text-secondary`. On a forest-filled Primary button that is
+a dark mark on a dark ground: present, tokenised, audit-clean, and invisible.
+
+So after any icon swap inside a button, **rebind the icon's stroke to the button's label
+token** and look at it. Two related traps in the same component:
+
+- **the icon node is hidden by default.** `Show icon` is `false` on the Button set, so a
+  variant cloned out of it has `visible = false` on the icon. Building `Icon button` from
+  `Type=Secondary` produced a perfect 48px square with nothing in it.
+- **icons in this library are stroked, not filled.** Recolouring code that only touches
+  `fills` silently does nothing. Check `strokes` first and fall back to `fills`.
+
+## A row gets an overflow when its actions outgrow it, not as a house style
+
+Settled 2026-09-10 across the two admin tables, because they answer it differently and
+the difference is the rule.
+
+**SCR-006 Desks has two row actions** — Edit, and Deactivate/Activate. They fit at 1280
+with room over, and they fit side by side at 768 and as equal halves at 360. So all
+three widths show both, and there is no menu. Hiding the destructive one behind a `⋯` at
+1280 while showing it plainly at 360 made the same act cost two clicks on a desktop and
+one on a phone, and it created a state — the open menu — that no `ST-##` had numbered.
+
+**SCR-008 People has four** — Edit, Reset password, Deactivate/Activate, and a role
+change. Four buttons do not fit a row at any width, so that screen keeps its overflow
+and numbers the open menu as a state.
+
+The test is the row, not the screen: **if every action fits, show every action.** A menu
+that exists to be tidy costs a component, a numbered state, a keyboard detour and an
+icon-only control that needs an accessible name spelled out per row.
 
 ## A component can lie about its own size
 
