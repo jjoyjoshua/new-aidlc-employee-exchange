@@ -5,7 +5,7 @@
 |                 |                                                                                                                              |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Serves**      | — (stories not yet drafted; the `US ↔ SCR` edge is added by `/ba` in Discovery step 3)                                        |
-| **Traces to**   | REQ-004, REQ-005, REQ-018, REQ-020, REQ-021, REQ-022, REQ-024, NFR-004, NFR-008                                                                         |
+| **Traces to**   | REQ-004, REQ-005, REQ-018, REQ-020, REQ-021, REQ-022, REQ-024, REQ-030, REQ-032, NFR-004, NFR-008                                                                         |
 | **Surface**     | `apps/ui` `features/admin-users` — `/admin/people`                                                                           |
 | **Persona**     | P-2 Marcus ([research](../research/BRD-001-employee-desk-booking.md))                                                        |
 | **Primary job** | Keep accounts matching the people who actually work here — add starters, change roles, switch leavers off, rescue passwords    |
@@ -18,7 +18,7 @@ The account list. Marcus creates users (REQ-018), assigns and changes roles (REQ
 
 Two rules shape this screen more than the CRUD does. **BR-001.11** forbids any action that would leave zero active Admins — so a refusal has to explain the lockout it prevented, not just deny the click. **BR-001.12** requires a reset password to be displayed once to the administrator and never emailed (BRD-001 §10) — so this screen has a state that shows a credential on a monitor, in an office, with people walking past (RISK-005).
 
-A third rule was added on 2026-09-07 (Joy Joshua, PO/BA, pending codification in BRD-001): **deactivating a user also cancels their upcoming bookings.** Access is revoked immediately — a leaver cannot wait for a desk to be freed — and the desks are released in the same act, because the person who holds them can no longer sign in to cancel them (REQ-010 requires signing in). The administrator sees the count before confirming, and each cancellation sends its usual email (REQ-024). This is deliberately the opposite shape from desk deactivation, where BR-001.9 blocks rather than cancels; the difference is that a desk can wait and a revoked account cannot.
+A third rule was added on 2026-09-07 (Joy Joshua, PO/BA; codified 2026-09-10 as REQ-030, BR-001.18 and V-17): **deactivating a user also cancels their upcoming bookings.** Access is revoked immediately — a leaver cannot wait for a desk to be freed — and the desks are released in the same act, because the person who holds them can no longer sign in to cancel them (REQ-010 requires signing in). The administrator sees the count before confirming, and each cancellation sends its usual email (REQ-024). This is deliberately the opposite shape from desk deactivation, where BR-001.9 blocks rather than cancels; the difference is that a desk can wait and a revoked account cannot.
 
 ## Place in the flow
 
@@ -27,7 +27,7 @@ A third rule was added on 2026-09-07 (Joy Joshua, PO/BA, pending codification in
 
 ## Layout
 
-A table with a search field — unlike the desk list, an office's people list grows past the point of scanning, and Marcus arrives knowing the name he wants.
+A table with a search field — unlike the desk list, an office's people list grows past the point of scanning, and Marcus arrives knowing the name he wants. Codified 2026-09-10 as **REQ-032**, priority **Must** — not for convenience, but because BR-001.11's refusal (ST-07, ST-09) offers **Make someone an admin** and focuses this field. The safeguard's only recovery route runs through it.
 
 ```
 ┌────────────┬──────────────────────────────────────────────────────┐
@@ -161,13 +161,14 @@ SCR-005 made with its ST-12.
 ### ST-10 Reset password confirmation
 
 - **When** **Reset password** is chosen on an account
-- **Shows** a confirmation that sets up what is about to happen, because the next state puts a credential on screen: *"Reset **Dana Silva's** password? We'll generate a new one and show it to you once — it isn't emailed to them, so you'll need to pass it on. Their current password stops working straight away."* Actions: **Reset password** and **Cancel**. Every clause is a fact from BR-001.12 or BRD-001 §10 that Marcus will otherwise discover too late
+- **Shows** a confirmation that sets up what is about to happen, because the next state puts a credential on screen: *"Reset **Dana Silva's** password? We'll generate a new one and show it to you once — it isn't emailed to them, so you'll need to pass it on. Their current password stops working straight away, and they'll be asked to choose their own the first time they sign in with the new one."* Actions: **Reset password** and **Cancel**. Every clause is a fact from BR-001.12, BR-001.17 or BRD-001 §10 that Marcus will otherwise discover too late
+- **Note (added 2026-09-10):** the final clause is new. REQ-029 and BR-001.17 apply identically to a password set at creation (REQ-018) and one set by this reset (REQ-021) — SCR-010 sits behind both — but only the **create** path said so. SCR-009 ST-01 has always warned *"They'll be asked to change it when they first sign in"*, and this screen said nothing, so an administrator resetting a password handed over a credential without knowing it was about to be replaced. Found 2026-09-10 by a cross-screen consistency sweep. No rule changed; one screen was simply quieter than the other about the same rule
 - **Can do** confirm, dismiss
 
 ### ST-11 Password reset result — shown once
 
 - **When** the reset succeeds (REQ-021, BR-001.12)
-- **Shows** the new password once, in a monospaced field large enough to read aloud accurately, with a **Copy** control and the exposure stated plainly (RISK-005): *"This is the only time you'll see it. Copy it now and give it to Dana Silva directly — we can't show it again, and it isn't in any email."* The only action is **Done**, and the dialog does not close on a click outside or on Escape — a credential shown once must not be dismissed by a stray tap. **Copy** confirms in place (*"Copied"*), because a silent copy leads to pasting the wrong clipboard
+- **Shows** the new password once, in a monospaced field large enough to read aloud accurately, with a **Copy** control and the exposure stated plainly (RISK-005): *"This is the only time you'll see it. Copy it now and give it to Dana Silva directly — we can't show it again, and it isn't in any email. They'll be asked to choose their own password when they sign in with it."* The final sentence is deliberately **last**, after the shown-once warning has landed: this state's first job is to stop the credential being lost, and nothing may displace that. It is repeated here rather than left on ST-10 because this is the moment Marcus is actually reading the password out, and it tells him what to say alongside it — the same reason SCR-009 repeats it in its create toast (ST-07) having already warned on the form. The only action is **Done**, and the dialog does not close on a click outside or on Escape — a credential shown once must not be dismissed by a stray tap. **Copy** confirms in place (*"Copied"*), because a silent copy leads to pasting the wrong clipboard
 - **Can do** copy, read it out, then **Done**. Nothing else on the screen is reachable until then
 
 ### ST-12 Action in progress
@@ -257,7 +258,7 @@ All rows resolved 2026-09-07. Rows 1 and 4 change BRD-001 and are listed in the 
 
 | #   | Conflict / question                                                                                                                                                                                                                                                                                                                                            | Between                     | Owner            | Status                                                                                                                                                                    |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **What happens to a deactivated user's upcoming bookings?** REQ-020 stops sign-in; nothing addresses their reservations. A leaver keeps a desk booked every Tuesday for three weeks and cannot cancel it themselves (REQ-010 requires signing in) — so desks sit reserved and empty until an Admin notices.                                                     | REQ-020, REQ-005 vs REQ-010 | PO/BA (`/ba`)    | **Resolved 2026-09-07 (Joy Joshua, PO/BA) — deactivation cancels them.** Deactivate immediately and cancel every Confirmed booking dated today or later in the same act; the admin sees the list and count first (ST-06); each cancellation emails the owner (REQ-024). **New rule — `/ba` must add it to BRD-001**   |
+| 1   | **What happens to a deactivated user's upcoming bookings?** REQ-020 stops sign-in; nothing addresses their reservations. A leaver keeps a desk booked every Tuesday for three weeks and cannot cancel it themselves (REQ-010 requires signing in) — so desks sit reserved and empty until an Admin notices.                                                     | REQ-020, REQ-005 vs REQ-010 | PO/BA (`/ba`)    | **Resolved 2026-09-07 (Joy Joshua, PO/BA) — deactivation cancels them.** Deactivate immediately and cancel every Confirmed booking dated today or later in the same act; the admin sees the list and count first (ST-06); each cancellation emails the owner (REQ-024). **New rule — `/ba` must add it to BRD-001.** **Codified 2026-09-10 as REQ-030, BR-001.18 and V-17.** BR-001.18 records in its own note that this is deliberately the opposite shape from BR-001.9, so neither is read as a precedent for the other, and RISK-011 records that these cancellations cannot be undone by reactivating the account   |
 | 2   | Should the reset-password result be printable, or is on-screen display the whole intent? BR-001.12 says shown once, copy encouraged. If the new starter is not at Marcus's desk, "copy to clipboard" needs somewhere to go — and every option (chat, paper, dictation) is outside the product.                                                                   | BR-001.12 vs RISK-005       | PO / security    | **Resolved 2026-09-07 (Joy Joshua, PO) — copy only.** No print, no send, shown once. The product does not become a credential-delivery channel. Confirms BR-001.12 as written; no BRD change                                            |
 | 3   | Can an Admin reset **their own** password here? REQ-021 is admin-initiated reset of "a user's" password and does not exclude self. Doing so shows Marcus a password he then has to use — harmless, but it is also the only self-service reset in a product that deliberately has none (BRD-001 §10).                                                             | REQ-021 vs BRD-001 §10      | PO/BA (`/ba`)    | **Resolved 2026-09-07 (Joy Joshua, PO/BA) — allowed.** The administrator's own row behaves like any other. It matters most in a single-admin office, where hiding it would leave that account unresettable. Clarifies REQ-021; no BRD change |
 | 4   | Row 1 cancels bookings on an employee’s behalf, so REQ-027 would push that employee an alert with no visible cause — the problem SCR-004 row 1 solved for admin-initiated cancellation. | REQ-027 vs row 1 | PO/BA (`/ba`) | **Resolved 2026-09-07 (Joy Joshua, PO/BA) — say why.** These use the same actor-naming copy agreed on SCR-004: the alert states the office admin cancelled it. **Folded into the same `/ba` change as SCR-004 row 1** |
@@ -327,6 +328,33 @@ the signal, as with taken and completed"* — so the quiet chips are a borderles
 NFR-008 is carried by the icon and the word, not the fill. The matching Figma variable is
 consequently valueless, which is how `transparent` is modelled there; the chip strokes
 bound to it are inert and were left alone.
+
+**Re-rendered 2026-09-10 — six frames, for the forced-password-change sentence.** ST-10
+and ST-11 each gained one sentence (see the notes on those states), so both states were
+rebuilt at 360, 768 and 1280. Nothing structural changed: no new state, no new component,
+no new token, and no change to ST-11's strict dismissal rules, its missing header ✕ or
+its missing drag handle. The copy is a `Body` **text property on the `Dialog` instance**,
+not an override on the text node, so each frame was one property set and the card grew on
+its own auto-layout.
+
+**What grew, measured.** ST-10's body went 72 → 120px at 1280 and 768 (three lines to
+five) and 120 → 168px at 360, taking the card 244 → 292 and 344 → 416. ST-11's went
+72 → 96 and 96 → 120, taking the card 328 → 352 and 352 → 376. ST-11 gains less because
+its sentence is shorter.
+
+**Repositioning was required and is the part worth knowing.** Every dialog on this page is
+`layoutPositioning: ABSOLUTE` inside its frame, so a card that grows keeps its top edge
+and extends *downward* — it does not re-centre and it does not stay anchored. Left alone,
+ST-10 at 360 finished 72px past the bottom of its own frame. The two centred modals were
+re-centred on the new height and the two 360 sheets re-anchored flush to the frame bottom.
+All six now sit fully inside their frames, and no text node is clipped — checked against
+`absoluteRenderBounds`, not by eye.
+
+**The two things this spec said to watch, both checked.** At 360 ST-11 still carries the
+credential on its own full-width line above **Copy**, untruncated and with no horizontal
+scroll — the extra sentence wrapped, which is the order this spec requires. ST-10 at 360
+kept its stacked footer, as predicted: that measurement is driven by the *Reset password*
+label needing 155px against a 152px half, and body copy does not touch it.
 
 **One canvas fault fixed in passing.** `Desk table header` (from the SCR-006 build) sat
 inside `Admin skeleton row`’s bounding box on the *Admin table & filters* page — the
