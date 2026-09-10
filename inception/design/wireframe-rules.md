@@ -33,6 +33,13 @@ frames** are outstanding — the non-default states of every screen. Until those
 exist, the middle shell is verified for ten default states and nothing else,
 and NFR-004 is a claim rather than a checked fact.
 
+**Revised 2026-09-10: 91 states, and one of them is a single width.** SCR-005
+gained ST-12 (the 360 filter disclosure) during its hi-fi build. It cannot exist at
+768 or 1280, where the filter panel is always open, so the target is **271 frames**
+(90 states × 3, plus ST-12 at 360) rather than 273. A state that exists at one width
+only is legitimate — SCR-010 already has a 360-only keyboard frame — but it has to
+say so in its own spec, or the missing two widths read as undrawn work. Both do.
+
 The width suffix is the last segment, after the state name, so frames sort by
 screen, then state, then width — which is the order a reviewer reads them in.
 
@@ -116,6 +123,25 @@ icon 2px off centre on the active item only, and left active and inactive rows i
 the expanded rail 3px out of alignment with each other. Both are the kind of fault
 you see before you can name — the rail simply looks untidy. An indicator marks a
 row; it does not take part in its layout. Fixed 2026-09-08.
+
+**"Every indicator" included one nobody had checked.** The rule above was written
+for the sidebar and applied only there; the **mobile bottom bar** kept its 3px bar as
+a layout child until 2026-09-10, and carried two faults because of it. First, the bar
+plus its 4px gap made the active tab 59px against its siblings’ 52px, so on a
+top-aligned row the active icon and label sat 7px lower than every other tab —
+the same untidiness as the rail, in a place the rule had not been read. Second, and
+worse: on the `Tab=Bookings` variant the visible bar had **no fill at all**, so the
+active tab was signalled by label colour alone. That is a straight NFR-008 failure,
+and it was live in the approved SCR-002 and SCR-003 frames at 360. Both fixed across
+all five variants during the SCR-005 build: the bar is absolutely positioned,
+top-centred, `--c-action`-filled, present on every tab and visible on exactly one.
+
+**When you add a variant to a nav component, set the colour AND the indicator.**
+Active is carried by three things — the bar, the label fill (`--c-action` against
+`--c-text-secondary`) and the icon stroke. Cloning a tab copies whichever state the
+source was in, so two new admin variants shipped for ten minutes with the indicator
+on the right tab and the *label* still coloured on the old one: two tabs reading as
+active at once. Read all three back after cloning.
 
 **Icons rank navigation; text carries account actions.** The account menu at the
 foot is text-only, on 36px rows. Icons on those rows put three icon sizes in a
@@ -312,6 +338,29 @@ only thing telling a phone user they are on top of something, not inside it.
 `Dialog header` (**76px** — 24px above and below the title) and `Dialog footer`.
 Change the chrome once and every frame follows. A popup assembled by hand in
 each frame drifts by the third state.
+
+## Two component sets that overlap on the canvas will eat each other
+
+Found 2026-09-10 while building SCR-005. A `COMPONENT_SET` is a frame, and a variant
+that ends up outside its parent frame is **silently ejected from the set** — it stays
+on the page as a loose `COMPONENT`, renamed from `Layout=Card compact, Action=None`
+to `Admin booking row/Card compact/None`. Nothing errors. The set simply has four
+variants where it had six, and the next script to ask for one of the missing variants
+fails with `cannot read property createInstance of undefined` — a message that points
+at the caller and not at the cause.
+
+It happens by placing a new set on top of an existing one: dropping a 2,328px-wide
+`Filter bar` at the coordinates already occupied by `Admin booking row` reflowed the
+latter and pushed two of its variants out of bounds. So:
+
+- **give each set its own vertical band** on the components page and leave a gap;
+  resize the set FIRST, then position the variants inside it
+- **read the variant list back** after any write that touches a set, and after any
+  reposition — `set.children.map(c => c.name)` is one line and it is the only
+  confirmation you have
+- re-appending an ejected component to the set works and restores the variant, but
+  **its text property references do not come back** — rebind them, then read one
+  instance to confirm, per the `clone()` note below
 
 ## A component can lie about its own size
 
