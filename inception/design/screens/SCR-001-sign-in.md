@@ -83,6 +83,15 @@ Single centred column, one card. No marketing, no illustration, no second column
 - **Shows** an error region above the fields — *"We can't reach the booking service right now. Try again in a moment."* — carrying a **Try again** control **inside the region**, beneath the message and aligned to its right edge. **Sign in** stays below, present and enabled. Both fields keep their contents, password included, so a retry is one tap
 - **Can do** retry, or wait. Nothing the user typed is lost
 
+**The page ground carries a decorative line-drawing of a desk** (added 2026-09-10).
+It sits behind the card and is purely decorative — it never carries meaning, never
+encodes a state, and no text is set in it. At 1280 it is anchored bottom-**right**,
+beside the content column; at 768 and 360 there is no side margin, so it becomes a
+bottom band and the frame reserves that band as padding, centring the column in
+what remains. Content keeps at least 32px clear of it at every width. Artwork:
+`inception/design/assets/login-backdrop.svg` (geometry only); colour:
+`--c-illustration-line`; placement: `wireframe-rules.md`.
+
 ## Components
 
 | Component        | Used for                                                       | States it appears in         |
@@ -93,6 +102,7 @@ Single centred column, one card. No marketing, no illustration, no second column
 | `alert`          | Form-level error region (`error` variant)                       | ST-04, ST-05                 |
 | `spinner`        | Inline busy indicator inside the button                         | ST-03                        |
 | `card`           | The form container                                              | ST-01 – ST-05                |
+| `login-backdrop` | Decorative desk line-drawing on the page ground, behind the card | ST-01 – ST-05                |
 
 ## Interaction and accessibility
 
@@ -115,6 +125,7 @@ Single centred column, one card. No marketing, no illustration, no second column
 | A first sign-in with an administrator-set password goes to SCR-010, not into the app             | Decided 2026-09-07 (Joy Joshua, PO/BA): the person who created the account must stop holding a working credential for it. The check happens before the shell renders, so there is no window in which the app is usable on somebody else's password                                                                       | Prompting later, or on a settings screen. Skippable, and it leaves the credential shared for as long as the user ignores it                                                       |
 | A fixed 400px card at every width above 360, rather than a grid-derived one                        | Decided 2026-09-10 by the designer. The grid describes the shell, and this screen has none; the inner-column widths that govern every other screen measure nothing here. A form is bounded by its reading line, not by the viewport. Fixing the width also makes SCR-001 and SCR-010 the same card at three sizes, which is what makes the forced password step read as one continuous arrival | A card that grows with the breakpoint. It uses the space a large monitor offers, and it makes the two auth screens stop being the same object; the password checklist would reflow differently at each width for no gain |
 | **Try again** sits inside ST-05's alert, and **Sign in** stays below it                            | They submit the same thing, and the redundancy is deliberate: after a failure the eye is on the alert, and on a phone the button may be below the fold. A recovery path is the wrong place to make someone hunt for the control they already know                                                                          | A single control — dropping Try again and letting **Sign in** be the retry. One less button, and it puts the recovery action somewhere other than where the explanation is. **Worth your veto at review if you would rather have the one button** |
+| A decorative desk line-drawing sits on the page ground behind the card | Added 2026-09-10 at the designer’s request. These two screens were the only ones with a bare ground, and an empty beige field is the weakest thing about the first screen anyone sees. It is a **ground**: purely decorative, no meaning, no state, no text set in it, so WCAG 1.4.3 and 1.4.11 do not apply to it, and the opaque card may cover as much of it as it likes. At 1280 it sits bottom-**right**, beside the column; at 768 and 360 it becomes a bottom band the frame reserves as padding. Every frame keeps ≥ 32px between content and art — the two 360 frames carrying an alert (ST-04, ST-05) grew ~130px to hold that. Colour comes from `--c-illustration-line`; the artwork file carries no colour at all | Pinning the art to the frame bottom regardless of the column. It reads fine on the three short states and collides with the column on the two tall ones — the kind of fault that appears in some states and not others, which is exactly the kind nobody catches until build |
 
 ## Conflicts and open questions
 
@@ -136,3 +147,11 @@ Five states, and draw each at **360px, 768px and 1280px** — NFR-004 names all 
 **Every treatment this screen needs already has a token** (checked 2026-09-10) — no new colour role is required, unlike SCR-002's build. Specifically: field edges are `--c-border-control` and not `--c-border`; focus is the ring plus its `--bw-2` offset gap; the card sits on the page ground with `--c-border-strong` and `shadow/1`; the ST-04 and ST-05 alerts use the danger family as a status chip, keeping `--c-border`; and ST-03's in-button spinner takes the **button's label colour**, never a text colour — the defect the SCR-002 build found, where the only cue that a request is in flight sat at 1.02:1 on the primary button.
 
 Draw ST-01 at 400px first and vary the rest from it; the card geometry is identical across all five states, and only the alert region's presence changes the height.
+
+**Built 2026-09-10 — 15 `HF /` frames, all five states at 360, 768 and 1280.** The card is a
+`Sign in card` component set with one variant per `ST-##`, so the three widths of a state
+cannot drift apart; the frame supplies only the page ground and the lockup. Three library
+components were built for this screen and SCR-010 and did not exist before: `Text field`,
+`Password field` and (on SCR-010) `Policy checklist`. No new colour role was needed, as
+predicted above. Design system & mockups file:
+<https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn>.
