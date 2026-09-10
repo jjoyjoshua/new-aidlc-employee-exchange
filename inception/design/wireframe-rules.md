@@ -332,6 +332,86 @@ favour of the property's default. A new context added to `Empty state` therefore
 carrying the *first* context's words until the frame sets them. Variant-level copy is a
 placeholder; the frame is where the words are decided.
 
+**A `FILL` text node can latch at zero width, and it looks like a font bug.** Set a text
+child to `FILL` before its siblings exist, inside a frame that is itself `FILL` inside
+another auto-layout frame, and the node can keep a width of 0 while its parent reports the
+right size and the node reports `layoutSizingHorizontal = "FILL"`. Ten password dots then
+render as a vertical thread one character wide — which reads as a broken glyph, not as a
+layout fault, so the wrong thing gets investigated. Re-setting `FILL` does nothing; the
+repair is `FIXED` → `resize()` → `FILL`, which forces the relayout. Found 2026-09-10 on the
+`Error focus` field variants, whose input sits one frame deeper than every other variant
+because of the focus ring. **Check the rendered width of any `FILL` text child you added
+before its siblings.**
+
+## The login backdrop is a ground, and it yields to content
+
+SCR-001 and SCR-010 sit on a line-drawing of a desk (added 2026-09-10 at the
+designer’s request). Three rules keep it decoration rather than a problem.
+
+**It carries no colour of its own.** `inception/design/assets/login-backdrop.svg`
+is geometry only: `currentColor`, no page ground, not one literal hex. The stroke
+comes from `--c-illustration-line` and the ground from `--c-surface`, so the
+backdrop cannot drift from the palette and both themes work from one file. The
+supplied artwork shipped its own background rect in the exact value of
+`--c-surface`; duplicating that would have created a second place for the page
+colour to live, so it was removed rather than copied.
+
+**One file, not three.** The three supplied SVGs carried byte-identical path data
+and differed only in scale and hand-tuned stroke width.
+`vector-effect="non-scaling-stroke"` holds the line at ~1.3px / ~1px at any size,
+which is what those stroke widths were compensating for — so the geometry is
+stored once and placed three ways:
+
+| Frame | Art width | Anchored | Bottom margin |
+| ----- | --------- | -------- | ------------- |
+| 1440 (`· 1280`) | 600 | bottom, **right** (48 from the edge) | 8 |
+| 768 | 440 | bottom, centred | 56 |
+| 360 | 281 | bottom, centred | 44 |
+
+At 1280 it sits in the right margin, beside the content column rather than under
+it. At 768 and 360 there is no side margin, so it becomes a **bottom band** and
+the frame reserves that band as bottom padding — the content column is centred in
+what remains, never in the whole frame.
+
+**Nothing readable is ever set on top of it.** The card is opaque and may cover as
+much of the drawing as it likes; that is what a backdrop is for. The rule is about
+the two things that sit on the bare ground: the product lockup (top — never near
+it) and SCR-010’s **Sign out** link (bottom — squarely in its way). Every frame
+keeps **≥ 32px** between the content column and the art: vertical clearance where
+the art is a band, horizontal clearance at 1280 where `Sign out` and the desk are
+side by side. Two SCR-001 frames at 360 (ST-04, ST-05) grew ~130px to hold that
+clearance, because their alert makes the column taller.
+
+**Where it does not appear, and why.** SCR-010 carries it at 1280 only. Its form is
+a six-rule checklist plus two fields and a sign-out link — about 836px at 768 — so
+reserving a band there would push a page that currently fits into a scroll that
+exists only to show decoration. A backdrop that costs the user a scroll on the one
+screen a new starter cannot skip has stopped being decoration (PRIN-4). At 1280 it
+costs nothing, because it lives in margin the form was never going to use. The
+`ST-05 Saved` frames carry no backdrop either — they are SCR-002’s shell, not the
+login ground.
+
+
+## A screen with no shell still gets its card as a component
+
+SCR-001 and SCR-010 are the only two screens with no `app-shell`, and the temptation is to
+draw each state as a one-off frame — there is no chrome to reuse, so what is there to
+componentise? The card. `Sign in card` and `Set password card` each hold **one variant per**
+**`ST-##`**, and every frame is a page ground, a lockup and one instance. Eleven card states
+built once, placed 31 times.
+
+The reason is the same one behind `Desk form popup`: three frames of one state at 360, 768
+and 1280 must differ **only** in width. Build them as three frames and they differ in
+whatever else drifted — a padding, a label, a field left in the wrong state — and the
+reviewer cannot tell a responsive decision from a mistake. With one variant behind all
+three, a width frame has exactly one degree of freedom, which is the point of drawing it.
+
+These two frames also have no grid: the shell table above measures a content region they do
+not have. The card is a fixed **400px** at 768 and 1280 and the 328px inner column at 360,
+centred on both axes, and it is the *same* card on both screens so the forced password step
+reads as one continuous arrival (designer, 2026-09-10). Sign out on SCR-010 sits **outside**
+the card, beneath it — an escape hatch, not a step, and last in the tab order.
+
 ## Section headings align with the content column, not with the card
 
 A section heading — `Upcoming`, `Past bookings` — sits at the **left edge of the
@@ -399,12 +479,22 @@ recolour a file whose whole point is that a grey frame cannot argue about brand,
 | **URL** | https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn |
 | **Synced by** | `/ux` through the Figma connector, from `tokens.css` and the specs in `screens/` |
 | **Direction** | One-way, as above. The spec PR is what gets approved; a frame never is |
-| **Contents** | 170 variables (57 primitives · 65 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 21 icons, 22 components — including the `Nav × Density` Sidebar set that covers the admin screens too — and 66 `HF /` frames: SCR-003 (12 states) and SCR-002 (10 states), each at 1440 (`· 1280`), 768 and 360 |
+| **Contents** | 170 variables (57 primitives · 65 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 21 icons, 29 components — including the `Nav × Density` Sidebar set that covers the admin screens too, and the `Field & Form` page the auth screens introduced — and 100 `HF /` frames: SCR-003 (12 states), SCR-002 (10), SCR-001 (5) and SCR-010 (6), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 frame for SCR-010 with the keyboard raised |
 
-**Eight screens have no** `HF /` **frames yet.** SCR-003 was drawn first because it is
-the only screen where clay "yours" and blocked red appear in the same desk list, which
-makes it the real test of the pass-2b palette. SCR-002 followed it because the two share
-the cancel dialog, so drawing them together settles that component once (2026-09-08).
+**Six screens have no** `HF /` **frames yet — SCR-004 through SCR-009, the admin set.**
+SCR-003 was drawn first because it is the only screen where clay "yours" and blocked red
+appear in the same desk list, which makes it the real test of the pass-2b palette. SCR-002
+followed it because the two share the cancel dialog, so drawing them together settles that
+component once (2026-09-08). SCR-001 and SCR-010 were drawn together on 2026-09-10 for the
+same reason: they are the same 400px card at three sizes, and building them apart is the
+surest way to make them stop matching. Between them they complete the employee journey in
+colour — sign in, set your password, book a desk, my bookings.
+
+The six that remain are larger and older than these four, and their specs predate the
+pass-2b palette, the one-card rule, the disabled-control rule, `--c-border-control` and the
+focus-offset rule. SCR-001 and SCR-010 each had a pre-build pass before a frame was drawn,
+and it found five faults; assume the admin specs need the same pass before 171 frames
+exist, not after.
 
 
 The file carries the token set as Figma variables — a `Color` collection with

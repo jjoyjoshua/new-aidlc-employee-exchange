@@ -243,6 +243,25 @@
   /* ---- color: scrim ---------------------------------------------------- */
   --c-scrim: var(--p-scrim-warm-40);
 
+  /* ---- color: decorative illustration ---------------------------------
+     The line-drawing backdrop on the two auth screens (SCR-001, SCR-010),
+     added 2026-09-10. A DECORATIVE stroke and nothing else: it never carries
+     meaning, never encodes a state, and no text is ever set in it, so WCAG
+     1.4.3 and 1.4.11 do not apply to it — which is exactly why it needs its
+     own name rather than borrowing one that does.
+
+     It aliases the clay ramp, so NO new hue enters the palette. It is
+     deliberately NOT --c-mine: clay means "your booking" (BR-001), and the
+     first time that treatment changes, a backdrop that borrowed it would
+     follow for no reason. Same separation as --c-danger-action against
+     --c-danger-border.
+
+     The supplied artwork sat one ramp step warmer; clay-300 is imperceptibly
+     different (deltaE ~1.5) and is already here, so the palette absorbs the
+     illustration instead of growing for it. Rendered at 50% opacity over
+     --c-surface. PENDING product-team approval — this is a pass-2b change. */
+  --c-illustration-line: var(--p-clay-300);
+
   /* spacing — closed scale, no values between steps */
   --s-2: 2px;   /* icon-to-label gaps */
   --s-4: 4px;   /* tight internal spacing */
@@ -403,6 +422,10 @@
 
     /* scrim */
     --c-scrim: var(--p-scrim-warm-70);
+
+    /* decorative illustration — clay-500 recedes on the umber ground the way
+       clay-300 recedes on the beige one; same 50% opacity */
+    --c-illustration-line: var(--p-clay-500);
 
     /* elevation — shadows barely read on a dark page; depth comes from the
        surface ramp above, so these stay subtle rather than getting heavier */

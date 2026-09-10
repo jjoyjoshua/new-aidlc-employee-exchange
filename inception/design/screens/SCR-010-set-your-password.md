@@ -18,7 +18,7 @@ This screen exists because of a decision taken on 2026-09-07 (Joy Joshua, PO/BA)
 
 It is reached on exactly two occasions, both of which mean *somebody else currently knows your password*: the first sign-in after an account is created (REQ-018), and the first sign-in after an administrator resets it (REQ-021). It is not a settings screen and it cannot be reached voluntarily — with no self-service reset in this release (BRD-001 §10), there is no route here for someone who simply wants a new password.
 
-It is deliberately **not** a state on SCR-001. Sign-in and choosing a password are different jobs with different failure modes, and burying a four-rule policy checklist inside the sign-in card would hide five states nobody would count.
+It is deliberately **not** a state on SCR-001. Sign-in and choosing a password are different jobs with different failure modes, and burying a five-rule policy checklist inside the sign-in card would hide five states nobody would count.
 
 ## Place in the flow
 
@@ -46,7 +46,7 @@ Single centred column, one card, matching SCR-001 so the transition reads as one
 │  │                               │  │
 │  │ New password                  │  │
 │  │ [                  ] [show]   │  │
-│  │ ✓ 8 characters or more        │  │  all four rules visible
+│  │ ✓ 8 characters or more        │  │  all five rules visible
 │  │ ✓ An upper-case letter        │  │  from the first keystroke
 │  │ ○ A lower-case letter         │  │
 │  │ ○ A number                    │  │
@@ -74,13 +74,15 @@ The closing warning is the one piece of copy on this screen that people will rem
 ### ST-01 Default
 
 - **When** the screen loads after a sign-in with an administrator-set password
-- **Shows** the explanation of why this screen appeared; a **New password** field (focused) with a show/hide control and all four policy rules from V-12 listed as an unmet checklist — **in its pending look: a hollow `○` marker and `--c-text-muted` text, never error styling**, because nothing is wrong yet and four rules in red on an untouched form say that something is; a **Confirm new password** field; an enabled **Save and continue**; and the no-self-service-reset warning
+- **Shows** the explanation of why this screen appeared; a **New password** field (focused) with a show/hide control and all five policy rules from V-12 listed as an unmet checklist — **in its pending look: a hollow `○` marker and `--c-text-muted` text, never error styling**, because nothing is wrong yet and five rules in red on an untouched form say that something is; a **Confirm new password** field; an enabled **Save and continue**; and the no-self-service-reset warning
 - **Can do** type a password, toggle visibility, submit
+- **Note (added 2026-09-10, found while drawing the hi-fi frames):** this spec said "four" rules throughout while its own layout sketch listed **five**. V-12 is the authority and it carries five independent conditions — *min 8 chars; upper, lower, digit, special* — so the checklist is five rows and every count in this file has been corrected. Built as "four", one V-12 condition would have had no row and no way to be reported
 
 ### ST-02 Rules not met
 
-- **When** submit is attempted with a password missing one or more of the four V-12 rules, with either field empty, or with the two entries not matching — caught in the browser before any request
+- **When** submit is attempted with a password missing one or more of the five V-12 rules, with either field empty, or with the two entries not matching — caught in the browser before any request
 - **Shows** the unmet rules still listed rather than collapsed into one message, so the remaining work stays visible at a glance — but **now in their blocking look**: the hollow `○` becomes the error icon, the text takes `--c-danger-ink`, and the field's edge changes with it. Rules already satisfied keep their met `✓` and do not move. A mismatch is reported beneath the confirm field as *"These don't match."* Each marked field carries an icon and a border change, never colour alone
+- **The checklist is the field's message.** The new-password field changes its edge and carries the invalid icon, but no message sits beneath it: the rules already say, line by line, what is missing. A second sentence restating them would either duplicate the list or invent a rule nobody wrote. The only field-level message on this state is *"These don't match."* beneath the confirm field (drawn 2026-09-10)
 - **Note (added 2026-09-10):** the checklist therefore has **three** looks, not two — met, pending, and blocking. The spec previously said the unmet rules stay "marked unmet", which would have made a refused submit *pixel-identical* to the state before it: the user presses Save, nothing changes, and the screen reads as broken. Pending and blocking differ by icon and by text, so the change is legible without colour vision
 - **Can do** correct and resubmit. Focus moves to the first field needing attention
 
@@ -109,18 +111,25 @@ The closing warning is the one piece of copy on this screen that people will rem
 - **Shows** an error region stating what is still true: *"We couldn't save that just now. The password you signed in with still works. Try again."* Both fields retain their contents — a compliant password retyped from memory tends to be a weaker one
 - **Can do** retry. Sign-out remains available, and the temporary password still works, so nobody is stranded here by an outage
 
+
+**The desk backdrop from SCR-001 appears here at 1280 only** (added 2026-09-10).
+This form is too tall to give up a bottom band at 768 or 360 without buying a
+scroll with decoration — see the decisions table. At 1280 it sits in the right
+margin and **Sign out** clears it by 24px.
+
 ## Components
 
 | Component          | Used for                                                                | States it appears in        |
 | ------------------ | ----------------------------------------------------------------------- | --------------------------- |
 | `card`             | The form container, matching SCR-001                                    | ST-01 – ST-06               |
 | `password-field`   | **New password** with show/hide; **Confirm new password**                | ST-01 – ST-04, ST-06        |
-| `policy-checklist` | The four V-12 rules, met and unmet — shared with SCR-009                 | ST-01 – ST-04, ST-06        |
+| `policy-checklist` | The five V-12 rules, met and unmet — shared with SCR-009                 | ST-01 – ST-04, ST-06        |
 | `button`           | **Save and continue**                                                    | ST-01 – ST-06               |
 | `alert`            | `error` for the reuse refusal and for a failed save                      | ST-03, ST-06                |
 | `spinner`          | Inline busy indicator inside the button                                  | ST-04                       |
 | `toast`            | The confirmation carried onto the destination screen                     | ST-05                       |
 | `button` (ghost)   | **Sign out**, beneath the card and outside it                            | ST-01 – ST-06               |
+| `login-backdrop`   | Decorative desk line-drawing on the page ground, behind the card        | ST-01 – ST-04, ST-06 (1280 only) |
 
 No `app-shell` on this screen — the navigation appears only once the account is the holder's own.
 
@@ -137,15 +146,16 @@ No `app-shell` on this screen — the navigation appears only once the account i
 
 | Decision                                                                    | Rationale                                                                                                                                                                                                   | Alternative rejected                                                                                                                                     |
 | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Its own screen, not a state on SCR-001                                        | Six states, four policy rules and a distinct job. Inside the sign-in card they would be states nobody counts — the thing the numbering exists to prevent                                                    | A step inside SCR-001. One less file, and five hidden states                                                                                              |
+| Its own screen, not a state on SCR-001                                        | Six states, five policy rules and a distinct job. Inside the sign-in card they would be states nobody counts — the thing the numbering exists to prevent                                                    | A step inside SCR-001. One less file, and five hidden states                                                                                              |
 | Explains why the screen appeared, before asking for anything                   | Nobody navigated here. An unexplained password form after a successful sign-in reads as a failure or a phishing page (PRIN-1)                                                                               | A bare "Set your password" heading. Shorter, and it makes a legitimate screen look suspicious                                                              |
-| All four rules shown before the first keystroke                                | Same reasoning as SCR-009: V-12 has four independent requirements, and revealing them one failure at a time turns one attempt into five. Here it is worse — the user is locked out of the product until they pass | Validating on blur, first failure only. Standard, and adversarial at the least forgiving moment                                                            |
+| All five rules shown before the first keystroke                                | Same reasoning as SCR-009: V-12 has five independent requirements, and revealing them one failure at a time turns one attempt into five. Here it is worse — the user is locked out of the product until they pass | Validating on blur, first failure only. Standard, and adversarial at the least forgiving moment                                                            |
 | Reusing the administrator-set password is refused (ST-03)                       | The decision's entire purpose is that the administrator stops holding a working credential. Accepting the same value would satisfy the flow and defeat the reason for it                                     | Allowing it. Fewer states, and the screen becomes ceremony                                                                                                 |
 | The no-self-service-reset warning is on this screen, not only on SCR-001         | This is the one moment someone is actively choosing a password. SCR-001's version of this message is for people who have already forgotten; this one is for people about to                                  | Leaving it to SCR-001. Consistent, and it arrives after it can help                                                                                        |
 | Sign-out available, and the temporary password keeps working                     | An outage on ST-06, or an interruption, must not strand someone outside the product. The temporary password is still the credential of record until this screen succeeds                                     | Invalidating the old password on arrival. Tidier, and it can lock a new starter out on their first morning                                                  |
 | No password field on SCR-009's edit mode, and no route here voluntarily           | Changing a password on purpose is self-service, which BRD-001 §10 puts out of scope. This screen is forced, or it is not reached                                                                            | A "change my password" link on SCR-004. Useful, and it quietly adds the self-service reset that was explicitly excluded — **worth raising as a change request if wanted** |
 | **Sign out** is a quiet text link *beneath* the card, not inside it                | Decided 2026-09-10. The spec has always promised sign-out here — it is what stops an outage on ST-06 stranding a new starter outside the product on their first morning — but no layout and no component ever gave it a home, so the frame could not have kept the promise. Outside the card it is reachable without competing with **Save and continue**, and its position says what it is: a way out, not a step | Inside the card beneath the primary action (two actions in one card, one of which abandons the task); a top-bar sign-out (there is no shell on this screen, and adding one contradicts "the shell appears only once the account is the holder's own") |
-| The policy checklist has three looks — met, pending, blocking                       | Pending and blocking cannot be the same, or a refused submit changes nothing on screen and the button reads as dead. Pending and *error* cannot be the same either, or a form nobody has touched yet appears to have four faults in it. The distinction is carried by icon and by text, so it survives without colour vision (NFR-008)                                                                        | Two looks only, as originally written. Fewer variants on `policy-checklist`, and one of the two failure modes above is then guaranteed |
+| The policy checklist has three looks — met, pending, blocking                       | Pending and blocking cannot be the same, or a refused submit changes nothing on screen and the button reads as dead. Pending and *error* cannot be the same either, or a form nobody has touched yet appears to have five faults in it. The distinction is carried by icon and by text, so it survives without colour vision (NFR-008)                                                                        | Two looks only, as originally written. Fewer variants on `policy-checklist`, and one of the two failure modes above is then guaranteed |
+| The desk backdrop is drawn at 1280 only, not at 768 or 360 | Added 2026-09-10. SCR-001 carries it at all three widths; this screen cannot. Its form is five policy rules, two fields, a warning and a sign-out link — about 836px at 768 — so reserving a bottom band would push a page that currently fits into a scroll that exists **only** to show decoration, on the one screen a new starter cannot skip (PRIN-4). At 1280 the art lives in right margin the form was never going to use, so it costs nothing, and **Sign out** clears it by 24px. The decoration yields; the form does not | Drawing it at every width and letting the frames grow. Consistent with SCR-001, and it buys a scroll with decoration. **Worth your veto at review if you would rather have the art everywhere and accept the taller page** |
 
 ## Conflicts and open questions
 
@@ -162,3 +172,12 @@ Six states at **360px, 768px and 1280px** (NFR-004), including one extra 360px f
 **No new colour role is needed** (checked 2026-09-10). The checklist's three looks are already covered: met on `--c-success-*`, pending on `--c-text-muted`, blocking on `--c-danger-ink` — the danger family used here as a status, so it keeps `--c-border` rather than `--c-border-strong`. Field edges are `--c-border-control`; focus is the ring plus its `--bw-2` offset gap; the card takes `--c-border-strong` and `shadow/1` on the page ground; ST-04's in-button spinner takes the **button's label colour**, never a text colour.
 
 Two things to carry into a later build rather than this one: **ST-05's admin path**, which lands on SCR-005 and should be drawn when that screen is built; and `policy-checklist` itself, which is **built here first and inherited by SCR-009** — so build it as a component with a met/pending/blocking axis, not as three hand-assembled lists.
+
+**Built 2026-09-10 — 19 `HF /` frames.** Five card states at 360, 768 and 1280, plus ST-05
+drawn on SCR-002 carrying the toast at all three widths, plus the extra 360 frame with the
+keyboard raised: the checklist ends 38px clear of the keyboard, so NFR-004’s promise is a
+measured fact rather than a claim. `policy-checklist` was built as specified — a
+`Policy rule` set with a met/pending/blocking axis and a `Policy checklist` wrapper that
+holds the five rows — and it is ready for SCR-009 to inherit. **The admin path of ST-05 is still outstanding** and belongs to
+SCR-005’s own build, exactly as this section says. Design system & mockups file:
+<https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn>.

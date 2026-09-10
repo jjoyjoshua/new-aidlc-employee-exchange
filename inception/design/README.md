@@ -11,6 +11,7 @@ What lives here, and what deliberately does not.
 | `tokens.css`               | The design system's single source — colors, type, spacing, radius, elevation |
 | `tokens.json`              | **Generated** from `tokens.css` by `aidlc-check --write` — never hand-edited |
 | `wireframe-rules.md`       | Grid, layout discipline, frame naming — for the designer's tool or a frame-generating agent |
+| `assets/`                  | Source artwork the product ships — SVG, geometry only, colour from tokens   |
 
 **Not here: the visual design files.** Frames stay in Figma, Penpot, or whatever
 the designer uses. The tool imports `tokens.json`, so the design file and this
@@ -18,6 +19,14 @@ repo agree on the values without either owning the other. What this folder holds
 is the part a reviewer must be able to check: which screens exist, which states
 each has, and how the screens connect. Frames are drawn from it — by the
 designer, or by `/ux` through a Figma connector when one is present.
+
+`assets/` is the one exception to that, and the line is worth stating: a frame
+is a *picture of* the design and stays in the tool; an SVG the product ships is
+a *part of* the design and has to be versioned, reviewed and diffed like any
+other source. Artwork here carries geometry only — `currentColor`, no page
+ground, no literal hex — so the colour still comes from `tokens.css` and the
+no-colour-outside-tokens rule holds. DEV imports these into `apps/ui` when it
+exists; nothing here is a build output.
 
 ## Rules `aidlc-check` enforces
 
