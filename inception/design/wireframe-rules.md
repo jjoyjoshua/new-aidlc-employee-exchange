@@ -334,6 +334,27 @@ Its selected state is a left bar plus its indicator plus its chip; its taken sta
 is the icon, the muted number and the chip. The card supplies the white and the
 edge.
 
+## A dialog taller than its viewport is capped, not overflowed
+
+Settled on SCR-009, 2026-09-10, and it applies to every dialog in the file. That form runs to
+**936px at 360 and 868px at 480**, and six of its eight states are taller than a 900px desktop
+frame — ST-04 by 144px. A dialog that overflows its viewport puts its confirming action
+off-screen, which is worse than one that scrolls.
+
+So a dialog is **capped at the viewport less a 24px margin top and bottom** — 852px at 1280,
+976px at 768, the full 780px at 360 where it is full-screen — with the header and footer pinned
+and only the body scrolling. Set the body to fill and clip; the footer then pins itself, and the
+overflow reads as a scroll rather than as a broken frame.
+
+**Check the tallest state, not the default one.** SCR-009's default fits 900px with room; its
+duplicate-email state does not, because a refusal alert adds ~176px to a form that was already
+close. The state that breaks the layout is almost always an error or refusal state, which is
+the one nobody sizes for.
+
+**A full-screen form at 360 is the same component with three overrides.** Stretch the instance
+to fill the frame, set `cornerRadius` to 0 and clear the shadow — a full-screen form has no card
+edge — and set its body to fill and clip. Do not build a second component for it.
+
 ## Popups are drawn over the screen they open from
 
 A popup frame is never the card on an empty background. It is:
@@ -374,7 +395,10 @@ a keyboard frame is about what stays visible, not about the whole scrolling page
 
 **The card is a component, not a frame you rebuild.** `Desk form popup` and
 `User form popup` each hold every state as a variant, both built on the shared
-`Dialog header` (**76px** — 24px above and below the title) and `Dialog footer`.
+`Dialog header` (**76px** — 24px above and below the title) and `Dialog footer`. Both exist as of
+2026-09-10, and the second was made by **cloning the first's chrome** rather than rebuilt from
+the tokens: two sibling forms that must not drift are cheapest to keep together if one starts
+as a copy of the other.
 Change the chrome once and every frame follows. A popup assembled by hand in
 each frame drifts by the third state.
 
@@ -473,6 +497,23 @@ The test is the row, not the screen: **if every action fits, show every action.*
 that exists to be tidy costs a component, a numbered state, a keyboard detour and an
 icon-only control that needs an accessible name spelled out per row.
 
+## A comma in a variant name silently breaks the set
+
+Figma parses a variant name as `Prop=Value` pairs **separated by commas**, so any comma inside a
+value starts a second, malformed property. `State=ST-09 Create — password set, all rules met`
+left the set reporting *"Component set has existing errors"*, refusing to return its
+`componentPropertyDefinitions` at all, and it had quietly mangled that variant's name to
+`=State=…`. Found on SCR-009, 2026-09-10.
+
+Two consequences worth remembering. **The error surfaces at a distance from its cause** — the
+set looks fine in the layer list and only breaks when something reads its properties, so a
+read-back after `combineAsVariants` is the cheapest way to catch it. And **the state name in
+the spec and the variant name should match**, so the fix belongs in the spec: SCR-009 ST-09 was
+renamed *Create — all rules met*, comma-free, in the spec and the frames together rather than
+carrying two names for one state.
+
+Em dashes, `·`, slashes and parentheses are all fine. It is only the comma.
+
 ## A component can lie about its own size
 
 Three faults from the SCR-002 build, all of which validated clean and looked wrong. Each
@@ -542,6 +583,13 @@ value.** Renaming all ten `Dialog` variants to append `, Footer=Side by side` cr
 property with that default, and all twelve dialog instances across SCR-002, SCR-003,
 SCR-005, SCR-006 and SCR-007 resolved to it and rendered unchanged. Check that frame by
 frame rather than assuming it; the cost of being wrong is five approved screens.
+
+**But `layoutSizing` and alignment overrides DO persist**, which is what makes a full-screen
+form possible from a card component. Established on SCR-009, 2026-09-10:
+`layoutSizingHorizontal` / `layoutSizingVertical` and `primaryAxisAlignItems` all survive on an
+instance and on a frame inside one, as do `cornerRadius`, `effects` / `effectStyleId` and
+`clipsContent`. So the line is: **what a child *is* can be overridden; how a parent *arranges*
+cannot.**
 
 **Children cannot be reordered inside an instance.** `insertChild` throws *"Cannot move
 node. New parent is an instance"*. So a stacked footer whose confirming action must sit on
@@ -696,9 +744,9 @@ recolour a file whose whole point is that a grey frame cannot argue about brand,
 | **URL** | https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn |
 | **Synced by** | `/ux` through the Figma connector, from `tokens.css` and the specs in `screens/` |
 | **Direction** | One-way, as above. The spec PR is what gets approved; a frame never is |
-| **Contents** | 171 variables (57 primitives · 66 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 24 icons, 47 components — including the `Nav × Density` Sidebar set that covers the admin screens too, the `Field & Form` page the auth screens introduced, and the `Admin table & filters` page the three admin lists share — and **235** `HF /` frames: SCR-003 (12 states), SCR-002 (10), SCR-001 (5), SCR-010 (6), SCR-005 (11 + one 360-only), SCR-006 (10), SCR-007 (7) and SCR-008 (16), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 frame for SCR-010 with the keyboard raised |
+| **Contents** | 171 variables (57 primitives · 66 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 24 icons, 48 components — including the `Nav × Density` Sidebar set that covers the admin screens too, the `Field & Form` page the auth screens introduced, and the `Admin table & filters` page the three admin lists share — and **260** `HF /` frames: SCR-003 (12 states), SCR-002 (10), SCR-001 (5), SCR-010 (6), SCR-005 (11 + one 360-only), SCR-006 (10), SCR-007 (7), SCR-008 (16) and SCR-009 (8 with form frames), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 keyboard frame each for SCR-007, SCR-009 and SCR-010 |
 
-**Two screens have no** `HF /` **frames yet — SCR-004 Settings and SCR-009 User form.**
+**One screen has no** `HF /` **frames yet — SCR-004 Settings.**
 SCR-003 was drawn first because it is the only screen where clay "yours" and blocked red
 appear in the same desk list, which makes it the real test of the pass-2b palette. SCR-002
 followed it because the two share the cancel dialog, so drawing them together settles that
@@ -708,15 +756,21 @@ surest way to make them stop matching. Between them they complete the employee j
 colour — sign in, set your password, book a desk, my bookings.
 
 The admin set followed on 2026-09-10: SCR-005, then SCR-006 and SCR-007 as a list-and-form
-pair, then SCR-008. **The pre-build pass earned its place every time.** SCR-001 and SCR-010
-had one and it found five faults; SCR-008 had one and it found eight, two of which were
-states nothing on the screen could reach — no control anywhere started a role change, so
-its confirmation and its last-admin refusal had no route in, and the open row menu this
-file already required was never numbered. Those specs predate the pass-2b palette, the
-one-card rule, the disabled-control rule, `--c-border-control` and the focus-offset rule,
-so **run the pass before the frames, not after.** SCR-009 is the form behind SCR-008's list
-and should be read against SCR-007, its opposite number, the way SCR-008 was read against
-SCR-006.
+pair, then SCR-008, then SCR-009 read against SCR-007 the way SCR-008 was read against
+SCR-006. **The pre-build pass earned its place every time.** SCR-001 and SCR-010 had one and
+it found five faults. SCR-008 had one and it found eight, two of which were states nothing on
+the screen could reach. SCR-009 had one and it found six, including a password rule count that
+said "four" in six places while V-12 carries five and the built `Policy checklist` already had
+five rows — the same fault SCR-010 had carried. **A count repeated in prose is the thing to
+check against its authority, not against the other prose.**
+
+Those specs predate the pass-2b palette, the one-card rule, the disabled-control rule,
+`--c-border-control` and the focus-offset rule, so **run the pass before the frames, not
+after** — and expect the build to find more anyway: SCR-009's pass measured the phone case and
+missed that six of eight states also overflow a 900px desktop, which only the frames showed.
+
+SCR-004 Settings is the last one. It is an employee screen, so it should be read against
+SCR-002 and SCR-010 rather than the admin set.
 
 
 The file carries the token set as Figma variables — a `Color` collection with
