@@ -4,48 +4,48 @@
 
 | Requirement | Stories | AC proven | Status |
 |---|---|---|---|
-| REQ-001 | — | — | unscheduled |
-| REQ-002 | — | — | unscheduled |
-| REQ-003 | — | — | unscheduled |
-| REQ-004 | — | — | unscheduled |
-| REQ-005 | — | — | unscheduled |
-| REQ-006 | — | — | unscheduled |
-| REQ-007 | — | — | unscheduled |
-| REQ-008 | — | — | unscheduled |
-| REQ-009 | — | — | unscheduled |
-| REQ-010 | — | — | unscheduled |
-| REQ-011 | — | — | unscheduled |
-| REQ-012 | — | — | unscheduled |
-| REQ-013 | — | — | unscheduled |
-| REQ-014 | — | — | unscheduled |
-| REQ-015 | — | — | unscheduled |
-| REQ-016 | — | — | unscheduled |
-| REQ-017 | — | — | unscheduled |
-| REQ-018 | — | — | unscheduled |
-| REQ-019 | — | — | unscheduled |
-| REQ-020 | — | — | unscheduled |
-| REQ-021 | — | — | unscheduled |
-| REQ-022 | — | — | unscheduled |
-| REQ-023 | — | — | unscheduled |
-| REQ-024 | — | — | unscheduled |
-| REQ-025 | — | — | unscheduled |
-| REQ-026 | — | — | unscheduled |
-| REQ-027 | — | — | unscheduled |
-| REQ-028 | — | — | unscheduled |
-| REQ-029 | — | — | unscheduled |
-| REQ-030 | — | — | unscheduled |
-| REQ-031 | — | — | unscheduled |
-| REQ-032 | — | — | unscheduled |
-| REQ-033 | — | — | unscheduled |
-| REQ-034 | — | — | unscheduled |
-| REQ-035 | — | — | unscheduled |
-| REQ-036 | — | — | unscheduled |
-| NFR-001 | — | — | unscheduled |
-| NFR-002 | — | — | unscheduled |
-| NFR-003 | — | — | unscheduled |
-| NFR-004 | — | — | unscheduled |
-| NFR-005 | — | — | unscheduled |
-| NFR-006 | — | — | unscheduled |
-| NFR-007 | — | — | unscheduled |
-| NFR-008 | — | — | unscheduled |
-| NFR-009 | — | — | unscheduled |
+| REQ-001 | US-001 | 0/8 | planned |
+| REQ-002 | US-001 | 0/8 | planned |
+| REQ-003 | US-002 | 0/4 | planned |
+| REQ-004 | US-020, US-021, US-024 | 0/38 | planned |
+| REQ-005 | US-001, US-025, US-026 | 0/30 | planned |
+| REQ-006 | US-005 | 0/8 | planned |
+| REQ-007 | US-006 | 0/10 | planned |
+| REQ-008 | US-007 | 0/12 | planned |
+| REQ-009 | US-010 | 0/10 | planned |
+| REQ-010 | US-011 | 0/10 | planned |
+| REQ-011 | US-013 | 0/11 | planned |
+| REQ-012 | US-014 | 0/10 | planned |
+| REQ-013 | US-014 | 0/10 | planned |
+| REQ-014 | US-015 | 0/10 | planned |
+| REQ-015 | US-017 | 0/9 | planned |
+| REQ-016 | US-018 | 0/9 | planned |
+| REQ-017 | US-006, US-016, US-019 | 0/32 | planned |
+| REQ-018 | US-021 | 0/12 | planned |
+| REQ-019 | US-023 | 0/9 | planned |
+| REQ-020 | US-025, US-026 | 0/22 | planned |
+| REQ-021 | US-027 | 0/11 | planned |
+| REQ-022 | US-024 | 0/13 | planned |
+| REQ-023 | US-028 | 0/8 | planned |
+| REQ-024 | US-025, US-029 | 0/22 | planned |
+| REQ-025 | US-030 | 0/10 | planned |
+| REQ-026 | US-031 | 0/11 | planned |
+| REQ-027 | US-032 | 0/10 | planned |
+| REQ-028 | US-010, US-013 | 0/21 | planned |
+| REQ-029 | US-004 | 0/8 | planned |
+| REQ-030 | US-025 | 0/14 | planned |
+| REQ-031 | US-014 | 0/10 | planned |
+| REQ-032 | US-020 | 0/13 | planned |
+| REQ-033 | US-022 | 0/6 | planned |
+| REQ-034 | US-008 | 0/6 | planned |
+| REQ-035 | US-009 | 0/7 | planned |
+| REQ-036 | US-012 | 0/6 | planned |
+| NFR-001 | US-005 | 0/8 | planned |
+| NFR-002 | US-033 | 0/9 | planned |
+| NFR-003 | US-001 | 0/8 | planned |
+| NFR-004 | US-033 | 0/9 | planned |
+| NFR-005 | US-034 | 0/8 | planned |
+| NFR-006 | US-031 | 0/11 | planned |
+| NFR-007 | US-034 | 0/8 | planned |
+| NFR-008 | US-033 | 0/9 | planned |
+| NFR-009 | US-003 | 0/5 | planned |

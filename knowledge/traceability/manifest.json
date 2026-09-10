@@ -2,20 +2,26 @@
   "$comment": "Traceability knowledge graph: REQ <-> US <-> tests, plus screens (US <-> SCR -> states, with flow edges: links_to[] between screens and \"entry\": true on roots), decisions (US -> ADR) and lessons-learned edges. Edited in the same PR as the artifacts it links; validated by tools/aidlc-check.mjs; traceability-matrix.md is generated from it (never hand-edited).",
   "requirements": {
     "REQ-001": {
-      "stories": [],
+      "stories": [
+        "US-001"
+      ],
       "screens": [
         "SCR-001"
       ]
     },
     "REQ-002": {
-      "stories": [],
+      "stories": [
+        "US-001"
+      ],
       "screens": [
         "SCR-001",
         "SCR-010"
       ]
     },
     "REQ-003": {
-      "stories": [],
+      "stories": [
+        "US-002"
+      ],
       "screens": [
         "SCR-002",
         "SCR-004",
@@ -23,96 +29,132 @@
       ]
     },
     "REQ-004": {
-      "stories": [],
+      "stories": [
+        "US-020",
+        "US-021",
+        "US-024"
+      ],
       "screens": [
         "SCR-008",
         "SCR-009"
       ]
     },
     "REQ-005": {
-      "stories": [],
+      "stories": [
+        "US-001",
+        "US-025",
+        "US-026"
+      ],
       "screens": [
         "SCR-001",
         "SCR-008"
       ]
     },
     "REQ-006": {
-      "stories": [],
+      "stories": [
+        "US-005"
+      ],
       "screens": [
         "SCR-003"
       ]
     },
     "REQ-007": {
-      "stories": [],
+      "stories": [
+        "US-006"
+      ],
       "screens": [
         "SCR-003"
       ]
     },
     "REQ-008": {
-      "stories": [],
+      "stories": [
+        "US-007"
+      ],
       "screens": [
         "SCR-003"
       ]
     },
     "REQ-009": {
-      "stories": [],
+      "stories": [
+        "US-010"
+      ],
       "screens": [
         "SCR-002"
       ]
     },
     "REQ-010": {
-      "stories": [],
+      "stories": [
+        "US-011"
+      ],
       "screens": [
         "SCR-002"
       ]
     },
     "REQ-011": {
-      "stories": [],
+      "stories": [
+        "US-013"
+      ],
       "screens": [
         "SCR-005"
       ]
     },
     "REQ-012": {
-      "stories": [],
+      "stories": [
+        "US-014"
+      ],
       "screens": [
         "SCR-005"
       ]
     },
     "REQ-013": {
-      "stories": [],
+      "stories": [
+        "US-014"
+      ],
       "screens": [
         "SCR-005"
       ]
     },
     "REQ-014": {
-      "stories": [],
+      "stories": [
+        "US-015"
+      ],
       "screens": [
         "SCR-005"
       ]
     },
     "REQ-015": {
-      "stories": [],
+      "stories": [
+        "US-017"
+      ],
       "screens": [
         "SCR-006",
         "SCR-007"
       ]
     },
     "REQ-016": {
-      "stories": [],
+      "stories": [
+        "US-018"
+      ],
       "screens": [
         "SCR-006",
         "SCR-007"
       ]
     },
     "REQ-017": {
-      "stories": [],
+      "stories": [
+        "US-006",
+        "US-016",
+        "US-019"
+      ],
       "screens": [
         "SCR-003",
         "SCR-006"
       ]
     },
     "REQ-018": {
-      "stories": [],
+      "stories": [
+        "US-021"
+      ],
       "screens": [
         "SCR-008",
         "SCR-009",
@@ -120,39 +162,53 @@
       ]
     },
     "REQ-019": {
-      "stories": [],
+      "stories": [
+        "US-023"
+      ],
       "screens": [
         "SCR-009"
       ]
     },
     "REQ-020": {
-      "stories": [],
+      "stories": [
+        "US-025",
+        "US-026"
+      ],
       "screens": [
         "SCR-008"
       ]
     },
     "REQ-021": {
-      "stories": [],
+      "stories": [
+        "US-027"
+      ],
       "screens": [
         "SCR-008",
         "SCR-010"
       ]
     },
     "REQ-022": {
-      "stories": [],
+      "stories": [
+        "US-024"
+      ],
       "screens": [
         "SCR-008",
         "SCR-009"
       ]
     },
     "REQ-023": {
-      "stories": [],
+      "stories": [
+        "US-028"
+      ],
       "screens": [
         "SCR-003"
       ]
     },
     "REQ-024": {
-      "stories": [],
+      "stories": [
+        "US-025",
+        "US-029"
+      ],
       "screens": [
         "SCR-002",
         "SCR-005",
@@ -160,78 +216,105 @@
       ]
     },
     "REQ-025": {
-      "stories": [],
+      "stories": [
+        "US-030"
+      ],
       "screens": []
     },
     "REQ-026": {
-      "stories": [],
+      "stories": [
+        "US-031"
+      ],
       "screens": [
         "SCR-004"
       ]
     },
     "REQ-027": {
-      "stories": [],
+      "stories": [
+        "US-032"
+      ],
       "screens": [
         "SCR-004"
       ]
     },
     "REQ-028": {
-      "stories": [],
+      "stories": [
+        "US-010",
+        "US-013"
+      ],
       "screens": [
         "SCR-002",
         "SCR-005"
       ]
     },
     "REQ-029": {
-      "stories": [],
+      "stories": [
+        "US-004"
+      ],
       "screens": [
         "SCR-010"
       ]
     },
     "REQ-030": {
-      "stories": [],
+      "stories": [
+        "US-025"
+      ],
       "screens": [
         "SCR-008"
       ]
     },
     "REQ-031": {
-      "stories": [],
+      "stories": [
+        "US-014"
+      ],
       "screens": [
         "SCR-005"
       ]
     },
     "REQ-032": {
-      "stories": [],
+      "stories": [
+        "US-020"
+      ],
       "screens": [
         "SCR-008"
       ]
     },
     "REQ-033": {
-      "stories": [],
+      "stories": [
+        "US-022"
+      ],
       "screens": [
         "SCR-009"
       ]
     },
     "REQ-034": {
-      "stories": [],
+      "stories": [
+        "US-008"
+      ],
       "screens": [
         "SCR-003"
       ]
     },
     "REQ-035": {
-      "stories": [],
+      "stories": [
+        "US-009"
+      ],
       "screens": [
         "SCR-003"
       ]
     },
     "REQ-036": {
-      "stories": [],
+      "stories": [
+        "US-012"
+      ],
       "screens": [
         "SCR-002"
       ]
     },
     "NFR-001": {
-      "stories": [],
+      "stories": [
+        "US-005"
+      ],
       "screens": [
         "SCR-002",
         "SCR-003",
@@ -239,18 +322,24 @@
       ]
     },
     "NFR-002": {
-      "stories": [],
+      "stories": [
+        "US-033"
+      ],
       "screens": []
     },
     "NFR-003": {
-      "stories": [],
+      "stories": [
+        "US-001"
+      ],
       "screens": [
         "SCR-001",
         "SCR-010"
       ]
     },
     "NFR-004": {
-      "stories": [],
+      "stories": [
+        "US-033"
+      ],
       "screens": [
         "SCR-001",
         "SCR-002",
@@ -265,21 +354,29 @@
       ]
     },
     "NFR-005": {
-      "stories": [],
+      "stories": [
+        "US-034"
+      ],
       "screens": []
     },
     "NFR-006": {
-      "stories": [],
+      "stories": [
+        "US-031"
+      ],
       "screens": [
         "SCR-004"
       ]
     },
     "NFR-007": {
-      "stories": [],
+      "stories": [
+        "US-034"
+      ],
       "screens": []
     },
     "NFR-008": {
-      "stories": [],
+      "stories": [
+        "US-033"
+      ],
       "screens": [
         "SCR-001",
         "SCR-002",
@@ -294,17 +391,741 @@
       ]
     },
     "NFR-009": {
-      "stories": [],
+      "stories": [
+        "US-003"
+      ],
       "screens": [
         "SCR-001"
       ]
     }
   },
-  "stories": {},
+  "stories": {
+    "US-001": {
+      "requirements": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-005",
+        "NFR-003"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-001"
+      ]
+    },
+    "US-002": {
+      "requirements": [
+        "REQ-003"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-002",
+        "SCR-004",
+        "SCR-005"
+      ]
+    },
+    "US-003": {
+      "requirements": [
+        "NFR-009"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-001"
+      ]
+    },
+    "US-004": {
+      "requirements": [
+        "REQ-029"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-010"
+      ]
+    },
+    "US-005": {
+      "requirements": [
+        "REQ-006",
+        "NFR-001"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-003"
+      ]
+    },
+    "US-006": {
+      "requirements": [
+        "REQ-007",
+        "REQ-017"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-003"
+      ]
+    },
+    "US-007": {
+      "requirements": [
+        "REQ-008"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-003"
+      ]
+    },
+    "US-008": {
+      "requirements": [
+        "REQ-034"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-003"
+      ]
+    },
+    "US-009": {
+      "requirements": [
+        "REQ-035"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-003"
+      ]
+    },
+    "US-010": {
+      "requirements": [
+        "REQ-009",
+        "REQ-028"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-002"
+      ]
+    },
+    "US-011": {
+      "requirements": [
+        "REQ-010"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-002"
+      ]
+    },
+    "US-012": {
+      "requirements": [
+        "REQ-036"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-002",
+        "SCR-005"
+      ]
+    },
+    "US-013": {
+      "requirements": [
+        "REQ-011",
+        "REQ-028"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-005"
+      ]
+    },
+    "US-014": {
+      "requirements": [
+        "REQ-012",
+        "REQ-013",
+        "REQ-031"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-005"
+      ]
+    },
+    "US-015": {
+      "requirements": [
+        "REQ-014"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-005"
+      ]
+    },
+    "US-016": {
+      "requirements": [
+        "REQ-017"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-006"
+      ]
+    },
+    "US-017": {
+      "requirements": [
+        "REQ-015"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-006",
+        "SCR-007"
+      ]
+    },
+    "US-018": {
+      "requirements": [
+        "REQ-016"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-006",
+        "SCR-007"
+      ]
+    },
+    "US-019": {
+      "requirements": [
+        "REQ-017"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-006"
+      ]
+    },
+    "US-020": {
+      "requirements": [
+        "REQ-032",
+        "REQ-004"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-13"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-008"
+      ]
+    },
+    "US-021": {
+      "requirements": [
+        "REQ-018",
+        "REQ-004"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-008",
+        "SCR-009"
+      ]
+    },
+    "US-022": {
+      "requirements": [
+        "REQ-033"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-009"
+      ]
+    },
+    "US-023": {
+      "requirements": [
+        "REQ-019"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-009"
+      ]
+    },
+    "US-024": {
+      "requirements": [
+        "REQ-022",
+        "REQ-004"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-13"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-008",
+        "SCR-009"
+      ]
+    },
+    "US-025": {
+      "requirements": [
+        "REQ-020",
+        "REQ-030",
+        "REQ-005",
+        "REQ-024"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11",
+        "AC-12",
+        "AC-13",
+        "AC-14"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-008"
+      ]
+    },
+    "US-026": {
+      "requirements": [
+        "REQ-020",
+        "REQ-005"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-008"
+      ]
+    },
+    "US-027": {
+      "requirements": [
+        "REQ-021"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-008"
+      ]
+    },
+    "US-028": {
+      "requirements": [
+        "REQ-023"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": []
+    },
+    "US-029": {
+      "requirements": [
+        "REQ-024"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": []
+    },
+    "US-030": {
+      "requirements": [
+        "REQ-025"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": []
+    },
+    "US-031": {
+      "requirements": [
+        "REQ-026",
+        "NFR-006"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10",
+        "AC-11"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-004"
+      ]
+    },
+    "US-032": {
+      "requirements": [
+        "REQ-027"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09",
+        "AC-10"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-004"
+      ]
+    },
+    "US-033": {
+      "requirements": [
+        "NFR-004",
+        "NFR-008",
+        "NFR-002"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08",
+        "AC-09"
+      ],
+      "tests": [],
+      "screens": [
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-004",
+        "SCR-005",
+        "SCR-006",
+        "SCR-007",
+        "SCR-008",
+        "SCR-009",
+        "SCR-010"
+      ]
+    },
+    "US-034": {
+      "requirements": [
+        "NFR-005",
+        "NFR-007"
+      ],
+      "acs": [
+        "AC-01",
+        "AC-02",
+        "AC-03",
+        "AC-04",
+        "AC-05",
+        "AC-06",
+        "AC-07",
+        "AC-08"
+      ],
+      "tests": [],
+      "screens": []
+    }
+  },
   "screens": {
     "SCR-001": {
       "artifact": "inception/design/screens/SCR-001-sign-in.md",
-      "stories": [],
+      "stories": [
+        "US-001",
+        "US-003",
+        "US-033"
+      ],
       "requirements": [
         "REQ-001",
         "REQ-002",
@@ -330,7 +1151,13 @@
     },
     "SCR-002": {
       "artifact": "inception/design/screens/SCR-002-my-bookings.md",
-      "stories": [],
+      "stories": [
+        "US-002",
+        "US-010",
+        "US-011",
+        "US-012",
+        "US-033"
+      ],
       "requirements": [
         "REQ-003",
         "REQ-009",
@@ -361,7 +1188,14 @@
     },
     "SCR-003": {
       "artifact": "inception/design/screens/SCR-003-book-a-desk.md",
-      "stories": [],
+      "stories": [
+        "US-005",
+        "US-006",
+        "US-007",
+        "US-008",
+        "US-009",
+        "US-033"
+      ],
       "requirements": [
         "REQ-006",
         "REQ-007",
@@ -394,7 +1228,12 @@
     },
     "SCR-004": {
       "artifact": "inception/design/screens/SCR-004-settings.md",
-      "stories": [],
+      "stories": [
+        "US-002",
+        "US-031",
+        "US-032",
+        "US-033"
+      ],
       "requirements": [
         "REQ-003",
         "REQ-026",
@@ -419,7 +1258,14 @@
     },
     "SCR-005": {
       "artifact": "inception/design/screens/SCR-005-all-bookings.md",
-      "stories": [],
+      "stories": [
+        "US-002",
+        "US-012",
+        "US-013",
+        "US-014",
+        "US-015",
+        "US-033"
+      ],
       "requirements": [
         "REQ-003",
         "REQ-011",
@@ -454,7 +1300,13 @@
     },
     "SCR-006": {
       "artifact": "inception/design/screens/SCR-006-desks.md",
-      "stories": [],
+      "stories": [
+        "US-016",
+        "US-017",
+        "US-018",
+        "US-019",
+        "US-033"
+      ],
       "requirements": [
         "REQ-015",
         "REQ-016",
@@ -482,7 +1334,11 @@
     },
     "SCR-007": {
       "artifact": "inception/design/screens/SCR-007-desk-form.md",
-      "stories": [],
+      "stories": [
+        "US-017",
+        "US-018",
+        "US-033"
+      ],
       "requirements": [
         "REQ-015",
         "REQ-016",
@@ -504,7 +1360,15 @@
     },
     "SCR-008": {
       "artifact": "inception/design/screens/SCR-008-people.md",
-      "stories": [],
+      "stories": [
+        "US-020",
+        "US-021",
+        "US-024",
+        "US-025",
+        "US-026",
+        "US-027",
+        "US-033"
+      ],
       "requirements": [
         "REQ-004",
         "REQ-005",
@@ -544,7 +1408,13 @@
     },
     "SCR-009": {
       "artifact": "inception/design/screens/SCR-009-user-form.md",
-      "stories": [],
+      "stories": [
+        "US-021",
+        "US-022",
+        "US-023",
+        "US-024",
+        "US-033"
+      ],
       "requirements": [
         "REQ-004",
         "REQ-018",
@@ -571,7 +1441,10 @@
     },
     "SCR-010": {
       "artifact": "inception/design/screens/SCR-010-set-your-password.md",
-      "stories": [],
+      "stories": [
+        "US-004",
+        "US-033"
+      ],
       "requirements": [
         "REQ-002",
         "REQ-018",
