@@ -25,7 +25,7 @@ It is a level-2 screen rather than an inline table editor because the validation
 - **Reached from:** SCR-006 (**Add desk**, or **Edit** on a row)
 - **Leads to:** SCR-006 (on save or cancel)
 
-Rendered as a modal over SCR-006 at ≥768px and as a full-screen view below it — a one-field form does not deserve a page of its own on a desktop, and a modal at 360px with a keyboard open is a squeeze. It keeps a `SCR-###` because its validation states must be numbered, listed in the manifest, and drawn.
+Rendered as a modal over SCR-006 at ≥768px and as a **bottom sheet** below it — a one-field form does not deserve a page of its own on a desktop, and a sheet keeps a strip of the screen it came from visible. **Corrected 2026-09-10:** this sentence said "full-screen view", which contradicted both the approved wireframe and the popup rule every other overlay in this design follows. The concern behind it — the keyboard covering the confirming action — was measured rather than assumed, and the sheet clears it. See the structural decision. It keeps a `SCR-###` because its validation states must be numbered, listed in the manifest, and drawn.
 
 ## Layout
 
@@ -99,10 +99,10 @@ The helper text states the rule and then says what the rule is *for*. An adminis
 
 | Component     | Used for                                                                    | States it appears in |
 | ------------- | --------------------------------------------------------------------------- | -------------------- |
-| `dialog`      | The form container — modal ≥768px, full-screen below                        | ST-01 – ST-07        |
+| `dialog`      | The form container — modal ≥768px, bottom sheet below                        | ST-01 – ST-07        |
 | `text-field`  | **Desk number**, with label, helper text, error slot and invalid styling    | ST-01 – ST-07        |
-| `radio-group` | **Active** / **Inactive** on add, each option carrying its consequence      | ST-01, ST-03 – ST-07 |
-| `alert`       | `info` for the upcoming-bookings note in edit; `error` for a failed save    | ST-02, ST-04, ST-07  |
+| `radio-group` | **Active** / **Inactive** on add, each option carrying its consequence. Built as `Radio option` (selected / unselected) with the group assembled in the form card | ST-01, ST-03 – ST-05, ST-07 |
+| `alert`       | `warning` for the upcoming-bookings note in edit and for the duplicate refusal; `error` for a failed save. **No `info` tone** — the palette has no info family, and both notes are cautions rather than neutral remarks. Gained an optional **Title** line so ST-04 can lead with the colliding desk number | ST-02, ST-04, ST-07  |
 | `button`      | **Add desk** / **Save changes**; **Cancel**                                  | ST-01 – ST-07        |
 | `spinner`     | Inline busy indicator inside the confirming action                          | ST-05                |
 
@@ -113,7 +113,7 @@ The helper text states the rule and then says what the rule is *for*. An adminis
 - **Non-colour signalling:** the invalid field carries an icon and its message as text as well as a border change. The duplicate refusal is an alert with an icon and the colliding desk number spelled out — a user who cannot distinguish the border colour still reads which desk is in the way
 - **Announcements:** the dialog's accessible name is **Add desk** or **Edit desk A-01**, so a screen-reader user knows which desk they are editing without re-reading the field. ST-04's refusal is a live region announced once, leading with the colliding number. ST-02's upcoming-bookings note is associated with the field, so it is read as part of the control rather than as loose text nearby
 - **Input hygiene:** leading and trailing whitespace is trimmed before comparison and before saving — `A-01 ` and `A-01` must not become two desks, and the user cannot see the difference. The field's autocapitalisation is off, since desk numbers are typed exactly
-- **At 360px:** full-screen with the confirming action at the bottom above the keyboard, never hidden behind it (NFR-004)
+- **At 360px:** a bottom sheet, with the confirming action at its foot. **Measured with the keyboard raised** (2026-09-10): in a 780px viewport a 290px keyboard leaves the sheet 490px, the tallest add-mode sheet is 420px, and the confirming action's lower edge lands at 474px — clearing the keyboard by 16px, never behind it (NFR-004). The dimmed strip above the sheet shrinks to 70px with the keyboard up, which is the honest cost of the sheet over a full-screen page
 
 ## Structural decisions
 
@@ -124,8 +124,12 @@ The helper text states the rule and then says what the rule is *for*. An adminis
 | Duplicate refusal explains case-normalisation, but only when case caused it                       | BR-001.8 normalises case, so `a-01` colliding with `A-01` looks like a bug to the person typing. Explaining it always would explain a mechanism that did not apply                                                                                  | One generic "already exists" message. Shorter, and it leaves a case collision looking like a broken screen                                                                                                   |
 | Status choice on add, absent on edit                                                              | A desk being set up before it is usable is a real case, so the choice belongs at creation. Afterwards, activation is SCR-006's row action — and BR-001.9's block belongs to that flow. Two screens controlling one attribute means two places to look | A status control in both modes. Symmetrical, and it would need BR-001.9's whole blocked-deactivation flow duplicated here                                                                                    |
 | Edit warns when the desk has upcoming bookings (ST-02)                                            | Renaming a booked desk changes what an employee sees with no notification (REQ-023–REQ-025 do not cover inventory edits). A warning is the most this screen can honestly do — it cannot invent a rule or an email                                    | Silent editing (a surprise for whoever booked it); blocking the edit (a rule BRD-001 does not contain). **Open question 3 on SCR-006 owns the real decision**                                                 |
-| Modal at ≥768px, full-screen below                                                                | A one-field form as a full desktop page is a page of whitespace; a modal at 360px with the keyboard raised leaves the confirming action fighting for room                                                                                            | Full-screen at every width (wasteful on desktop); modal at every width (cramped on a phone)                                                                                                                 |
+| Modal at ≥768px, **bottom sheet** below (title corrected 2026-09-10)                                                                | A one-field form as a full desktop page is a page of whitespace; a modal at 360px with the keyboard raised leaves the confirming action fighting for room                                                                                            | Full-screen at every width (wasteful on desktop); modal at every width (cramped on a phone)                                                                                                                 |
 | Everything typed is retained on every failure (ST-03, ST-04, ST-07)                                | The field is short but exact, and it is often copied from a physical label. Clearing it on failure means walking back to the desk                                                                                                                    | Clearing on failure. Common, and pointless punishment for a network error                                                                                                                                     |
+| A bottom sheet at 360, not a full-screen page (corrected 2026-09-10)                              | This file said full-screen; the approved wireframe drew a sheet, and `wireframe-rules.md` makes a sheet the treatment for every popup below 768 — the strip of dimmed screen above it is the only thing telling a phone user they are on top of Desks rather than inside a new page. The reason the spec had reached for full-screen was the keyboard, so that got measured instead of argued: with a 290px keyboard in a 780px viewport the confirming action lands 16px clear. The rule wins and the sentence was wrong | Full-screen at 360, as this file originally said. More room for the keyboard, and it makes this the only popup in the design that behaves differently at 360, for a problem that turns out not to exist |
+| Refusals sit above the field; the persistent edit note sits below the helper (2026-09-10)          | ST-04 and ST-07 are about what was just typed, so they belong before the input a reader is about to correct — which is what the greyscale frame drew. ST-02's note is a consequence of the edit rather than a correction to it, and the helper explains the input, so the order there is field, helper, note. Splitting the field from its own helper to make room for the note read worse | One position for every alert. Tidier as a rule, and it either buries a refusal below the field or separates the field from the text explaining it |
+| The duplicate refusal leads with a Title line, not one paragraph (2026-09-10)                     | PRIN-3 asks the refusal to name the colliding desk, and the a11y note asks the announcement to lead with it. A single paragraph buries the desk number mid-sentence; a headline carries it and the explanation follows. `Alert` gained an optional Title for this, defaulting off so no existing alert changed | The spec's single-paragraph copy. Faithful to the sentence as written, and the number it exists to communicate stops being the first thing read |
+| No `info` alert tone was added to the palette (2026-09-10)                                        | The components table asked for `info` on ST-02's note. The palette has success, warning and danger and no info family, and this note — *three people hold this desk and will not be told* — is a caution, not a neutral remark. `warning` says the true thing and no new hue enters the palette for one note | Adding an info family. Matches the table, and it buys a whole new hue to make a warning look calmer than it is |
 
 ## Conflicts and open questions
 
@@ -140,4 +144,41 @@ Both rows resolved 2026-09-07. Row 1 adds a rule to BRD-001 and is listed in the
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-007 · Desk form / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Seven states. Draw the modal at **1280px** and **768px** (it is a modal at and above 768px) and the full-screen form at **360px** (NFR-004) — including one 360px frame with the on-screen keyboard raised, since that is where the confirming action is most at risk of being covered.
+**The hi-fi frames for this screen exist.** All seven states are drawn at 360, 768 and
+1280, plus one extra 360 frame with the on-screen keyboard raised, in *Employee Desk
+Booking — Design System & Mockups*
+(<https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn>) — **22 frames** — named
+`HF / SCR-007 · Desk form / ST-## <state> · <width>`, on the pass-2b palette as Figma
+variables in both themes. Every colour and every text style is a token — audited:
+**0 raw paints out of 2,378, and 0 unstyled text nodes out of 825**. Neither the frames
+nor the Figma file is what gets approved; this spec's PR is.
+
+**Every frame is drawn over SCR-006**, dimmed, because that is the screen this form opens
+from and a form card on an empty ground reads as a page rather than as an overlay. At 768
+and 1280 the card is a centred 480px modal — the same width as every other dialog in the
+file, rather than the wireframe's 520, so the chrome matches. At 360 it is a bottom sheet:
+full width, bottom corners squared, a strip of the dimmed list left visible above it.
+
+**ST-06 has no form in it.** The form has closed by then, so it is drawn as SCR-006 with
+the new desk sorted into position — A-12 between A-02 and B-03, not appended — the summary
+line recounted to 41 desks, and the toast naming the effect on bookability. Same treatment
+SCR-005 ST-11 and SCR-010 use for a state that lands on another screen.
+
+**The keyboard frame is the one that had to be measured, not eyeballed.** In a 780px
+viewport a 290px keyboard leaves 490px; the tallest add-mode sheet is 420px; the confirming
+action's lower edge lands at 474px. It clears by 16px. That is the whole reason this frame
+exists, and it is why the full-screen instruction in this spec could be corrected with a
+number rather than an opinion.
+
+Built for this screen, and reusable: **`Radio option`** (selected / unselected — a radio
+and not a toggle, because both outcomes are named), **`Desk form popup`** holding all six
+in-form states as variants on the shared `Dialog header` and `Dialog footer`, and an
+optional **Title** line on **`Alert`** so a refusal can lead with the fact. `Show title`
+defaults off, so every existing alert in the file is untouched.
+
+**Two things the frames do not draw.** ST-03 has two messages in this spec — *"Give the
+desk a number."* for empty and *"Use one letter, a dash and two digits — like A-01."* for a
+bad shape; the frames show the **shape** one, since the empty case is the same frame with
+the message swapped and the field blank. And ST-04's case-collision sentence is shown in
+full: the spec says it appears only when case actually caused the collision, so the frame
+draws the case that includes it.
