@@ -27,6 +27,8 @@ Sign-out from either shell returns here (REQ-003, specified on SCR-002 and SCR-0
 
 Single centred column, one card. No marketing, no illustration, no second column — this is an internal tool people reach with intent. At 360px the card is the page with page margins only.
 
+**The card is 400px wide at both 768 and 1280, centred on both axes, and it does not grow with the breakpoint** (decided 2026-09-10 by the designer). This screen and SCR-010 are the only two with no `app-shell`, so the grid's inner columns — 1104 at desktop, 648 at tablet — measure a content region these screens do not have. A 1104px sign-in form is a reading line four times longer than anything written on it. 400px sets every field at a comfortable measure and holds the longest string on the screen, the help text, in two lines. SCR-010 uses the same 400px card, so the forced password step reads as the same place rather than a new one. At 360 the card is the page: the 328px inner column inside 16px page margins.
+
 ```
 ┌─────────────────────────────────────┐
 │                                     │
@@ -78,7 +80,7 @@ Single centred column, one card. No marketing, no illustration, no second column
 ### ST-05 Service unavailable
 
 - **When** the request fails to reach the server, times out, or returns a server error — a different cause from ST-04 and it must not read like a rejection
-- **Shows** *"We can't reach the booking service right now. Try again in a moment."* with a **Try again** control; both fields keep their contents, password included, so a retry is one tap
+- **Shows** an error region above the fields — *"We can't reach the booking service right now. Try again in a moment."* — carrying a **Try again** control **inside the region**, beneath the message and aligned to its right edge. **Sign in** stays below, present and enabled. Both fields keep their contents, password included, so a retry is one tap
 - **Can do** retry, or wait. Nothing the user typed is lost
 
 ## Components
@@ -94,7 +96,7 @@ Single centred column, one card. No marketing, no illustration, no second column
 
 ## Interaction and accessibility
 
-- **Keyboard:** tab order is email → show/hide → password → Sign in → (error region's Try again, when present). Enter submits from either field. Nothing on this screen requires a pointer
+- **Keyboard:** tab order is email → password → show/hide → **Sign in**, and in ST-05 the alert's **Try again** precedes them all, because it sits above the fields. Enter submits from either field. Nothing on this screen requires a pointer. **Corrected 2026-09-10:** this line used to place show/hide *before* the password field. That contradicts the layout above — the toggle sits inside the password field, at its right edge — and it contradicts SCR-010, which orders the same pair correctly. Built as written, the tab after email would have landed on a visibility toggle for a field the user had not reached yet
 - **Focus:** visible ring on every interactive element (`--c-focus-ring`). After ST-02 focus moves to the first invalid field; after ST-04 to the password field; after ST-05 focus stays where it was and the alert is announced without stealing it
 - **Non-colour signalling:** an invalid field carries an icon and its message in text as well as a border change; the form-level alert carries an icon and the word describing the problem. A user who sees no colour difference loses nothing
 - **Announcements:** the error region is a live region (`role="alert"`), announced once when it appears. The busy button announces its state change. The password show/hide control announces which mode it is in, not just that it was pressed
@@ -111,6 +113,8 @@ Single centred column, one card. No marketing, no illustration, no second column
 | Role decides the landing screen, silently — no role picker                                     | REQ-004 gives each user exactly one role, so a picker would offer a choice nobody has                                                                                                                                                                                                         | A post-sign-in "continue as…" step                                                                                                                                                |
 | No "remember me" control                                                                       | Sessions last 30 days and are extended by use (decided 2026-09-07 (Joy Joshua, PO/BA)), so the default already is "remember me" — a checkbox would offer control over something nobody needs to change. Cancelling a booking must never be gated behind a password prompt (INSIGHT-04)                                  | A remember-me checkbox (a control with one sensible setting); a short session with re-authentication (adds friction to the act that frees desks)                                  |
 | A first sign-in with an administrator-set password goes to SCR-010, not into the app             | Decided 2026-09-07 (Joy Joshua, PO/BA): the person who created the account must stop holding a working credential for it. The check happens before the shell renders, so there is no window in which the app is usable on somebody else's password                                                                       | Prompting later, or on a settings screen. Skippable, and it leaves the credential shared for as long as the user ignores it                                                       |
+| A fixed 400px card at every width above 360, rather than a grid-derived one                        | Decided 2026-09-10 by the designer. The grid describes the shell, and this screen has none; the inner-column widths that govern every other screen measure nothing here. A form is bounded by its reading line, not by the viewport. Fixing the width also makes SCR-001 and SCR-010 the same card at three sizes, which is what makes the forced password step read as one continuous arrival | A card that grows with the breakpoint. It uses the space a large monitor offers, and it makes the two auth screens stop being the same object; the password checklist would reflow differently at each width for no gain |
+| **Try again** sits inside ST-05's alert, and **Sign in** stays below it                            | They submit the same thing, and the redundancy is deliberate: after a failure the eye is on the alert, and on a phone the button may be below the fold. A recovery path is the wrong place to make someone hunt for the control they already know                                                                          | A single control — dropping Try again and letting **Sign in** be the retry. One less button, and it puts the recovery action somewhere other than where the explanation is. **Worth your veto at review if you would rather have the one button** |
 
 ## Conflicts and open questions
 
@@ -127,4 +131,8 @@ The session decision also removes the one control this screen was holding open, 
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-001 · Sign in / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Five states, and draw each at **360px, 768px and 1280px** — NFR-004 names all three as verification widths, so a frame at one width is a third of a state.
+Five states, and draw each at **360px, 768px and 1280px** — NFR-004 names all three as verification widths, so a frame at one width is a third of a state. **15 frames.**
+
+**Every treatment this screen needs already has a token** (checked 2026-09-10) — no new colour role is required, unlike SCR-002's build. Specifically: field edges are `--c-border-control` and not `--c-border`; focus is the ring plus its `--bw-2` offset gap; the card sits on the page ground with `--c-border-strong` and `shadow/1`; the ST-04 and ST-05 alerts use the danger family as a status chip, keeping `--c-border`; and ST-03's in-button spinner takes the **button's label colour**, never a text colour — the defect the SCR-002 build found, where the only cue that a request is in flight sat at 1.02:1 on the primary button.
+
+Draw ST-01 at 400px first and vary the rest from it; the card geometry is identical across all five states, and only the alert region's presence changes the height.
