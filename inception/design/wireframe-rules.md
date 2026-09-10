@@ -90,7 +90,7 @@ Three things the middle breakpoint changed, none of them cosmetic:
 
 **At 768 the sidebar is 72px, so the content area is 648px** — and that number
 is the one that matters. Measured against it, all three admin tables overflow:
-All bookings needs 793px, People 854px, Desks 672px. That is why SCR-005,
+All bookings needs 793px, People 896px, Desks 672px. That is why SCR-005,
 SCR-006 and SCR-008 switch to their card layout below **1024**, not below 768.
 Check a new table against 648px before assuming it survives the middle
 breakpoint.
@@ -158,6 +158,12 @@ person**) and **`Icon / more`** (the row overflow on SCR-008). Both are geometry
 stroked paths, round caps, colour from the stroke token, no literal hex — and both were
 cloned from an existing icon rather than drawn fresh, so weight, caps and joins match
 the set without anyone having to remember what they were.
+
+**`Icon / search`** was added 2026-09-10 for SCR-008, whose list is the first with a search
+field. Same method: cloned from `Icon / block` — already a stroked circle plus a stroked
+line — and its two vector paths rewritten into a 13px circle and a 5.5px handle, so weight,
+caps and joins came along for free. **Rewriting `vectorPaths` resets `strokeCap` to `NONE`,**
+so set the caps back to `ROUND` afterwards and look at the icon; nothing else reports it.
 
 `Icon / more` is three dots drawn as one stroked path with round caps and a zero-height
 bounding box. That is legitimate and it renders correctly, but it means the vector has
@@ -422,7 +428,14 @@ token** and look at it. Two related traps in the same component:
 
 - **the icon node is hidden by default.** `Show icon` is `false` on the Button set, so a
   variant cloned out of it has `visible = false` on the icon. Building `Icon button` from
-  `Type=Secondary` produced a perfect 48px square with nothing in it.
+  `Type=Secondary` produced a perfect 48px square with nothing in it. **`Icon button` is
+  no longer built that way:** SCR-008 turned out to be its only consumer, and forty
+  bordered squares down a table's right edge read as a column of empty boxes, so it now
+  carries `Type=Ghost`'s treatment — no fill, no stroke at rest. It also shipped with a
+  dead, invisible `Icon / calendar` beside its real slot, which nothing could ever show;
+  removed 2026-09-10. **An invisible child with no property reference is not a slot, it is
+  a leftover** — an empty `componentPropertyReferences` object is truthy, so filter on the
+  reference you expect, not on the object.
 - **icons in this library are stroked, not filled.** Recolouring code that only touches
   `fills` silently does nothing. Check `strokes` first and fall back to `fills`.
 
@@ -437,9 +450,24 @@ three widths show both, and there is no menu. Hiding the destructive one behind 
 1280 while showing it plainly at 360 made the same act cost two clicks on a desktop and
 one on a phone, and it created a state — the open menu — that no `ST-##` had numbered.
 
-**SCR-008 People has four** — Edit, Reset password, Deactivate/Activate, and a role
-change. Four buttons do not fit a row at any width, so that screen keeps its overflow
-and numbers the open menu as a state.
+**SCR-008 People has four** — Edit, a role change, Reset password, and Deactivate/Activate.
+Four buttons do not fit a row at any width, so that screen keeps its overflow and numbers
+the open menu as a state: it is **ST-15**, added 2026-09-10 by that screen's pre-build pass,
+which found the rule had been written here and never carried into the spec. It is the
+doorway to five other states, so undrawn it would have taken them with it.
+
+Three things that screen settled about a menu that stays:
+
+- **the trigger is the single row control at every width** — table row, tablet card and
+  phone card alike — because a menu that collapses into expanded buttons at one width gives
+  the phone a route the desktop lacks, which is the fault SCR-006 corrected
+- **the trigger is ghost, and each one needs its own accessible name.** Forty controls all
+  called "Actions" are forty identical stops in a screen reader's list, so the name carries
+  the person: *"Actions for Dana Silva"*
+- **an anchored popover takes no scrim; a sheet does.** The popover hangs off the `⋯` that
+  opened it and that trigger says which row it belongs to, so it is not modal. At 360 the
+  same menu is a full-width sheet with no anchor — modal, scrimmed, and titled with the
+  person, which is the one thing an icon-only trigger on a card cannot say
 
 The test is the row, not the screen: **if every action fits, show every action.** A menu
 that exists to be tidy costs a component, a numbered state, a keyboard detour and an
@@ -456,6 +484,17 @@ while the painted surface stays put — a 296px-wide instance still showing an 8
 a 48px height override that never reaches the thing you can see. So resizing a button is
 always **two** moves: set the instance, then set its `Surface` to `FILL` on the axis you
 changed.
+
+**The same fault can sit in a component and go unseen for five screens.** `Dialog`'s
+bottom-sheet footer made both buttons `FILL` — equal halves at 360 — and left their
+`Surface` children hugging. The secondary action therefore painted **85px inside its 152px
+slot** while the primary, whose label happened to be 151px wide, filled its own. Two
+buttons that the layout says are equal, rendering visibly unequal, in every two-action
+sheet in the file. Found and fixed 2026-09-10 during the SCR-008 build, on the footer
+instances — which is exactly where stretching belongs — and it corrected the 360 dialog
+frames on SCR-002, SCR-003, SCR-005, SCR-006 and SCR-007 at the same time. **When a
+component sets a child to `FILL`, check what the child paints, not what the child
+measures.**
 
 **And do NOT fix that in the component.** Setting `Surface` to `FILL` on all 24 variants
 looks like the tidy fix and is a regression: a button whose surface fills can no longer be
@@ -486,6 +525,40 @@ repair is `FIXED` → `resize()` → `FILL`, which forces the relayout. Found 20
 `Error focus` field variants, whose input sits one frame deeper than every other variant
 because of the focus ring. **Check the rendered width of any `FILL` text child you added
 before its siblings.**
+
+## Layout overrides do not survive inside an instance
+
+Three findings from the SCR-008 build, in the order they bite.
+
+**Setting `layoutMode` on a frame inside an instance silently reverts.** SCR-008's ST-06
+needed one bottom sheet's footer stacked because *Deactivate and cancel 3 bookings* cannot
+fit a 152px half. Setting `footer.layoutMode = 'VERTICAL'` on the instance reported success,
+returned no error, and left the footer horizontal — the read-back afterwards is the only
+thing that catches it. **A layout change that has to differ per frame is a variant, not an
+override.** `Dialog` therefore gained a third axis, `Footer=[Side by side|Stacked]`.
+
+**Adding an axis to a shared set is safe if you give every existing variant the default
+value.** Renaming all ten `Dialog` variants to append `, Footer=Side by side` created the
+property with that default, and all twelve dialog instances across SCR-002, SCR-003,
+SCR-005, SCR-006 and SCR-007 resolved to it and rendered unchanged. Check that frame by
+frame rather than assuming it; the cost of being wrong is five approved screens.
+
+**Children cannot be reordered inside an instance.** `insertChild` throws *"Cannot move
+node. New parent is an instance"*. So a stacked footer whose confirming action must sit on
+top has to be ordered in the **component**, where reordering works — another reason the
+per-frame override was never going to do it.
+
+## A vertically-FILL child collapses when its parent turns vertical
+
+The same footer, once it was a real variant: its buttons were `FILL/FILL`, correct for a
+horizontal row where vertical FILL means "match the row's height". Turned vertical, vertical
+FILL means "share the primary axis" — so two 40px buttons each shrank to **16px** while
+their `Surface` children stayed 40px and overflowed the frame. It reads as a rendering bug,
+not a sizing one.
+
+The repair is `HUG` on the child, not a taller parent. And the parent will not hug until the
+children stop filling it, so fix the children first and let the frame follow — `AUTO` on the
+parent alone does nothing while a child still claims the axis.
 
 ## The login backdrop is a ground, and it yields to content
 
@@ -623,9 +696,9 @@ recolour a file whose whole point is that a grey frame cannot argue about brand,
 | **URL** | https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn |
 | **Synced by** | `/ux` through the Figma connector, from `tokens.css` and the specs in `screens/` |
 | **Direction** | One-way, as above. The spec PR is what gets approved; a frame never is |
-| **Contents** | 170 variables (57 primitives · 65 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 21 icons, 29 components — including the `Nav × Density` Sidebar set that covers the admin screens too, and the `Field & Form` page the auth screens introduced — and 100 `HF /` frames: SCR-003 (12 states), SCR-002 (10), SCR-001 (5) and SCR-010 (6), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 frame for SCR-010 with the keyboard raised |
+| **Contents** | 171 variables (57 primitives · 66 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 24 icons, 47 components — including the `Nav × Density` Sidebar set that covers the admin screens too, the `Field & Form` page the auth screens introduced, and the `Admin table & filters` page the three admin lists share — and **235** `HF /` frames: SCR-003 (12 states), SCR-002 (10), SCR-001 (5), SCR-010 (6), SCR-005 (11 + one 360-only), SCR-006 (10), SCR-007 (7) and SCR-008 (16), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 frame for SCR-010 with the keyboard raised |
 
-**Six screens have no** `HF /` **frames yet — SCR-004 through SCR-009, the admin set.**
+**Two screens have no** `HF /` **frames yet — SCR-004 Settings and SCR-009 User form.**
 SCR-003 was drawn first because it is the only screen where clay "yours" and blocked red
 appear in the same desk list, which makes it the real test of the pass-2b palette. SCR-002
 followed it because the two share the cancel dialog, so drawing them together settles that
@@ -634,11 +707,16 @@ same reason: they are the same 400px card at three sizes, and building them apar
 surest way to make them stop matching. Between them they complete the employee journey in
 colour — sign in, set your password, book a desk, my bookings.
 
-The six that remain are larger and older than these four, and their specs predate the
-pass-2b palette, the one-card rule, the disabled-control rule, `--c-border-control` and the
-focus-offset rule. SCR-001 and SCR-010 each had a pre-build pass before a frame was drawn,
-and it found five faults; assume the admin specs need the same pass before 171 frames
-exist, not after.
+The admin set followed on 2026-09-10: SCR-005, then SCR-006 and SCR-007 as a list-and-form
+pair, then SCR-008. **The pre-build pass earned its place every time.** SCR-001 and SCR-010
+had one and it found five faults; SCR-008 had one and it found eight, two of which were
+states nothing on the screen could reach — no control anywhere started a role change, so
+its confirmation and its last-admin refusal had no route in, and the open row menu this
+file already required was never numbered. Those specs predate the pass-2b palette, the
+one-card rule, the disabled-control rule, `--c-border-control` and the focus-offset rule,
+so **run the pass before the frames, not after.** SCR-009 is the form behind SCR-008's list
+and should be read against SCR-007, its opposite number, the way SCR-008 was read against
+SCR-006.
 
 
 The file carries the token set as Figma variables — a `Color` collection with

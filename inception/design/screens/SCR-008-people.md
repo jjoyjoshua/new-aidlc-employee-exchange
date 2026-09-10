@@ -41,9 +41,9 @@ A table with a search field — unlike the desk list, an office's people list gr
 │            │  ├──────────────┼───────────────┼────────┼────────┤  │
 │            │  │ Priya Raman  │ priya@…       │Employee│✓ Active│⋯ │
 │            │  │ Marcus Vale  │ marcus@…      │Admin   │✓ Active│⋯ │  ⋯ Edit ·
-│            │  │  (you)       │               │        │        │  │  Reset password ·
-│            │  │ Dana Silva   │ dana@…        │Employee│⊘ Deactd│⋯ │  Deactivate
-│            │  └──────────────┴───────────────┴────────┴────────┘  │
+│            │  │  (you)       │               │        │        │  │  Make an admin ·
+│            │  │ Dana Silva   │ dana@…        │Employee│⊘ Deactd│⋯ │  Reset password ·
+│            │  └──────────────┴───────────────┴────────┴────────┘  │  Deactivate
 │  ─────────  │                                                      │
 │  ◕ Marcus  │                                                      │
 └────────────┴──────────────────────────────────────────────────────┘
@@ -53,7 +53,32 @@ A table with a search field — unlike the desk list, an office's people list gr
 
 The summary line counts admins explicitly — *"2 admins"* — because that number is the one BR-001.11 protects. When it reads **1 admin**, Marcus can see the safeguard coming before he trips it (PRIN-2).
 
-Below 1024px each row becomes a card in the same field order, with the row actions as full-width controls (PRIN-4).
+**The row's four actions live in one overflow menu, at every width.** Edit, a role
+change, Reset password, and Deactivate/Activate — four controls do not fit a table row at
+1280, so this screen keeps its menu where SCR-006 dropped one. The test is the row, not a
+house style: SCR-006's two actions fit where these four do not
+([wireframe-rules](../wireframe-rules.md)). The menu is therefore the *single* row control
+at 1280, at 768 and at 360, which is what keeps the same act costing the same number of
+clicks on a phone and on a desktop — the fault SCR-006 had to correct on 2026-09-10.
+
+**The role change is a menu item labelled with the role it would produce** — **Make an
+admin** on an employee, **Make an employee** on an admin. Decided 2026-09-10 during the
+pre-build pass, and it closed a hole: this file named four row actions in its component
+table and three in ST-01, and **nothing anywhere started a role change**, which left ST-08
+and ST-09 — the role-change confirmation and its last-admin refusal — with no route in.
+Labelling the item by outcome means the confirmation it opens has already been described by
+the thing that opened it. An inline role select in the row was rejected again here for the
+reason the structural decisions below already give: it turns a mis-click into a permission
+change.
+
+Below 1024px each row becomes a card in the same field order, and **the menu stays a single
+`Icon button` at the card's top-right**, aligned with the name. This sentence previously
+said the row actions became "full-width controls", which contradicted two things at once:
+the tablet rule that full-width stacked buttons are absurd at 648px, and the existence of
+the menu itself — PRIN-4 asks for touch-sized controls, not for four of them. **At 360 the
+menu opens as a bottom sheet titled with the person's name**, per the popup rule, which
+also repairs the one thing an icon-only trigger loses on a phone: which row you are about
+to change.
 
 **The table becomes cards below 1024px, not below 768px** (measured 2026-09-07 while
 drawing the tablet frames). At 768px with the collapsed icon-only sidebar the content
@@ -62,16 +87,27 @@ area is 648px, and this table's own columns need more than that — so a table k
 at a glance (A-6). Portrait tablet therefore gets the card list; landscape tablet and
 desktop, at 1024 and above, keep the table.
 
-This table needs **854px** — the widest of the three; at 768 it has 648.
+This table needs **896px** — the widest of the three; at 768 it has 648. That figure was
+**854px** until 2026-09-10, when the hi-fi build gave the table real columns and measured
+it: Name 240 · Email 280 · Role 120 · Status 160 · a 48px `⋯`, plus the 24px padding each
+side. The earlier number predated the columns; the conclusion it supports — cards below
+1024, because 896 does not fit 648 — is unchanged, and now it is measured rather than
+estimated.
 
 ## States
 
-Fourteen. Two rule refusals (ST-07, ST-09), one credential display, two shapes of deactivation, and a shared trio for the row actions.
+Sixteen. Two rule refusals (ST-07, ST-09), one credential display, two shapes of
+deactivation, a shared trio for the row actions, and — added 2026-09-10 by the pre-build
+pass — the open row menu and a search that matches (ST-15, ST-16). Both were interface this
+file already described and had never numbered, and an unnumbered state is a state someone
+forgets to build. They are **appended rather than inserted**, so every existing `ST-##`
+keeps the number the approved wireframes and the manifest already carry — the same choice
+SCR-005 made with its ST-12.
 
 ### ST-01 Default
 
 - **When** the user list is loaded
-- **Shows** the summary line — *"38 people · 36 employees, 2 admins · 1 deactivated"* — then every account: name, email, role, a status chip reading **Active** or **Deactivated** (icon plus word), and an overflow menu holding **Edit**, **Reset password**, and **Deactivate** or **Activate**. The signed-in administrator's row is marked **(you)**. **Add person** sits in the page header
+- **Shows** the summary line — *"38 people · 36 employees, 2 admins · 1 deactivated"* — then every account: name, email, role, a status chip reading **Active** or **Deactivated** (icon plus word), and an overflow menu (`⋯`) holding **Edit**, **Make an admin** / **Make an employee**, **Reset password**, and **Deactivate** or **Activate** — **closed** in this state; open it is ST-15. The signed-in administrator's row is marked **(you)**. **Add person** sits in the page header. No search is active, so there is no match line above the table — that is ST-16
 - **Can do** search, add a person (→ SCR-009), edit (→ SCR-009), change role, reset a password, deactivate or reactivate
 
 ### ST-02 Loading
@@ -150,19 +186,31 @@ Fourteen. Two rule refusals (ST-07, ST-09), one credential display, two shapes o
 
 - **When** a deactivation, activation or role change succeeds
 - **Shows** the dialog closes; the row's chip or role updates in place; the summary line updates — and it is the admin count that Marcus watches, so *"2 admins"* becoming *"3 admins"* is the real confirmation. A transient message states the effect: *"Dana Silva deactivated. They can no longer sign in."* / *"Priya Raman is now an admin."*
-- **Can do** carry on. Focus returns to the row, which is still there
+- **Can do** carry on. Focus returns to the row's **`⋯`** trigger — the control the action was started from, which is what the Interaction section promises and what ST-15 hands focus back to. That trigger survives every one of these actions (a deactivation changes the menu's *item* from **Deactivate** to **Activate**, not the button), so there is always something to return to. This bullet previously said "the row", leaving the two sections disagreeing about focus — corrected 2026-09-10
+
+### ST-15 Row menu open
+
+- **When** a row's **`⋯`** is activated. Added 2026-09-10 by the pre-build pass: [`wireframe-rules.md`](../wireframe-rules.md) settled on 2026-09-10 that this screen keeps its overflow *and numbers the open menu as a state*, and the state had never been written. It is the doorway to five of the other fifteen, so leaving it undrawn would have taken them with it
+- **Shows** the menu over the row it belongs to, carrying all four actions in a fixed order — **Edit**, **Make an admin** / **Make an employee**, **Reset password**, then **Deactivate** / **Activate** last, separated by a divider because it is the destructive one. The role item's label names the role it would *produce*, so it reads **Make an employee** on Marcus's own admin row and **Make an admin** on Priya's. On a **deactivated** account the last item reads **Activate**, and the role item stays available — a deactivated person's role still decides what they come back to. At ≥768px an anchored popover on `--c-surface-overlay` with `shadow/2`; **at 360px a bottom sheet titled with the person's name**, because an icon-only trigger on a card is the one place the interface cannot otherwise say which row is about to change
+- **Can do** choose any of the four — **Edit** → SCR-009; the role item → ST-08, or ST-09 where it would leave no admin; **Reset password** → ST-10; **Deactivate** → ST-05, ST-06 or ST-07 depending on the bookings held and the admin count — or dismiss with Escape or a click away. Dismissing returns focus to the **`⋯`** that opened it
+
+### ST-16 Search with matches
+
+- **When** a search term matches one or more accounts. Added 2026-09-10 by the pre-build pass — the match line described below appears in **no other state**, so without a frame of its own it would not have been drawn
+- **Shows** the term retained in the field with a clear (`×`) control, the matching rows only, and a **match line** immediately above the table reading *"Showing 3 of 38"*. **The summary line does not re-count.** It goes on reading *"38 people · 36 employees, 2 admins · 1 deactivated"*, unchanged, because the admin count is the number BR-001.11 defends and it sits on the screen so that a refusal is visible before it fires. Re-counting it to describe the matches would delete that number at exactly the moment it is load-bearing: ST-07 and ST-09 send Marcus *here*, to search for somebody to promote (decided 2026-09-10 by the designer)
+- **Can do** open any matching row's menu (→ ST-15), clear the search (→ ST-01), keep typing (→ ST-03 if it stops matching), or add a person
 
 ## Components
 
 | Component        | Used for                                                                                             | States it appears in              |
 | ---------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `app-shell`      | Admin sidebar / bottom bar, page header with **Add person**, account menu                            | ST-01 – ST-14                     |
-| `search-field`   | Search by name or email                                                                              | ST-01, ST-03, ST-05 – ST-14       |
-| `result-summary` | Counts, with admins counted explicitly — the number BR-001.11 protects                               | ST-01, ST-03, ST-05 – ST-14       |
-| `data-table`     | Name · Email · Role · Status · actions — stacked cards below 768px; own row marked **(you)**          | ST-01, ST-05 – ST-14              |
-| `status-chip`    | **Active** / **Deactivated** — icon **and** word, never colour alone                                 | ST-01, ST-05 – ST-14              |
-| `menu`           | Row overflow: **Edit**, **Reset password**, **Deactivate** / **Activate**, role change               | ST-01, ST-14                      |
-| `button`         | **Add person**; dialog actions; **Try again**; **Clear search**; **Copy**                            | ST-01 – ST-14                     |
+| `app-shell`      | Admin sidebar / bottom bar, page header with **Add person**, account menu. ST-04 needs the header **without** its action, and the set had no variant without one — `Desktop` and `Mobile` both carry SCR-005's timezone line, which does not belong on this page. **`Size=Desktop title` and `Size=Mobile title` were added** 2026-09-10 alongside the `Desktop action` / `Mobile action` pair SCR-006 added | ST-01 – ST-16                     |
+| `search-field`   | Search by name or email; carries a clear (`×`) control once a term is present                        | ST-01, ST-03, ST-05 – ST-16       |
+| `result-summary` | Counts, with admins counted explicitly — the number BR-001.11 protects. **Never re-counts for a search;** the match line is a separate row above the table (ST-16) | ST-01, ST-03, ST-05 – ST-16       |
+| `data-table`     | Name · Email · Role · Status · `⋯` — stacked cards below **1024px**, matching the Layout section above; own row marked **(you)**. The 768px figure this row used to carry contradicted it | ST-01, ST-05 – ST-16              |
+| `status-chip`    | **Active** / **Deactivated** — icon **and** word, never colour alone. This is the library's `Inactive` variant carrying the word *Deactivated*: the quiet-neutral treatment is shared with SCR-006 and only the copy differs, because a desk is *inactive* and a person is *deactivated*. **A `Deactivated` variant was added** 2026-09-10: the set has no text property, so its words live in the variants and a new word needs a new variant — cloned from `Inactive`, so the fill, border and block icon are the same tokens and only the label differs | ST-01, ST-05 – ST-16              |
+| `menu`           | Row overflow, four items in a fixed order: **Edit**, **Make an admin** / **Make an employee**, **Reset password**, **Deactivate** / **Activate**. Anchored popover ≥768px, bottom sheet titled with the person's name at 360 | ST-15 (open); trigger in ST-01, ST-14, ST-16 |
+| `button`         | **Add person**; dialog actions; **Try again**; **Clear search**; **Copy**                            | ST-01 – ST-16                     |
 | `empty-state`    | No search match — the only empty state reachable here                                                | ST-03                             |
 | `alert`          | Load failure (`error`); in-dialog failure (`error`); last-admin refusals (`warning`)                 | ST-04, ST-07, ST-09, ST-13        |
 | `skeleton-row`   | Loading placeholders at real row height                                                              | ST-02                             |
@@ -172,11 +220,11 @@ Fourteen. Two rule refusals (ST-07, ST-09), one credential display, two shapes o
 
 ## Interaction and accessibility
 
-- **Keyboard:** search first, then the table, then each row's overflow. The table is a table, so headers are announced per cell — a bare "Employee" tells a screen-reader user nothing without its **Role** header. Overflow menus open with Enter, close with Escape, and return focus to their trigger
+- **Keyboard:** search first, then the table, then each row's overflow. The table is a table, so headers are announced per cell — a bare "Employee" tells a screen-reader user nothing without its **Role** header. Overflow menus open with Enter, close with Escape, and return focus to their trigger. The trigger is icon-only, so **each row's `⋯` needs its own accessible name** — *"Actions for Dana Silva"* — because forty controls all called "Actions" is forty identical stops in a screen reader's control list. Inside the open menu (ST-15) the arrow keys move between the four items and the role item's name is its visible label, so what is announced is the outcome (*"Make an admin"*), not the field it changes
 - **Focus:** visible ring on every control (`--c-focus-ring`). Dialogs trap focus and return it to the originating overflow. In ST-07 and ST-09 focus goes to the refusal text, not to **Make someone an admin** — the explanation is the point, and a focused button invites Enter before reading. In ST-11 focus goes to the password field itself so a screen-reader user hears the credential before the instructions, and the trap is strict: no outside click, no Escape, only **Done**
 - **Non-colour signalling:** **Active** and **Deactivated** carry an icon **and** the word; roles are words, never a colour or a badge shape alone (NFR-008). The last-admin refusals carry an icon and state the count in text
 - **Announcements:** the summary line is a live region, so a role change announces the new admin count — the safeguard-relevant fact. ST-07 and ST-09 are assertive and lead with the account name and the word "only". ST-11's dialog is announced with its full warning before the password is read, so nobody hears a credential without hearing that it is shown once. **Copy** announces *"Copied"* rather than only changing an icon
-- **The credential moment (ST-11):** the password is rendered in a monospaced face with unambiguous glyph shapes — Marcus will read it aloud, and `1`/`l`/`I` and `0`/`O` confusion turns one reset into two. It is never placed in a URL, a toast, or anything that outlives the dialog
+- **The credential moment (ST-11):** the password is rendered in a monospaced face with unambiguous glyph shapes — Marcus will read it aloud, and `1`/`l`/`I` and `0`/`O` confusion turns one reset into two. It is never placed in a URL, a toast, or anything that outlives the dialog. **At 360px this sheet carries no drag handle** — added 2026-09-10 by the pre-build pass. Every other sheet on this screen gets one, because a handle is how a phone user knows a sheet can be pushed away; here it would be a promise the state has to break, and the cost of breaking it is a second reset. So the affordance is absent rather than present-and-inert, and the strip of dimmed screen above the sheet is likewise not a dismiss target
 - **At 360px:** rows become cards in field order; the ST-11 sheet gives the password its own full-width line above **Copy**, never truncated or requiring a horizontal scroll to read (NFR-004)
 
 ## Structural decisions
@@ -195,6 +243,13 @@ Fourteen. Two rule refusals (ST-07, ST-09), one credential display, two shapes o
 | Two deactivation confirmations, not one (ST-05, ST-06)                                                      | Cancelling nobody's day and cancelling three people's days are different consequences, so they get different copy and different frames. ST-06 lists the bookings rather than only counting them, because the administrator may recognise one they did not expect                    | One dialog whose text varies. One less frame, and the state that releases three desks stops being counted                                                                                                       |
 | Search, unlike SCR-006's desk list                                                                         | An office's people list grows and turns over, and Marcus arrives knowing the name. 40 desks are scannable; 200 employees over time are not                                                                                                                                        | No search, for symmetry with Desks. Consistent, and wrong about the data                                                                                                                                        |
 | No delete, only deactivate                                                                                 | BRD-001 offers no user delete (REQ-020 is deactivation) because bookings reference their owner and history must survive. The absence is deliberate and the copy explains what deactivation does instead                                                                            | A delete action. Convenient for a mistyped account, and it orphans bookings. **A wrong name or email is fixed on SCR-009 (REQ-019)**                                                                            |
+| The four row actions stay in one menu at every width, and the open menu is a numbered state (ST-15) | Four controls do not fit a table row at 1280, so unlike SCR-006 this screen earns its overflow — the test is the row, not a house style. Keeping it the single row control at 360 too means one act costs the same number of clicks everywhere, which is the fault SCR-006 corrected on 2026-09-10. Numbering the open menu is what `wireframe-rules.md` requires of a screen that keeps one, and it is the doorway to five other states | Expanding all four onto the card below 1024px. More discoverable on a phone, and it gives the phone a route the desktop does not have — and contradicts the reason the menu exists |
+| The role change is a menu item labelled with the role it would produce (2026-09-10) | Nothing in this file previously started a role change, which left ST-08 and ST-09 unreachable — the component table said four row actions and ST-01 said three. **Make an admin** / **Make an employee** names the outcome, so the confirmation that follows was already described by the control that opened it, and the announced name is the consequence rather than the field | An inline role select, rejected a second time for the reason the row above already gives: it turns a mis-click into a permission change. A generic **Change role** item, which announces the field and makes the confirmation the first place the direction appears |
+| The summary line never re-counts for a search; a separate match line does (ST-16)                     | *"2 admins"* is the quantity BR-001.11 defends and it is on the screen so the refusal is visible before it fires. A search that re-counted it would remove that number precisely when it matters most — ST-07 and ST-09 send Marcus to the search field to find someone to promote, so the count must survive the search they told him to run | Re-counting the summary to describe the matches. Reads more naturally as a description of what is on screen, and blinds the safeguard during the one task the safeguard hands out. Showing no match count at all, which leaves "did my search work?" unanswered when the results sit below the fold |
+| The row's `⋯` is a **ghost** control, not a bordered one | SCR-008 is the first and only consumer of `Icon button`, which SCR-006 built from `Type=Secondary` and then never used. A bordered 48px square is right beside an **Edit** button, which is the job it was built for; it is wrong repeated down forty rows, where it turns the right-hand edge of the table into a column of empty boxes. The icon is the affordance and the row is the context, so the control carries no fill or stroke at rest — matching `Button` `Type=Ghost` | Keeping the secondary border it was built with. Consistent with the component's origin, and it makes the quietest control on the screen the most drawn one |
+| At 360px a sheet footer **stacks** when its labels cannot fit equal halves, and only then | Measured 2026-09-10 during the build. The sheet footer gives each action 152px; the label plus its 32px padding needs **291px** for *Deactivate and cancel 3 bookings* (ST-06), **222px** for *Make someone an admin* (ST-07, ST-09) and **155px** for *Reset password* (ST-10) — so those four clip, and ST-05, ST-08, ST-12 and ST-13 (115–142px) do not. Stacking gives each action the full 312px. The confirming action sits **on top** and the dismissal beneath, which keeps a destructive action away from the thumb. Shortening the labels was not available: ST-06's count is in the label precisely so a habitual click cannot hide it | Stacking every sheet on the screen for uniformity — it would override four dialogs that fit, and diverge from the same component on SCR-002, SCR-003, SCR-005, SCR-006 and SCR-007 for no measured reason. Leaving them clipped, which is not a design |
+| The open menu gets a scrim at 360 and **no scrim** at 768 and 1280 (ST-15) | The popup rule asks for a scrim because a form card floating on nothing cannot be told from a page. An anchored popover is not that: it hangs off the `⋯` it came from, and that trigger is the thing saying which row it belongs to, so it needs no dimming and is not modal. At 360 the same menu **is** modal — a full-width sheet with no anchor — so it takes the scrim, and the person's name as a title | Scrimming the desktop popover too. Uniform with the dialogs, and it makes a four-item menu read as a modal interruption |
+| ST-11's sheet has no drag handle at 360px                                                              | A handle is how a phone user learns a sheet can be swiped away, and this is the one sheet that must not be. An inert handle teaches the gesture and then refuses it; an absent handle never makes the promise. The dimmed strip above it is not a dismiss target either, for the same reason | A handle for consistency with every other sheet on the screen. Uniform, and uniquely expensive here — the password cannot be shown twice (BR-001.12) |
 
 ## Conflicts and open questions
 
@@ -211,4 +266,69 @@ All rows resolved 2026-09-07. Rows 1 and 4 change BRD-001 and are listed in the 
 
 Tokens: `inception/design/tokens.json` (W3C DTCG — importable into Figma via Tokens Studio, Penpot, and others). Draw one frame per `ST-##` above; the numbering is the checklist. Name each frame `WF / SCR-008 · People / ST-## <state>` (`HF /` once styled) — the name is the only thing that ties a frame back to this spec. Grid, spacing, and the per-frame checklist: `inception/design/wireframe-rules.md`.
 
-Fourteen states at **360px, 768px and 1280px** (NFR-004). **ST-11 is the frame to get right**: a credential that has to be read aloud accurately, on a screen other people can see, that cannot be shown again. ST-07 and ST-09 are the same refusal component with different causes — draw both, since the copy is the whole difference. ST-12 – ST-14 are shared by four different row actions; draw them once with the deactivate copy and note the reuse.
+Sixteen states at **360px, 768px and 1280px** (NFR-004) — 48 frames. **ST-11 is the frame to get right**: a credential that has to be read aloud accurately, on a screen other people can see, that cannot be shown again. ST-07 and ST-09 are the same refusal component with different causes — draw both, since the copy is the whole difference. ST-12 – ST-14 are shared by four different row actions; draw them once with the deactivate copy and note the reuse.
+
+**The hi-fi frames for this screen exist.** All sixteen states are drawn at 360, 768 and
+1280 in *Employee Desk Booking — Design System & Mockups*
+(<https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn>) — **48 frames** — named
+`HF / SCR-008 · People / ST-## <state> · <width>`, on the pass-2b palette as Figma
+variables in both themes. Every colour and every text style is a token — audited:
+**0 raw paints out of 3,654, and 0 unstyled text nodes out of 1,294** across 5,731 nodes —
+so the dark theme is a mode switch rather than a redraw, which was rendered and checked.
+Neither the frames nor the Figma file is what gets approved; this spec’s PR is.
+
+**ST-11 was drawn as this handoff asked.** The credential sits in `mono/regular` at
+`--t-mono` (20px — already the largest size in the ramp, so no token was needed), and the
+sample is deliberately `q4Lm1I0oTz8v`: it carries `1`, `I`, `0` and `o`, the four glyphs
+this state exists to disambiguate. The dialog has **no ✕ in its header** and, at 360, **no
+drag handle** — the two affordances that would offer a dismissal the state cannot honour.
+
+Built for this screen, and reusable: **`Icon / search`** (the library had no magnifier;
+cloned from `Icon / block` so weight, caps and joins match the set), **`Search field`**
+(`Default` / `Focus` / `Filled` / `Disabled`, the `Filled` state carrying the clear `×`),
+**`People table header`**, **`Person row`** (table / card / card compact × active /
+deactivated, with a `Show you` boolean for the **(you)** marker), **`People skeleton row`**
+(its own component, on *this* table’s column grid — a skeleton only stops the table
+jumping if its columns match, and its three layouts are 64 / 80 / 152px, exactly the real
+row heights), **`Row menu`** (popover / sheet × deactivate / activate),
+**`Credential field`** (`Default` / `Copied`), a `Status chip` **`Deactivated`** variant, an
+`Empty state` **`No search match (people)`** context carrying two actions, and
+`Page header` **`Desktop title`** / **`Mobile title`** for ST-04.
+
+**Four faults found while building, none of which a token audit can see.**
+
+1. **`Icon button` shipped with a dead second child.** Its `Surface` held both
+   `Icon / more` and an invisible `Icon / calendar` with no property reference — nothing
+   could ever show it. Removed. It also arrived with a secondary border; see the
+   structural decision above.
+2. **The bottom-sheet dialog footer’s buttons were FILL, but their painted `Surface`
+   children were not** — the "resizing a button is always two moves" rule, applied to the
+   component and never checked. At 360 that made the secondary action render **85px inside
+   its 152px half**, so every two-action sheet in the file had visibly unequal buttons.
+   Fixed on the footer instances (which is where stretching belongs), and it corrects the
+   360 dialog frames on **SCR-002, SCR-003, SCR-005, SCR-006 and SCR-007** as a
+   side-effect — all verified unchanged otherwise.
+3. **Overriding `layoutMode` on a frame inside an instance does not persist.** Setting the
+   sheet footer to vertical looked like it worked and silently reverted, which is why
+   ST-06’s stacked footer needed a real `Footer=Stacked` variant rather than a per-frame
+   override. Adding that third axis to `Dialog` gave every existing variant
+   `Footer=Side by side`, so all twelve dialog instances on the earlier screens kept their
+   appearance — checked frame by frame.
+4. **A vertically-`FILL` child collapses when its parent turns vertical.** The footer
+   buttons were `FILL/FILL` for a horizontal row; stacked, vertical FILL made them share
+   the primary axis and each shrank to **16px** while its `Surface` stayed 40px and
+   overflowed. The repair is `HUG`, not a taller frame.
+
+**One thing checked and found correct rather than fixed.** The **`Deactivated` chip has no
+border in either theme**, and in dark its fill sits **1.05:1** against the card, so it
+reads as icon-plus-word rather than as a pill. That is deliberate: `tokens.css` sets
+`--c-state-inactive-border: transparent` with the reason attached — *"the block icon is
+the signal, as with taken and completed"* — so the quiet chips are a borderless family and
+NFR-008 is carried by the icon and the word, not the fill. The matching Figma variable is
+consequently valueless, which is how `transparent` is modelled there; the chip strokes
+bound to it are inert and were left alone.
+
+**One canvas fault fixed in passing.** `Desk table header` (from the SCR-006 build) sat
+inside `Admin skeleton row`’s bounding box on the *Admin table & filters* page — the
+overlap `wireframe-rules.md` warns eats component sets. Moved clear; no set on that page
+overlaps another now.
