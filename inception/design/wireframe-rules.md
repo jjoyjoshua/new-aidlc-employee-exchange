@@ -346,6 +346,26 @@ frame's bottom edge, full width, with its bottom corners squared off, so a strip
 of the dimmed screen stays visible above it. That strip is doing work: it is the
 only thing telling a phone user they are on top of something, not inside it.
 
+**A screen spec that contradicts this rule loses, and 2026-09-10 settled how that gets
+decided.** SCR-007 said its form was full-screen at 360; the approved wireframe drew a
+sheet, and this rule says sheet. The spec had a real reason behind it — the keyboard
+covering the confirming action — so that got **measured instead of argued**: in a 780px
+viewport a 290px keyboard leaves 490px, the tallest state of that sheet is 420px, and the
+confirming action's lower edge lands at 474px. It clears by 16px. The sheet stayed, the
+spec sentence was corrected, and the measurement went into the spec so nobody has to
+re-litigate it.
+
+So when a spec and this file disagree about an overlay: **draw the rule, measure the
+spec's worry, and write the number down.** The cost of the sheet is real and belongs in
+the spec too — with the keyboard raised the dimmed strip shrinks to about 70px, which is
+nearly gone but still doing its job.
+
+**Keyboard frames use one convention.** An absolutely positioned frame named
+`On-screen keyboard`, 360×290, filled `--c-fill-muted`, carrying its own name as a centred
+label in `--c-text-on-fill`, anchored to the bottom of a **360×780** viewport frame.
+Established on SCR-010 and reused by SCR-007. The page frame is clipped to 780 for these:
+a keyboard frame is about what stays visible, not about the whole scrolling page.
+
 **The card is a component, not a frame you rebuild.** `Desk form popup` and
 `User form popup` each hold every state as a variant, both built on the shared
 `Dialog header` (**76px** — 24px above and below the title) and `Dialog footer`.
