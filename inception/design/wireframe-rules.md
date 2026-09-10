@@ -150,6 +150,25 @@ clutter rather than as hierarchy, and 20px rows with no vertical padding left th
 labels touching each other. `Icon / settings` and `Icon / sign-out` stay in the
 library for the mobile account menu, which is not drawn yet.
 
+## A screen reached from the account menu still needs a shell state
+
+Found on SCR-004, 2026-09-10, and it is the kind of fault a token audit cannot see. Every
+`Sidebar` variant in the file lights a main nav item, and every `Bottom bar` variant lights a
+tab — so the first Settings frames showed **Bookings** active while the user was on Settings.
+Lighting nothing instead reads as a rendering fault rather than as a fact.
+
+**The fix is to light the thing that was actually used.** `Nav=Employee-Settings` lights the
+account menu's own **Settings** row with the three cues the nav items already use — a 3px
+absolutely-positioned indicator bar, a medium-weight label, and a `--c-fill-subtle` pill — so
+the rail says where you are without claiming you are somewhere else. `Tab=None` does the
+same by omission on the mobile bar, because at 360 the screen is reached from the avatar in
+the top bar and no tab is its parent.
+
+**At 768 there is nothing to light, and that is correct.** The collapsed rail carries no
+account menu — only the avatar — so the Settings state there is simply a rail with no active
+item. A state that has nowhere to show itself at one width is fine; a state that shows the
+wrong thing is not.
+
 ## The icon set is closed until a screen needs one
 
 Two were added 2026-09-10 for SCR-006, because the library genuinely had neither and
@@ -689,6 +708,26 @@ header is a control and needs its 44px.
 Row text is inset 16px by the row; the heading above the card is not. That difference is
 correct and deliberate — the heading labels the card, it is not inside it.
 
+## Absence is a state, and it needs drawing like one
+
+SCR-004 has three states where the switch is not usable, and they are deliberately not the
+same drawing:
+
+- **disabled** when a route to enabling it exists — the browser has blocked notifications, and
+  the user can change that in browser settings. A disabled control implies a route, so here the
+  implication is true
+- **absent** when no route exists — the browser has no push support. A disabled switch would
+  invite a hunt for a setting that is not there
+- **absent** again when the state could not be read at all, because either position would be a
+  guess drawn with a switch's authority behind it
+
+When a control is absent, **keep its label**. The row still reads **Browser alerts** with
+nothing beside it, and the note underneath says why. Removing the label as well removes the
+evidence that the feature exists, which turns an explained absence into an unexplained one.
+
+And a disabled control **stays in the tab order**, so its explanation can be reached. A
+disabled control removed from the tab order is a disabled control nobody can find out about.
+
 ## A booking is not a desk
 
 The state tokens divide into two families that are easy to conflate and must not be:
@@ -708,6 +747,26 @@ with Book hardcoded as the active tab, which made every SCR-002 mobile frame wro
 gained a `Tab` axis — the same shape as the Sidebar's `Nav`. A screen selects its own
 active item. Ten frames each overriding two icon colours and a bar's visibility is ten
 chances to miss one.
+
+## A reassurance is a note row, not an alert
+
+The palette has two alert tones, `Danger` and `Warning`, and **no `info` family** — SCR-007
+decided against adding one for a single note, and SCR-004 confirmed it. Both tones say
+"careful". Put either behind a sentence whose content is good news and the tone contradicts
+the words.
+
+So a fact that reassures gets `Note row` instead: **a swappable icon plus text on**
+**`--c-fill-subtle`**, inside the card it belongs to, with its text in `--c-text-on-fill`
+because it sits on a fill. It is quieter than an alert and still unmissable when it sits above
+the fold in every state, which is how SCR-004 satisfies PRIN-5 for the one promise on that
+screen that is unconditionally true.
+
+The swappable icon is what earns it a component rather than three paragraphs: the same row
+carries SCR-004's email promise (`Icon / mail`), its blocked-by-browser explanation
+(`Icon / block`) and its unsupported-browser explanation (`Icon / info-circle`).
+
+**Reserve the alerts for what actually went wrong.** On SCR-004 that is exactly two states —
+a save that failed and a read that failed — and both use `Danger`.
 
 ## Recurring page patterns
 
@@ -744,9 +803,9 @@ recolour a file whose whole point is that a grey frame cannot argue about brand,
 | **URL** | https://www.figma.com/design/xjFVgBbMrJUl7Ys3EX3Cbn |
 | **Synced by** | `/ux` through the Figma connector, from `tokens.css` and the specs in `screens/` |
 | **Direction** | One-way, as above. The spec PR is what gets approved; a frame never is |
-| **Contents** | 171 variables (57 primitives · 66 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 24 icons, 48 components — including the `Nav × Density` Sidebar set that covers the admin screens too, the `Field & Form` page the auth screens introduced, and the `Admin table & filters` page the three admin lists share — and **260** `HF /` frames: SCR-003 (12 states), SCR-002 (10), SCR-001 (5), SCR-010 (6), SCR-005 (11 + one 360-only), SCR-006 (10), SCR-007 (7), SCR-008 (16) and SCR-009 (8 with form frames), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 keyboard frame each for SCR-007, SCR-009 and SCR-010 |
+| **Contents** | 171 variables (57 primitives · 66 colour roles in Light and Dark · 48 scale), 13 text styles, 4 elevation styles, 25 icons, 51 components — including the `Nav × Density` Sidebar set that covers the admin screens and the account-menu Settings state too, the `Field & Form` page the auth screens introduced, and the `Admin table & filters` page the three admin lists share — and **284** `HF /` frames covering **all ten screens**: SCR-003 (12 states), SCR-002 (10), SCR-001 (5), SCR-010 (6), SCR-004 (8), SCR-005 (11 + one 360-only), SCR-006 (10), SCR-007 (7), SCR-008 (16) and SCR-009 (8 with form frames), each at 1440 (`· 1280`), 768 and 360, plus one extra 360 keyboard frame each for SCR-007, SCR-009 and SCR-010 |
 
-**One screen has no** `HF /` **frames yet — SCR-004 Settings.**
+**All ten screens now have** `HF /` **frames.** SCR-004 Settings was the last, on 2026-09-10.
 SCR-003 was drawn first because it is the only screen where clay "yours" and blocked red
 appear in the same desk list, which makes it the real test of the pass-2b palette. SCR-002
 followed it because the two share the cancel dialog, so drawing them together settles that
@@ -769,8 +828,13 @@ Those specs predate the pass-2b palette, the one-card rule, the disabled-control
 after** — and expect the build to find more anyway: SCR-009's pass measured the phone case and
 missed that six of eight states also overflow a 900px desktop, which only the frames showed.
 
-SCR-004 Settings is the last one. It is an employee screen, so it should be read against
-SCR-002 and SCR-010 rather than the admin set.
+SCR-004 came last and was read against SCR-002 and SCR-010 rather than the admin set, being
+an employee screen. Its pass found six things, of which two were the same shape as findings on
+other screens — a state the charter's floor requires and nobody had written (a failed *read*,
+where only a failed *save* had a state), and a component named in the spec that the palette
+cannot supply (an `info` alert tone). **Both are worth looking for first on any new spec:**
+the missing member of the load/empty/error floor, and a component or tone the spec assumes
+exists.
 
 
 The file carries the token set as Figma variables — a `Color` collection with
