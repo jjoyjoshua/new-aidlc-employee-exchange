@@ -189,6 +189,18 @@ measurably fails, so none of them is a preference:
   boundary of a text input, which WCAG 1.4.11 requires at 3:1. Affects every
   form frame: SCR-001, SCR-007, SCR-009, SCR-010.
 - **Focus is a ring plus a `--bw-2` offset gap in `--c-focus-ring-offset`.** The
+- **On an invalid control the ring takes the error colour, not the brand one.**
+  Found in review 2026-09-10: an invalid *and* focused field was drawing a forest
+  ring around a red border — two outlines in two hues, which reads as a rendering
+  fault rather than as two facts. Deleting the ring is not the fix; a keyboard user
+  who tabs into an invalid field would then have no focus indicator at all, and
+  both auth specs promise visible focus on every control (WCAG 2.4.7). So the ring
+  switches to `--c-danger-border` and **focus is carried by the geometry** — an
+  error at rest is one thin border, an error with focus is a heavier ring plus its
+  offset gap. One hue, two unmistakable states. No new token: a border role used as
+  a border, which is what naming rule 2 asks for. The ring against its white offset
+  gap is 7.18:1, comfortably past the 3:1 that WCAG 2.4.11 wants of a focus
+  indicator.
   ring is brand green and so is the primary button — drawn without the offset
   gap, the ring is 1.00:1 against that button and simply is not there.
 - **Text over a `--c-fill-*` is `--c-text-on-fill`.** `--c-text-muted` on the
