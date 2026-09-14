@@ -122,16 +122,23 @@ The reservation. The only table with meaningful concurrency.
 local. A `timestamptz` would store an instant and re-derive the calendar day from whatever
 timezone the reader happens to use, which is exactly the bug NFR-001 exists to prevent. A
 `date` has no timezone to get wrong. The office's own "today" is computed once, on the
-server, from the configured office timezone (§6, open question 1) and compared against this
+server, from the configured office timezone (`Asia/Kolkata`, NFR-001) and compared against this
 column as a date.
 
 **Why `cancellation_source` and `cancelled_by` are both here.** BR-001.20 requires the push
-notification to name the office admin when somebody other than the owner cancelled. The
-composer needs to know _that_ it was somebody else (`cancellation_source`), and the audit
-trail needs to know _who_ (`cancelled_by`). `cancelled_by` alone is not enough: comparing it
-to `user_id` cannot distinguish the deactivation cascade from an ordinary admin cancel —
-both are performed by an admin against somebody else's booking — and the two produce
-different wording in BR-001.20's own examples.
+notification **and, since 2026-09-14, the cancellation email** to name the office admin when
+somebody other than the owner cancelled. The composer needs to know _that_ it was somebody
+else (`cancellation_source`), and the audit trail needs to know _who_ (`cancelled_by`).
+`cancelled_by` alone is not enough: comparing it to `user_id` cannot distinguish the
+deactivation cascade from an ordinary admin cancel — both are performed by an admin against
+somebody else's booking — and the two produce different wording in BR-001.20's own examples.
+
+That distinction now carries more weight than when it was written. US-029 splits the email
+into three cases by exactly these three enum values: `owner` names no actor (AC-05), `admin`
+names the role (AC-04), and `deactivation_cascade` names the role **and** omits the
+invitation to rebook (AC-06). A composer keyed on `cancelled_by <> user_id` would collapse
+the last two and send a deactivated user an invitation to book a desk they can no longer
+reach. **Key the email composer on `cancellation_source`, never on a comparison of ids.**
 
 **Completed is derived, never stored.** BR-001.5's note leaves this to architecture; the
 decision is to derive it:
@@ -353,21 +360,38 @@ that the decision was made rather than overlooked.
 
 These are **not** for the Architect to answer. Each needs the BA, the PO or IT.
 
-| #   | Question                                                                                                                                                                                                                                                                                                                                      | Owner    | Blocks                              |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------- |
-| 1   | **What is the office's timezone?** NFR-001 makes every date boundary, and BR-001.14's 08:00 reminder, office-local — but no requirement names the zone. It is a configuration value with no value, and an unset one silently becomes UTC, which BR-001.14 explicitly calls a failure. Needs an IANA zone (e.g. `Asia/Kolkata`) before the first booking is stored. **See the note below — detecting it from the browser was proposed and does not serve REQ-025.** | PO / IT  | REQ-006, REQ-028, BR-001.14, US-030 |
-| 2   | **Does the cancellation email name the actor, as the push does?** This is BRD-001 open question #14, still open. It decides nothing in the schema — `cancellation_source` is already stored — but it decides the email template, and it reaches everyone rather than only push opt-ins.                                                          | PO / BA  | US-029, US-030                      |
-| 3   | **Is a deactivated user's live session ended immediately?** REQ-005 stops a deactivated user _signing in_. NFR-009 gives a 30-day session. This design rejects every request from an inactive account at the middleware, so the effect is immediate — but the requirements never state it, and the opposite reading is defensible from the text alone. Confirm so it can be tested. | PO / BA  | REQ-005, REQ-020, US-025            |
-| 4   | **How long is notification history kept?** NFR-005 requires failures be logged for operational follow-up; nothing says for how long. Not urgent — growth is small — but nobody has been asked.                                                                                                                                                 | IT / DevOps | NFR-005                          |
+| #   | Question                                                                                                                                                                                                                                                                                                                                      | Owner    | Blocks                              | Status |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------- | ------ |
+| 1   | **What is the office's timezone?** NFR-001 makes every date boundary, and BR-001.14's 08:00 reminder, office-local — but no requirement names the zone. It is a configuration value with no value, and an unset one silently becomes UTC, which BR-001.14 explicitly calls a failure. Needs an IANA zone (e.g. `Asia/Kolkata`) before the first booking is stored. **See the note below — detecting it from the browser was proposed and does not serve REQ-025.** | PO / IT  | REQ-006, REQ-028, BR-001.14, US-030 | **Resolved 2026-09-14** — **`Asia/Kolkata`**, now named in NFR-001 (BRD-001 open question 15, PR 23). Fixed UTC+05:30, no DST |
+| 2   | **Does the cancellation email name the actor, as the push does?** This was BRD-001 open question #14. It decides nothing in the schema — `cancellation_source` is already stored — but it decides the email template, and it reaches everyone rather than only push opt-ins.                                                          | PO / BA  | US-029, US-030                      | **Resolved 2026-09-14** — **yes**, BR-001.20 now covers both channels and names the role, never the individual (BRD-001 open question 14, PR 23). No schema change: `cancellation_source` already carries all three cases |
+| 3   | **Is a deactivated user's live session ended immediately?** REQ-005 stops a deactivated user _signing in_. NFR-009 gives a 30-day session. This design rejects every request from an inactive account at the middleware, so the effect is immediate — but the requirements never state it, and the opposite reading is defensible from the text alone. Confirm so it can be tested. | PO / BA  | REQ-005, REQ-020, US-025            | **Open** |
+| 4   | **How long is notification history kept?** NFR-005 requires failures be logged for operational follow-up; nothing says for how long. Not urgent — growth is small — but nobody has been asked.                                                                                                                                                 | IT / DevOps | NFR-005                          | **Open** |
 
-Question 1 is the one to answer first. The others can be resolved during delivery; that one
-is needed before any booking is written.
+Questions 1 and 2 were answered on 2026-09-14 and are recorded in BRD-001 (open questions 15
+and 14 respectively). Questions 3 and 4 remain open and can be resolved during delivery;
+neither blocks a booking being written.
+
+**What question 1's answer settles beyond the value.** `Asia/Kolkata` is a fixed UTC+05:30
+with no daylight saving, so 08:00 office local is permanently 02:30 UTC. The reminder job
+(`app-architecture.md` §4.3) therefore needs no zone-aware scheduler, which removes a
+constraint that would otherwise have narrowed the deferred hosting choice. The offset is a
+**half-hour** one: any code or configuration assuming whole-hour offsets will be thirty
+minutes wrong, which is avoided by using the IANA name throughout as §5.4 already requires.
+
+**What question 2's answer does not change.** The email now names the actor, and the
+deactivation cascade takes different copy from an ordinary admin cancel (US-029/AC-06). Both
+were already representable: `cancellation_source` is `('owner', 'admin', 'deactivation_cascade')`,
+and those three values map one-to-one onto US-029/AC-05, AC-04 and AC-06. The note below on
+why `cancelled_by` alone is insufficient is what makes this work — it was written for the
+push channel and now carries the email too. **No migration, no new column.**
 
 ### Note on question 1 — why the timezone cannot come from the browser
 
 Detecting the timezone from the user's device was proposed (Joy Joshua, 2026-09-14) and is
 recorded here because it is a reasonable instinct that does not survive contact with two
-approved requirements. It remains **open**, not decided.
+approved requirements. **Resolved 2026-09-14 in favour of a single configured value**
+(`Asia/Kolkata`); the reasoning is kept because it is the reason the setting is configured
+rather than detected, and anyone proposing detection again will arrive at this same question.
 
 - **REQ-025 has no user.** The day-before reminder runs on a schedule at 08:00 with nobody
   signed in and no browser open. There is no device to read a timezone from, so a
@@ -383,7 +407,7 @@ approved requirements. It remains **open**, not decided.
 - **NFR-002 is one office.** The timezone is a property of that office, not of whoever is
   looking at it.
 
-The shape that does work, and which this design assumes until told otherwise: the office
+The shape that does work, and which is now the decided one: the office
 timezone is a single configured value, and browser detection is used — if wanted — only as
 a convenience to *pre-fill* that setting during setup, for an admin to confirm. Displaying a
 booking's time in the viewer's own local time is a separate, harmless presentation choice
