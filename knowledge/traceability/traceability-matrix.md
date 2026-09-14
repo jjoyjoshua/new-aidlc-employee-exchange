@@ -27,7 +27,7 @@
 | REQ-021 | US-027 | 0/11 | planned |
 | REQ-022 | US-024 | 0/13 | planned |
 | REQ-023 | US-028 | 0/8 | planned |
-| REQ-024 | US-025, US-029 | 0/22 | planned |
+| REQ-024 | US-025, US-029 | 0/24 | planned |
 | REQ-025 | US-030 | 0/10 | planned |
 | REQ-026 | US-031 | 0/11 | planned |
 | REQ-027 | US-032 | 0/10 | planned |
