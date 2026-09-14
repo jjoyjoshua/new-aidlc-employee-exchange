@@ -5,7 +5,7 @@
 |                |                                                                    |
 | -------------- | ------------------------------------------------------------------ |
 | **Epic**       | EPIC-003                                                           |
-| **Traces to**  | REQ-020, REQ-030, REQ-005, REQ-024, BR-001.11, BR-001.18, V-11, V-17 |
+| **Traces to**  | REQ-020, REQ-030, REQ-005, REQ-024, BR-001.11, BR-001.18, BR-001.20, V-11, V-17 |
 | **Priority**   | Must                                                               |
 | **Estimate**   | 8 pts (AI draft — humans re-estimate)                              |
 | **Depends on** | US-020, US-024                                                     |
@@ -64,7 +64,7 @@ So that a leaver's reservations do not sit empty until somebody notices.
 
 - **Given** bookings cancelled by the cascade
 - **When** the deactivation completes
-- **Then** one cancellation email is sent to that person for each cancelled booking (REQ-024, REQ-030, BR-001.13)
+- **Then** one cancellation email is sent to that person for each cancelled booking (REQ-024, REQ-030, BR-001.13), each naming the office admin as the actor by role and **omitting any invitation to book another desk** — REQ-005 has already stopped them signing in (BR-001.20 variant, US-029/AC-04, US-029/AC-06)
 
 ### AC-09 An opted-in person's push alert names the office admin
 
