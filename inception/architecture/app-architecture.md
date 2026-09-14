@@ -201,6 +201,18 @@ Any scheduler can then call it at 08:00 office time: Supabase's own `pg_cron`, t
 scheduler, a GitHub Actions schedule, or an in-process timer if the server is always-on and
 single-instance. Changing that choice later changes configuration, not code.
 
+**Since 2026-09-14 that list is genuinely open.** The office is `Asia/Kolkata` (NFR-001), a
+fixed UTC+05:30 with no daylight saving, so 08:00 office local is permanently **02:30 UTC**
+and a plain daily `30 2 * * *` is correct and stays correct. A UTC-only scheduler — GitHub
+Actions cron among them — is therefore sufficient; had the office been in a DST zone, a
+fixed-offset schedule would have drifted an hour twice a year and the trigger would have had
+to be zone-aware. That constraint no longer narrows the hosting choice in §7.
+
+The job still computes tomorrow's date in the office timezone rather than trusting the
+schedule, so a daily run needs no cron day-of-week arithmetic: it returns immediately on the
+runs where tomorrow is a weekend. Keep it that way — the correctness lives in the job, and
+the schedule is only how often it is offered the chance to act.
+
 **Why not an in-process scheduler by default.** It is the simplest thing that works, and it
 breaks silently the first time the service runs two copies for availability — both fire, and
 only the idempotency index above stops two emails. Keeping the trigger outside means that
@@ -271,15 +283,24 @@ refuses to start if anything required is missing or malformed** (US-034/AC-04). 
 | Setting                     | Required | Notes                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------- |
 | Supabase URL, anon key, service-role key | yes | the service-role key is server-only, never bundled      |
-| `OFFICE_TIMEZONE`           | yes      | IANA name. **No default** — see db-design open question 1     |
+| `OFFICE_TIMEZONE`           | yes      | IANA name, **`Asia/Kolkata`** (NFR-001). **No default** — see below |
 | Mail service + credentials  | yes      | NFR-007, US-034/AC-02                                         |
 | Mail sender address         | yes      | NFR-007. `TBD (owner: IT)` until go-live, US-034/AC-03        |
 | Web Push VAPID key pair     | yes      | REQ-026                                                       |
 | Reminder-run shared secret  | yes      | §4.3                                                          |
 
-`OFFICE_TIMEZONE` deliberately has no default. A default of UTC would make BR-001.14's
-explicit failure case ("reminder sent at 08:00 UTC while the office is not on UTC") the
-out-of-the-box behaviour.
+`OFFICE_TIMEZONE` deliberately has no default **even though the value is now known**. A
+default of UTC would make BR-001.14's explicit failure case ("reminder sent at 08:00 UTC
+while the office is not on UTC") the out-of-the-box behaviour, and NFR-001 now says in the
+requirement itself that a missing value must refuse process start rather than fall back.
+Naming `Asia/Kolkata` as the value does not make it a literal in code: NFR-002 scopes this
+release to one office, but a hard-coded zone is the thing that makes a second office a
+rewrite instead of a deployment.
+
+The value must be the IANA name, not an offset. `Asia/Kolkata` is UTC+**05:30** — a
+half-hour offset that whole-hour assumptions get wrong — and an invalid name fails the
+startup check above, so a typo presents as a process that will not boot rather than as
+times that are quietly wrong.
 
 ### 5.5 Logging
 
@@ -322,14 +343,16 @@ Named so nobody has to wonder whether it was overlooked:
 
 ## 7. Open questions and handoffs
 
-Database-level questions live in [`db-design.md` §6](./db-design.md#6-open-questions) — the
-office timezone is the one to answer first. Beyond those:
+Database-level questions live in [`db-design.md` §6](./db-design.md#6-open-questions). The
+two that gated delivery — the office timezone and the cancellation-email wording — were
+answered on 2026-09-14 and are marked resolved there; questions 3 and 4 remain open and
+block nothing. Beyond those:
 
 | #   | Item                                                                                                                                                                                                             | Owner        |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | 1   | **`ai/standards/` describes the wrong stack.** Coding, API, security, testing and task-surface standards all specify NestJS / Angular / TypeORM / Nx. They need rewriting for React + Express + Supabase before the first story is implemented, or every review cites rules that do not apply. | DevOps / team |
 | 2   | **`tools/aidlc-check.mjs` looks for product code at `apps/api`, `apps/ui`, `libs/graph-engine`.** With this layout the test-target check skips itself with a warning, so nothing fails — but the check stops proving anything. Point it at the real paths once they exist. | DevOps       |
-| 3   | **Where does this run?** Deferred deliberately (§4.3), and nothing here depends on the answer. It must be settled before Gate 3, and it decides how the reminder is triggered. | PO / DevOps  |
+| 3   | **Where does this run?** Deferred deliberately (§4.3), and nothing here depends on the answer. It must be settled before Gate 3. It no longer constrains the reminder trigger: with `Asia/Kolkata` fixed at UTC+05:30 and no DST (NFR-001), a UTC-only scheduler is sufficient, so this can be decided on hosting merits alone. | PO / DevOps  |
 | 4   | **Which mail service?** NFR-007 already owns this as `TBD (owner: IT)`. Recorded here because §5.4 cannot be completed without it. | IT           |
 | 5   | **Supabase project tiers and settings.** Password policy (V-12) is a project setting and should be configured to match rather than only enforced in code. Confirm the plan supports what is needed. | DevOps       |
 
