@@ -20,15 +20,15 @@ Never commit directly to `main`. Branch protection enforces it.
 - bullet per meaningful change
 ```
 
-Types: `feat fix docs test refactor ci chore perf`. Scope = Nx project or domain (`routing`, `ui`, `graph-engine`, `product`, `stories`...). The reference links the commit into traceability: `[US-###]` for story work, `[#12]` for issue-driven fixes, `[BRD-###]` for Gate 1 artifacts.
+Types: `feat fix docs test refactor ci chore perf`. Scope = workspace or module (`api`, `ui`, `auth`, `bookings`, `desks`, `users`, `notifications`, `domain`, `product`, `stories`...). The reference links the commit into traceability: `[US-###]` for story work, `[#12]` for issue-driven fixes, `[BRD-###]` for Gate 1 artifacts.
 
 Example:
 
 ```
-feat(routing): implement Dijkstra shortest path [US-002]
+feat(bookings): book an available desk [US-007]
 
-- adjacency + feasibility pruning per ADR-001
-- tests for US-002/AC-01..AC-05 incl. disconnected-graph edge case
+- insert arbitrated by the partial unique index per app-architecture §4.1
+- tests for US-007/AC-01..AC-06 incl. two concurrent bookers racing for one desk
 ```
 
 ## PRs
