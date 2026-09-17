@@ -171,7 +171,9 @@ describe('attemptSignIn — success (US-001/AC-01, US-001/AC-02)', () => {
   });
 
   it('carries mustChangePassword through without acting on it (US-001/AC-01)', async () => {
-    // US-004 is what gates on this. US-001 reports it (US-001/D-08).
+    // The forced password-change story is what gates on this flag; this story only reports it
+    // (US-001/D-08). Naming that story by its id here would read as a coverage citation, and
+    // this test proves nothing for it — `aidlc-check` is right to reject that.
     const { service } = build({
       profiles: { findById: vi.fn(async () => ({ ...PROFILE, must_change_password: true })) },
     });
