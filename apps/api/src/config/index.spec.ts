@@ -1,10 +1,14 @@
 /**
  * Scaffold tests for the configuration validator.
  *
- * These deliberately carry **no `US-###/AC-##` citation**. US-034 has not been through Gate
- * D1, and a citation here would claim coverage for a story nobody has planned or approved.
- * When US-034 is implemented, its DEV adds the AC-named tests; these stay as the unit-level
- * ones underneath.
+ * These deliberately carry **no story or acceptance-criterion citation**. The story that owns
+ * configuration failure handling has not been through Gate D1, and a citation here would
+ * claim coverage for work nobody has planned or approved. Naming its ID in this file would do
+ * the same thing: `aidlc-check` reads an ID in a test file as a citation and requires a
+ * matching manifest entry, which is exactly the claim these tests must not make.
+ *
+ * When that story is implemented, its DEV adds the AC-named tests and the manifest entry;
+ * these stay as the unit-level tests underneath.
  */
 import { describe, expect, it } from 'vitest';
 import { ConfigurationError, loadConfig } from './index.js';
