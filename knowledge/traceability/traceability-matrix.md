@@ -6,7 +6,7 @@
 |---|---|---|---|
 | REQ-001 | US-001 | 8/8 | delivered |
 | REQ-002 | US-001 | 8/8 | delivered |
-| REQ-003 | US-002 | 0/4 | planned |
+| REQ-003 | US-002 | 4/4 | delivered |
 | REQ-004 | US-020, US-021, US-024 | 0/38 | planned |
 | REQ-005 | US-001, US-025, US-026 | 8/30 | in progress |
 | REQ-006 | US-005 | 0/8 | planned |

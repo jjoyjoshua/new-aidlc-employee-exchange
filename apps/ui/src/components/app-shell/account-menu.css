@@ -1,0 +1,65 @@
+/*
+ * The shell's account menu (US-002/AC-01). Structural, matching app-shell.css's own stub level
+ * of polish — the shell's hi-fi treatment belongs to the stories that give it real screens.
+ */
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu__trigger {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-secondary);
+  background: transparent;
+  border: var(--bw-1) solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--s-8) var(--s-12);
+  cursor: pointer;
+}
+
+.account-menu__trigger:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+.account-menu__list {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  margin-top: var(--s-8);
+  padding: var(--s-8);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+}
+
+.account-menu__item {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  color: var(--c-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: var(--s-8) var(--s-12);
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-menu__item:hover,
+.account-menu__item:focus-visible {
+  background: var(--c-fill-subtle);
+}
+
+.account-menu__item:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: -2px;
+}

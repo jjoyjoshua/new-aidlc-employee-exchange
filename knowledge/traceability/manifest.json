@@ -454,11 +454,21 @@
         "AC-03",
         "AC-04"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/auth/auth.adapter.spec.ts",
+        "apps/api/src/modules/auth/auth.service.spec.ts",
+        "apps/api/src/modules/auth/auth.routes.spec.ts",
+        "apps/ui/src/lib/api-client.spec.ts",
+        "apps/ui/src/lib/auth/auth-context.spec.tsx",
+        "apps/ui/src/lib/auth/require-session.spec.tsx",
+        "apps/ui/src/components/app-shell/AccountMenu.spec.tsx",
+        "apps/ui/src/components/app-shell/AppShell.spec.tsx"
+      ],
       "screens": [
         "SCR-002",
         "SCR-004",
-        "SCR-005"
+        "SCR-005",
+        "SCR-010"
       ]
     },
     "US-003": {
@@ -1466,6 +1476,7 @@
     "SCR-010": {
       "artifact": "inception/design/screens/SCR-010-set-your-password.md",
       "stories": [
+        "US-002",
         "US-004",
         "US-033"
       ],

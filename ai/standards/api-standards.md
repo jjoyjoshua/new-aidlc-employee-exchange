@@ -36,6 +36,7 @@ no constraint names.
 | ------ | ----------------------------------------------------------------------------- |
 | `200`  | Read succeeded                                                                |
 | `201`  | Created                                                                       |
+| `204`  | A state-changing request succeeded and has nothing to say                     |
 | `400`  | The request did not parse, or violates a field rule (V-12, V-16)              |
 | `401`  | No session, expired session, inactive account                                 |
 | `403`  | Signed in but not permitted — wrong role (V-07), or password change pending   |
@@ -50,6 +51,10 @@ US-001/AC-07 exists precisely to separate "the service is unavailable" from "we 
 and the screen says different things for each: a `503` offers **Try again** and keeps what the
 user typed, a `500` does not pretend a retry will help. An operator needs the same split to tell
 a Supabase outage from our own bug. Added 2026-09-17 with US-001 (ADR-003 follow-up 3).
+
+**`204` has no body, and none is added to describe it.** An empty response schema would be
+exported and maintained forever to describe nothing. Added 2026-09-18 with US-002's sign-out,
+the first endpoint whose entire value is that it never fails.
 
 **Keep the `409`/`422` split honest.** `409` means the world changed or a value collides, and
 retrying differently can succeed. `422` means the rule says no. Two people racing for desk

@@ -146,6 +146,74 @@ describe('apiClient — the service is unavailable (US-001/AC-07)', () => {
   });
 });
 
+/**
+ * US-002/FR-14 — `requestNoContent` shares transport, timeout, abort and error mapping with
+ * `request`; it differs only in succeeding on a genuinely empty response instead of parsing one
+ * against a schema. US-002 is the first story that sends a `204`.
+ */
+describe('apiClient.requestNoContent — a 204 succeeds (US-002/AC-02)', () => {
+  it('resolves ok on an empty 204 (US-002/AC-02)', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    const result = await client().requestNoContent('/api/auth/sign-out', { method: 'POST' });
+
+    expect(result).toEqual({ kind: 'ok', data: undefined });
+  });
+
+  it('attaches the bearer token, same as request() (US-002/AC-02)', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await client('a-token').requestNoContent('/api/auth/sign-out', { method: 'POST' });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer a-token');
+  });
+
+  it('maps a transport failure to unavailable, same as request() (US-002)', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const result = await client().requestNoContent('/api/auth/sign-out', { method: 'POST' });
+
+    expect(result).toEqual({ kind: 'unavailable' });
+  });
+
+  it('maps a 5xx to unavailable rather than success (US-002)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ statusCode: 500, code: 'internal_error', message: 'oops' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await client().requestNoContent('/api/auth/sign-out', { method: 'POST' });
+
+    expect(result).toEqual({ kind: 'unavailable' });
+  });
+
+  it('maps our error body on a 4xx to a typed rejection (US-002)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ statusCode: 401, code: 'no_session', message: 'no' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await client().requestNoContent('/api/auth/sign-out', { method: 'POST' });
+
+    expect(result).toEqual({ kind: 'error', status: 401, code: 'no_session', message: 'no' });
+  });
+
+  it('treats an unexpected non-empty 2xx body as unavailable, not as success (US-002)', async () => {
+    // A 204 arriving where a schema was expected is a contract violation on `request()`;
+    // a BODY arriving where 204-or-empty was expected is the same violation the other way.
+    fetchMock.mockResolvedValue(new Response('{"unexpected":true}', { status: 200 }));
+
+    const result = await client().requestNoContent('/api/auth/sign-out', { method: 'POST' });
+
+    expect(result).toEqual({ kind: 'unavailable' });
+  });
+});
+
 describe('apiClient — the request takes too long (US-001/AC-07, NFR-02)', () => {
   it('aborts after the timeout and reports unavailable (US-001/AC-07)', async () => {
     // No NFR names a client timeout, so AC-07's "times out" clause would be untestable without

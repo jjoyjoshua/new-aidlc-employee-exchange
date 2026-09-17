@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isTransportFailure, supabaseAuthAdapter } from './auth.adapter.js';
-import { setSupabaseAuthClientForTesting } from '../../infra/supabase/index.js';
+import { setSupabaseAuthClientForTesting, setSupabaseForTesting } from '../../infra/supabase/index.js';
 
 /**
  * US-001/AC-07 — "an unreachable service does not read as a rejection".
@@ -93,5 +93,35 @@ describe('a downstream that throws rather than returns (US-001/AC-07)', () => {
 
     expect(outcome).toEqual({ kind: 'unavailable' });
     setSupabaseAuthClientForTesting(undefined);
+  });
+});
+
+/**
+ * US-002/D-03 — `scope` is a required argument, never a default, because `'global'` (US-001's
+ * deactivated-account refusal) and `'local'` (US-002's sign-out) are both real, deliberate
+ * choices and hiding either behind a default is how the wrong one gets picked by omission.
+ */
+describe('revokeSession — scope is passed through, not assumed (US-002/D-03)', () => {
+  it('passes the caller-supplied scope to the Supabase admin call, not a hardcoded one', async () => {
+    const calls: Array<[string, string]> = [];
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async signOut(token: string, scope: string) {
+            calls.push([token, scope]);
+            return { error: null };
+          },
+        },
+      },
+    } as never);
+
+    await supabaseAuthAdapter.revokeSession('a-token', 'local');
+    await supabaseAuthAdapter.revokeSession('another-token', 'global');
+
+    expect(calls).toEqual([
+      ['a-token', 'local'],
+      ['another-token', 'global'],
+    ]);
+    setSupabaseForTesting(undefined);
   });
 });

@@ -11,6 +11,7 @@
  */
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../../lib/auth/auth-context.js';
+import { AccountMenu } from './AccountMenu.js';
 import './app-shell.css';
 
 const EMPLOYEE_NAV = [
@@ -36,6 +37,7 @@ export function AppShell() {
             {item.label}
           </NavLink>
         ))}
+        <AccountMenu />
       </nav>
 
       <main className="app-shell__main">
