@@ -81,8 +81,11 @@ eslint-disable comment.
   REQ-036's refresh-on-focus is a property of that layer, configured once — never a
   per-screen `useEffect`
 - The browser's Supabase client is constructed with the **anon key** and used for exactly
-  two things: signing in and refreshing the token. **It never reads a table.** All data comes
-  from `/api/*` with the access token as a bearer ([ADR-001](../../knowledge/decisions/ADR-001-server-mediated-supabase-access.md))
+  one thing: refreshing the token. **It never reads a table, and it never signs anyone in.**
+  All data comes from `/api/*` with the access token as a bearer
+  ([ADR-001](../../knowledge/decisions/ADR-001-server-mediated-supabase-access.md)), and
+  credentials go to `POST /api/auth/sign-in`
+  ([ADR-003](../../knowledge/decisions/ADR-003-express-mediated-sign-in.md))
 - [`inception/design/tokens.css`](../../inception/design/tokens.css) is the single source for
   design values. Components consume tokens, never literals. The file is a protected path
   ([`task-surfaces.md`](task-surfaces.md)) and `tokens.json` is generated from it

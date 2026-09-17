@@ -7,3 +7,75 @@
  * Components consume tokens. Never a literal.
  */
 @import '../../../../inception/design/tokens.css';
+
+/* ---------------------------------------------------------------------------
+ * Base layer.
+ *
+ * Tokens say what things look like; this says what the document is. Without it every
+ * component inherits the browser's defaults, and two of those defaults are actively wrong for
+ * this design — both found on a real screen, neither catchable by a component test, because
+ * jsdom has no layout engine and no browser chrome.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Every element sizes by its border box.
+ *
+ * Without this, `.field__control` computes to `100%` **plus** its `--s-16` padding on each side
+ * **plus** its 1px border — 34px wider than the card's content box, so the email and password
+ * fields hang over the card's right edge. The default `content-box` makes "width: 100%" mean
+ * "100% and then some" for any element with padding, which is every control in this system.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/*
+ * The browser's default `body { margin: 8px }` was drawing a frame of bare `html` background
+ * around the page — a white border around a dark screen, plus the scrollbar that 100vh + 8px
+ * inevitably produces.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Tells the browser which palette its own chrome should use — scrollbars, form control
+ * internals, the caret, autofill. `tokens.css` switches on `prefers-color-scheme: dark`, but
+ * that only restyles OUR elements; without this declaration the browser keeps painting light
+ * scrollbars and light autofill over a dark page.
+ */
+:root {
+  color-scheme: light dark;
+}
+
+/*
+ * Form controls do not inherit typography by default — they fall back to the platform UI font
+ * at 13px or so. Every field in this system sets its own type from tokens, but inheriting here
+ * means a control that forgets to is still recognisably part of the page rather than obviously
+ * unstyled.
+ */
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}

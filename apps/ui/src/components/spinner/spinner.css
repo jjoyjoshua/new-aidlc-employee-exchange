@@ -1,0 +1,39 @@
+/*
+ * Spinner — Figma `Icon / spinner` (node 13:4), as it appears inside the busy button
+ * (`Type=Primary, State=Busy`, node 15:30) on SCR-001 ST-03.
+ *
+ * Size is --icon-md (20px), matching the frame.
+ *
+ * **The colour is `currentColor`, and that is the rule, not a convenience.** SCR-001's handoff
+ * calls this out by name: the in-button spinner takes the BUTTON'S LABEL COLOUR, never a text
+ * colour. The SCR-002 build shipped the other way round and the only cue that a request was in
+ * flight measured 1.02:1 against the primary button — invisible. Inheriting means the spinner
+ * is correct on every surface it is ever placed on, including the dark action fill.
+ */
+
+.spinner {
+  display: block;
+  flex: none;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  color: inherit;
+  animation: spinner-rotate 800ms linear infinite;
+}
+
+/*
+ * A spinner is exactly the kind of continuous motion WCAG 2.3.3 asks to be able to turn off,
+ * and vestibular triggers are a real accessibility concern rather than a nicety. Without the
+ * animation it is still a visible, differently-shaped mark beside the label, so the busy state
+ * does not depend on movement to be perceivable.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -7,13 +7,15 @@
     "node": ">=20"
   },
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "libs/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:contracts": "npm run build -w libs/contracts",
+    "build": "npm run build:contracts && npm run build -w apps/api && npm run build -w apps/ui",
+    "test": "npm run build:contracts && npm test --workspaces --if-present",
+    "typecheck": "npm run build:contracts && npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "check": "node tools/aidlc-check.mjs"

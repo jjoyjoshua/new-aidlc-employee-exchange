@@ -43,6 +43,13 @@ no constraint names.
 | `409`  | Something else got there first, or the value is taken: V-04, V-05, V-08, V-10 |
 | `422`  | The request is well-formed but the rule refuses it: V-06, V-09, V-11          |
 | `500`  | Never intentional                                                             |
+| `503`  | A named downstream is unreachable — timed out, refused, or answered 5xx        |
+
+**`503` is not a softer `500`.** `500` is our defect; `503` is a dependency we do not control.
+US-001/AC-07 exists precisely to separate "the service is unavailable" from "we rejected you",
+and the screen says different things for each: a `503` offers **Try again** and keeps what the
+user typed, a `500` does not pretend a retry will help. An operator needs the same split to tell
+a Supabase outage from our own bug. Added 2026-09-17 with US-001 (ADR-003 follow-up 3).
 
 **Keep the `409`/`422` split honest.** `409` means the world changed or a value collides, and
 retrying differently can succeed. `422` means the rule says no. Two people racing for desk

@@ -18,3 +18,14 @@ export const systemClock: Clock = {
 
 /** A clock stopped at a chosen instant, for tests. */
 export const fixedClock = (instant: Date): Clock => ({ now: () => new Date(instant) });
+
+/**
+ * Wait. Lives here rather than inline so the one place that waits — US-001/AC-04's
+ * failure-delay floor — is injectable, and so a test can hand the route a small floor instead
+ * of actually sleeping half a second (`domain/sign-in-failure-delay.ts`).
+ *
+ * `domain/` must never call this: the rule computes *how long* to wait and takes the clock
+ * reading as an argument; the service is what waits.
+ */
+export const sleep = (ms: number): Promise<void> =>
+  ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));

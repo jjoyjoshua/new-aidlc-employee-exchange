@@ -1,0 +1,75 @@
+/*
+ * The application shell — the navigation every screen except SCR-001 and SCR-010 sits inside.
+ *
+ * Breakpoints come from `inception/design/ia.md` §Shell, NOT from the frame widths:
+ *   >= 1024px   persistent sidebar
+ *   768–1023px  icon-only collapsed sidebar
+ *   < 768px     bottom bar
+ *
+ * **This is a structural stub.** US-001 needs the shell only so AC-02's admin navigation can be
+ * present and AC-03 has somewhere to bounce to; the screens it frames are US-010's and US-013's.
+ * Its hi-fi treatment belongs with those stories and their SCR-002 / SCR-005 frames, which this
+ * story has not been given.
+ */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--c-surface);
+}
+
+.app-shell__main {
+  flex: 1;
+  padding: var(--s-24) var(--s-16);
+}
+
+.app-shell__nav {
+  display: flex;
+  gap: var(--s-8);
+  padding: var(--s-8) var(--s-16);
+  background: var(--c-surface-raised);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.app-shell__link {
+  padding: var(--s-8) var(--s-12);
+  border-radius: var(--r-md);
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-secondary);
+  text-decoration: none;
+}
+
+.app-shell__link[aria-current='page'] {
+  background: var(--c-fill-subtle);
+  color: var(--c-text-on-fill);
+}
+
+.app-shell__link:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+/* Bottom bar below 768; sidebar from 768 up. */
+@media (min-width: 768px) {
+  .app-shell {
+    flex-direction: row;
+  }
+
+  .app-shell__nav {
+    flex-direction: column;
+    border-top: 0;
+    border-right: var(--bw-1) solid var(--c-border);
+    padding: var(--s-16) var(--s-8);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-shell__nav {
+    min-width: 200px;
+    padding: var(--s-24) var(--s-16);
+  }
+}

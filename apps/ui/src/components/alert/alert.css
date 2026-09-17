@@ -1,0 +1,89 @@
+/*
+ * Alert — Figma `Alert` (node 32:123), measured on
+ * `HF / SCR-001 · Sign in / ST-05 Service unavailable · 1280` (139:295).
+ *
+ * The frame's values, all tokens:
+ *   container  flex row, align-items start, gap --s-12, padding --s-16, radius --r-md,
+ *              --bw-1 solid border, width 100%
+ *   icon       --icon-md, shrink 0
+ *   body       flex column, gap --s-12, flex 1
+ *   message    --t-body-sm / --lh-body-sm, --fw-regular
+ *   actions    flex wrap, gap --s-8, justify-end, width 100%
+ *
+ * Two tones only — Danger for a fault, Warning for a caution or a refusal the user can correct.
+ * **There is deliberately no Info tone**: the palette has no info family, and the notes that
+ * wanted one turned out to be cautions rather than neutral remarks. Adding one here would be a
+ * token decision taken by a component.
+ */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-12);
+  width: 100%;
+  padding: var(--s-16);
+  border: var(--bw-1) solid;
+  border-radius: var(--r-md);
+}
+
+.alert--danger {
+  background: var(--c-danger-fill);
+  border-color: var(--c-danger-border);
+  color: var(--c-danger-ink);
+}
+
+.alert--warning {
+  background: var(--c-warning-fill);
+  border-color: var(--c-warning-border);
+  color: var(--c-warning-ink);
+}
+
+/* Inherits the tone's ink, which is what makes one icon correct in both tones. */
+.alert__icon {
+  flex: none;
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.alert__body {
+  display: flex;
+  flex: 1 0 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--s-12);
+}
+
+/* The optional title leads with the fact. Off by default, so every existing single-message
+   alert is unchanged (SCR-007 ST-04 is what wanted it, PRIN-3). */
+.alert__title {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.alert__message {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-regular);
+}
+
+/*
+ * Actions sit INSIDE the alert, aligned to its right edge.
+ *
+ * On SCR-001 ST-05 that is **Try again**, and `Sign in` stays live below the alert. The
+ * redundancy is deliberate: after a failure the eye is on the alert, and on a phone the submit
+ * button may be below the fold. A recovery path is the wrong place to make someone hunt for a
+ * control they already know.
+ *
+ * `flex-wrap` because at 360 the alert is 280px wide inside the card and a long action label
+ * must drop rather than overflow.
+ */
+.alert__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-8);
+  width: 100%;
+}

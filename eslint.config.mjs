@@ -125,8 +125,73 @@ export default tseslint.config(
     },
   },
 
-  // The browser's one permitted Supabase client: anon key, sign-in and token refresh only.
-  // It never reads a table (ADR-001).
+  // ---- Boundary 4: the browser cannot reach the server package ----------------
+  // ADR-002: this is what keeps infra/supabase — and the service-role key it holds —
+  // unreachable from a browser bundle. It is the reason a shared package was chosen over
+  // TypeScript path mapping.
+  //
+  // NOTE: this block RESTATES the @supabase/supabase-js ban from the apps/** block above.
+  // Flat config REPLACES `no-restricted-imports` rather than merging it, so omitting the
+  // restatement would silently delete that ban for apps/ui — the exact hole ADR-001 exists
+  // to close, and the most important boundary in the project.
+  {
+    files: ['apps/ui/**/*.ts', 'apps/ui/**/*.tsx'],
+    ignores: ['apps/ui/src/lib/supabase-client.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@supabase/supabase-js',
+              message:
+                'Only apps/api/src/infra/supabase (server) and apps/ui/src/lib/supabase-client.ts ' +
+                '(browser, anon key, token refresh only) may construct a Supabase client.',
+            },
+          ],
+          patterns: [
+            {
+              // Three forms, because this rule matches the import STRING, not the resolved
+              // path. `**/apps/api/**` alone lets `../../api/src/http/app.js` straight through
+              // — verified by deliberate violation on 2026-09-17, which is why the relative
+              // form is listed separately (ADR-002 follow-up 2).
+              group: ['@desk-booking/api', '**/apps/api/**', '../**/api/src/**'],
+              message:
+                'apps/ui may not import from apps/api. That package holds infra/supabase and the ' +
+                'service-role key, which bypasses every RLS policy in the project. Shared wire ' +
+                'shapes go in @desk-booking/contracts (ADR-002).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // ---- Boundary 5: the contract depends on neither side -----------------------
+  {
+    files: ['libs/contracts/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // The relative form is listed for the same reason as Boundary 4: this rule
+              // matches the import string, not the resolved path.
+              group: ['@desk-booking/api', '@desk-booking/ui', '**/apps/**', '../**/apps/**'],
+              message:
+                'libs/contracts depends on zod and nothing else (ADR-002). It describes what ' +
+                'crosses the wire; the rules live in apps/api/src/domain.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // The browser's one permitted Supabase client: anon key and token refresh only.
+  // It never reads a table, and since ADR-003 it never signs in either (ADR-001, ADR-003).
+  // This must stay AFTER Boundary 4 or it exempts nothing.
   {
     files: ['apps/ui/src/lib/supabase-client.ts'],
     rules: { 'no-restricted-imports': 'off' },

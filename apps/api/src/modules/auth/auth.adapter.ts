@@ -1,0 +1,110 @@
+/**
+ * The real `AuthAdapter` — the only place Supabase Auth is spoken to.
+ *
+ * It exists so `auth.service.ts` can express the three US-001/AC-04 causes without a network,
+ * and so the one judgement this file makes — *is this a rejection or an outage?* — sits in one
+ * readable function instead of being scattered through the service.
+ */
+import { supabase, supabaseAuthClient } from '../../infra/supabase/index.js';
+import { logger } from '../../infra/logger/index.js';
+import type { AuthAdapter, AuthAttempt } from './auth.service.js';
+
+/**
+ * A rejection is a credential answer; an outage is not, and AC-07 exists to keep them apart.
+ *
+ * GoTrue answers a bad credential with `400`/`401`. Anything at or above `500`, and anything
+ * with no status at all — DNS failure, connection refused, a timeout — is the service being
+ * unreachable, and must reach the user as "we can't reach the booking service" rather than
+ * "your password is wrong".
+ *
+ * Erring towards `unavailable` on an unrecognised shape is deliberate: telling a user their
+ * credentials failed when the truth is our outage is the worse of the two mistakes.
+ */
+export function isTransportFailure(error: { status?: number | undefined } | null): boolean {
+  if (!error) return false;
+  const status = error.status;
+
+  // No status at all, or a status below 100, means **no HTTP response happened** — the request
+  // never reached a server that answered. supabase-js reports a refused connection, a DNS
+  // failure or a timeout as `AuthRetryableFetchError` with `status: 0`, which is not a status
+  // code at all; 100 is the lowest real one.
+  //
+  // Checking only for `undefined` here was a live defect: `0 >= 500` is false, so a total
+  // outage was classified as a CREDENTIAL REJECTION and every user was told their password was
+  // wrong. Found by pointing the server at a Supabase that was not running.
+  if (status === undefined || status < 100) return true;
+
+  return status >= 500;
+}
+
+export const supabaseAuthAdapter: AuthAdapter = {
+  async signInWithPassword(email, password): Promise<AuthAttempt> {
+    let result: Awaited<ReturnType<ReturnType<typeof supabaseAuthClient>['auth']['signInWithPassword']>>;
+
+    try {
+      // The SDK mostly RETURNS failures rather than throwing, which is why the `error` branch
+      // below exists. But it can also throw outright — client construction can fail, and a
+      // fetch implementation can raise rather than resolve. Found by running the server:
+      // a throw here escaped this adapter entirely and surfaced as a 500, which told the user
+      // "our bug" when the truth was "we cannot reach the service".
+      //
+      // A downstream that throws is the same outcome for the user as a downstream that answers
+      // 5xx: AC-07's "unreachable", never AC-04's "rejected". Erring this way is deliberate —
+      // calling an outage a rejection tells someone their password is wrong during an incident.
+      result = await supabaseAuthClient().auth.signInWithPassword({ email, password });
+    } catch (thrown) {
+      logger.error('supabase auth threw', {
+        message: thrown instanceof Error ? thrown.message : String(thrown),
+      });
+      return { kind: 'unavailable' };
+    }
+
+    const { data, error } = result;
+
+    if (error) {
+      if (isTransportFailure(error)) {
+        // No credential detail here — this line is about our dependency, not about the user.
+        logger.error('supabase auth unreachable', { status: error.status, message: error.message });
+        return { kind: 'unavailable' };
+      }
+      return { kind: 'rejected' };
+    }
+
+    // Defensive: a success with no session is not a shape GoTrue documents, and treating it as
+    // a sign-in would hand the caller an undefined token.
+    if (!data.session || !data.user) return { kind: 'unavailable' };
+
+    return {
+      kind: 'ok',
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        // `expires_at` is optional in the SDK's types; derive it rather than emit `undefined`,
+        // which `sessionSchema` would reject at the browser's parse.
+        expires_at:
+          data.session.expires_at ??
+          Math.floor(Date.now() / 1000) + (data.session.expires_in ?? 3600),
+      },
+      userId: data.user.id,
+    };
+  },
+
+  /**
+   * Revoke a session GoTrue has already minted for an account we then refused (US-001/FR-13).
+   *
+   * Scope is `global`, not `local`: the point is that a deactivated account holds no working
+   * credential anywhere, not that this one token is retired.
+   *
+   * This needs the **service-role** client — admin operations are not available on the anon
+   * key. Verified present in @supabase/supabase-js 2.109.0 as `auth.admin.signOut(jwt, scope)`.
+   */
+  async revokeSession(accessToken) {
+    const { error } = await supabase().auth.admin.signOut(accessToken, 'global');
+    if (error) {
+      // Logged, never thrown. The refusal is the security outcome and it is already decided;
+      // a failed revoke must not turn into a successful sign-in. But it must not be silent
+      // either — a deactivated account with a live refresh token is worth an alert.
+      logger.error('failed to revoke session for a refused sign-in', { message: error.message });
+    }
+  },
+};

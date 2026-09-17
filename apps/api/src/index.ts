@@ -7,7 +7,7 @@
  * production, quietly.
  */
 import { ConfigurationError, config } from './config/index.js';
-import { createApp } from './http/app.js';
+import { buildApp } from './composition.js';
 import { logger } from './infra/logger/index.js';
 
 function main(): void {
@@ -28,7 +28,7 @@ function main(): void {
     throw error;
   }
 
-  createApp().listen(port, () => {
+  buildApp().listen(port, () => {
     logger.info('server listening', { port, officeTimezone: timezone });
   });
 }

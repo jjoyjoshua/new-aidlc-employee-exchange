@@ -1,0 +1,21 @@
+/*
+ * Card — Figma `Sign in card` (node 133:124) and the generic container it generalises.
+ *
+ * The frame's values: --c-surface-raised, --bw-1 solid --c-border-strong, --r-lg,
+ * padding --s-24, gap --s-24, and shadow/1.
+ *
+ * Width is NOT set here. SCR-001 fixes the card at 400px at 768 and 1280 and lets it fill the
+ * 328px column at 360 — that is the screen's layout decision, not the card's, and baking it in
+ * would make this component unusable on the nine screens that size their own containers.
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-24);
+  padding: var(--s-24);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
