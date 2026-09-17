@@ -4,6 +4,7 @@ Every development spec package in this repo. **Check here before creating a new 
 
 | Story | Feature | Tier | Status | Folder |
 | ----- | ------- | ---- | ------ | ------ |
+| US-001 | Sign in with email and password | Complex | planned | [`US-001-sign-in/`](US-001-sign-in/) |
 
 ## How to update
 

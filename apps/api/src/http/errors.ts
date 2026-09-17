@@ -8,11 +8,17 @@
  * no constraint names.
  */
 
-export interface ErrorBody {
-  statusCode: number;
-  code: string;
-  message: string;
-}
+/**
+ * `ErrorBody` and the code strings come from `@desk-booking/contracts`, not from here.
+ *
+ * This file used to declare its own `ErrorBody` interface and its own
+ * `PASSWORD_CHANGE_REQUIRED` constant. Two declarations are not a contract — that is ADR-002's
+ * own sentence, and this file is the first place it applied.
+ */
+import { ERROR_CODES, type ErrorBody, type ErrorCode } from '@desk-booking/contracts';
+
+export { ERROR_CODES };
+export type { ErrorBody, ErrorCode };
 
 /**
  * A failure the server chose, with the status and code already decided.
@@ -63,6 +69,18 @@ export const unprocessable = (code: string, message: string) => new HttpError(42
  * The forced password change (REQ-029, BR-001.17).
  *
  * This particular code is part of the contract: the React app uses it to route to SCR-010
- * rather than render an error. Changing the string breaks that flow.
+ * rather than render an error. It now lives in `@desk-booking/contracts` so the middleware and
+ * SCR-010 agree on one constant rather than on two typed strings.
  */
-export const PASSWORD_CHANGE_REQUIRED = 'password_change_required';
+export const PASSWORD_CHANGE_REQUIRED = ERROR_CODES.password_change_required;
+
+/**
+ * A named downstream is unreachable — Supabase Auth timed out, refused the connection, or
+ * answered 5xx.
+ *
+ * Distinct from `internal_error` on purpose. US-001/AC-07 exists precisely to separate "the
+ * service is unavailable" from "we rejected you", and an operator needs to tell a Supabase
+ * outage from our own defect. `api-standards.md` gains the row.
+ */
+export const serviceUnavailable = (message: string) =>
+  new HttpError(503, ERROR_CODES.service_unavailable, message);

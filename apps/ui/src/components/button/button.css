@@ -1,0 +1,114 @@
+/*
+ * Button — built from Figma `Button` (node 15:125), primary default variant `15:2`.
+ *
+ * Every value is a token. A literal here is a review finding: `tokens.css` is the single
+ * source and the Figma variables carry the same names, which is what makes the two checkable
+ * against each other.
+ */
+
+.button {
+  /* The Figma component's surface is control/md. `size="lg"` overrides the vertical padding
+     to spacing/12, exactly as the component description prescribes for the bottom-anchored
+     confirm — it does not set a second height. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-8);
+  min-height: var(--control-md);
+  padding: var(--s-8) var(--s-16);
+  border: var(--bw-1) solid transparent;
+  border-radius: var(--r-md);
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  text-align: center;
+}
+
+.button--lg {
+  min-height: var(--control-lg);
+  padding-block: var(--s-12);
+}
+
+.button--block {
+  display: flex;
+  width: 100%;
+}
+
+/*
+ * Focus paints OUTSIDE the box: a ring in --c-focus-ring plus a --bw-2 gap in
+ * --c-focus-ring-offset.
+ *
+ * The ring and the primary button are the same green. Without the offset gap the ring is
+ * 1.00:1 against the button — no focus indicator at all on the most important control on the
+ * screen. `outline-offset` supplies the gap; the surface colour shows through it.
+ */
+.button:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+.button--primary {
+  background: var(--c-action);
+  color: var(--c-action-label);
+  border-color: var(--c-action);
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--c-action-hover);
+  border-color: var(--c-action-hover);
+}
+
+.button--primary:active:not(:disabled) {
+  background: var(--c-action-pressed);
+  border-color: var(--c-action-pressed);
+}
+
+/* Figma `Type=Secondary, State=Default` (node 15:35). The label is --c-text, NOT --c-action:
+   a secondary button is a control with a neutral label, and the green is reserved for the
+   primary action and for inline text actions like the password toggle. */
+.button--secondary {
+  background: var(--c-surface-raised);
+  color: var(--c-text);
+  border-color: var(--c-border-control);
+}
+
+/*
+ * Busy — Figma `Type=Primary, State=Busy` (node 15:30).
+ *
+ * The surface darkens to --c-action-pressed and a spinner joins the label at --s-8. The label
+ * STAYS. Geometry is unchanged, which is the whole point: SCR-001 ST-03 requires no layout
+ * shift, and a button that swaps its label for a spinner moves everything below it.
+ */
+.button--busy.button--primary {
+  background: var(--c-action-pressed);
+  border-color: var(--c-action-pressed);
+  cursor: progress;
+}
+
+.button--ghost {
+  background: transparent;
+  color: var(--c-action);
+  border-color: transparent;
+}
+
+/*
+ * Disabled, revised 2026-09-08 in the design file.
+ *
+ * The primary disabled state used --c-fill-disabled under --c-text-disabled and measured
+ * 1.30:1 — the worst contrast in the file, and unreadable. The cause: --c-text-disabled is
+ * documented at 2.69:1, which is its ratio on WHITE; on a mid-tone fill it collapses.
+ *
+ * It now retreats to a quiet fill with a --c-border-strong edge (2.07:1), so the button keeps
+ * its shape and its box without carrying weight. The label measures 2.37:1 — low, but exempt
+ * under WCAG 1.4.3 for inactive controls, and in family with the other disabled variants.
+ *
+ * Geometry is unchanged, which is what keeps "no layout shift" true when a button becomes busy.
+ */
+.button:disabled {
+  background: var(--c-fill-subtle);
+  color: var(--c-text-disabled);
+  border-color: var(--c-border-strong);
+  cursor: not-allowed;
+}

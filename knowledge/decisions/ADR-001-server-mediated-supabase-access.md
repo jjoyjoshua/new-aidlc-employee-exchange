@@ -43,8 +43,14 @@ session and sends its access token to Express as a bearer token; Express verifie
 the user's profile, applies the rules, and is the only party that talks to Postgres — using
 the service-role key, which never leaves the server.
 
-The browser's Supabase client is constructed with the anon key and used for exactly two
-things: signing in, and refreshing the access token. It never reads or writes a table.
+The browser's Supabase client is constructed with the anon key and used for exactly one
+thing: refreshing the access token. It never reads or writes a table.
+
+**Narrowed by [ADR-003](ADR-003-express-mediated-sign-in.md) on 2026-09-17.** This paragraph
+used to say "signing in, and refreshing the access token". Credential submission now goes to
+`POST /api/auth/sign-in` on Express, because Supabase Auth has no concept of
+`user_profiles.is_active` and would issue a real token to a deactivated account — which
+US-001/AC-04 forbids. Everything else in this ADR is unchanged.
 
 Row Level Security stays enabled on every table with deny-all policies. It is defence in
 depth against a leaked anon key, not the rule book.

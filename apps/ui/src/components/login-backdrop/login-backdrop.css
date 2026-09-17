@@ -1,0 +1,63 @@
+/*
+ * Login backdrop — Figma `Login backdrop` (node 149:405). SCR-001 and SCR-010 only.
+ *
+ * A GROUND, not an illustration with meaning: no state, no text set in it, purely decorative,
+ * so WCAG 1.4.3 and 1.4.11 do not apply to it and the opaque card may cover as much of it as
+ * it likes.
+ *
+ * Placement is measured from the three ST-01 frames:
+ *   1280 (139:3)   600 x 335, left 792 of 1440, top 557 of 900  -> bottom-RIGHT, beside the column
+ *   768  (139:36)  440 x 245, left 164 of 768,  top 723 of 1024 -> centred bottom band
+ *   360  (139:395) 281 x 157, left 40 of 360,   top 579 of 780  -> centred bottom band
+ *
+ * Always 50% opacity, stroke from --c-illustration-line. It MOVES between breakpoints rather
+ * than scaling with the viewport, which is why the sizes are fixed per breakpoint rather than
+ * expressed as a percentage.
+ *
+ * The 32px clearance rule from wireframe-rules.md is held by the page, not here: at 768 and 360
+ * the frame reserves the band as bottom padding so the column centres in what remains.
+ */
+
+.login-backdrop {
+  position: absolute;
+  z-index: 0;
+  opacity: 0.5;
+  color: var(--c-illustration-line);
+  pointer-events: none;
+}
+
+.login-backdrop svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 360 — centred bottom band */
+.login-backdrop {
+  width: 281px;
+  height: 157px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 44px; /* 780 - 579 - 157 */
+}
+
+/* 768 — a larger centred bottom band */
+@media (min-width: 768px) {
+  .login-backdrop {
+    width: 440px;
+    height: 245px;
+    bottom: 56px; /* 1024 - 723 - 245 */
+  }
+}
+
+/* 1280 — bottom-right, beside the content column rather than beneath it */
+@media (min-width: 1024px) {
+  .login-backdrop {
+    width: 600px;
+    height: 335px;
+    left: auto;
+    right: 48px; /* 1440 - 792 - 600 */
+    transform: none;
+    bottom: 8px; /* 900 - 557 - 335 */
+  }
+}

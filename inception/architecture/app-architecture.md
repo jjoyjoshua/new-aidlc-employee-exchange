@@ -64,8 +64,14 @@ asserted here.
 
 The browser holds a Supabase session and sends its access token to Express. Express verifies
 it, loads the profile, and does the work. The browser's Supabase client is used for exactly
-two things: signing in and refreshing the token. It is constructed with the anon key and
-never reads a table.
+one thing: refreshing the token. It is constructed with the anon key and never reads a table.
+
+**Credential submission goes to `POST /api/auth/sign-in`, not to Supabase Auth**
+([ADR-003](../../knowledge/decisions/ADR-003-express-mediated-sign-in.md), 2026-09-17). Express
+verifies the password server-side and applies `user_profiles.is_active` before any token
+reaches the browser. Supabase Auth has no concept of that column, so a browser signing in
+directly would receive a real session for a deactivated account and discover the refusal one
+round-trip later — which US-001/AC-04 forbids.
 
 ---
 

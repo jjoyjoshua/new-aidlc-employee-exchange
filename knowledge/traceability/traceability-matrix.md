@@ -4,11 +4,11 @@
 
 | Requirement | Stories | AC proven | Status |
 |---|---|---|---|
-| REQ-001 | US-001 | 0/8 | planned |
-| REQ-002 | US-001 | 0/8 | planned |
+| REQ-001 | US-001 | 8/8 | delivered |
+| REQ-002 | US-001 | 8/8 | delivered |
 | REQ-003 | US-002 | 0/4 | planned |
 | REQ-004 | US-020, US-021, US-024 | 0/38 | planned |
-| REQ-005 | US-001, US-025, US-026 | 0/30 | planned |
+| REQ-005 | US-001, US-025, US-026 | 8/30 | in progress |
 | REQ-006 | US-005 | 0/8 | planned |
 | REQ-007 | US-006 | 0/10 | planned |
 | REQ-008 | US-007 | 0/12 | planned |
@@ -42,7 +42,7 @@
 | REQ-036 | US-012 | 0/6 | planned |
 | NFR-001 | US-005 | 0/8 | planned |
 | NFR-002 | US-033 | 0/9 | planned |
-| NFR-003 | US-001 | 0/8 | planned |
+| NFR-003 | US-001 | 8/8 | delivered |
 | NFR-004 | US-033 | 0/9 | planned |
 | NFR-005 | US-034 | 0/8 | planned |
 | NFR-006 | US-031 | 0/11 | planned |

@@ -1,0 +1,101 @@
+/*
+ * SCR-001 page layout, measured from the three ST-01 frames.
+ *
+ *   360  (139:395)  padding 32px 16px 201px · column 328
+ *   768  (139:36)   padding 48px 16px       · column 400
+ *   1280 (139:3)    padding 48px 16px       · column 400
+ *
+ * The 201px bottom padding at 360 is not arbitrary: it is the band the backdrop occupies,
+ * reserved as padding so the column centres in what REMAINS. That is how the ≥32px clearance
+ * between content and artwork is held without the two ever being measured against each other.
+ *
+ * This screen and SCR-010 are the only two with no app-shell, so the grid's inner columns
+ * measure a content region these screens do not have. The card is bounded by its reading line
+ * instead.
+ */
+
+.sign-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--s-32) var(--s-16) 201px;
+  background: var(--c-surface);
+  overflow: hidden;
+}
+
+/* The backdrop leaves the flow and becomes a bottom-right ground beside the column. */
+@media (min-width: 768px) {
+  .sign-in {
+    padding-block: var(--s-48);
+  }
+}
+
+.sign-in__column {
+  position: relative;
+  z-index: 1; /* above the backdrop, which is decorative and must never intercept a click */
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-32);
+  width: 100%;
+  max-width: 328px;
+}
+
+/*
+ * Fixed at 400 from 768 up, and it does NOT grow with the breakpoint.
+ *
+ * The grid describes the shell and this screen has none; a 1104px sign-in form is a reading
+ * line four times longer than anything written on it. 400px also makes SCR-001 and SCR-010 the
+ * same card at three sizes, which is what makes the forced password step read as one
+ * continuous arrival rather than a new place.
+ */
+@media (min-width: 768px) {
+  .sign-in__column {
+    max-width: 400px;
+  }
+}
+
+.sign-in__lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  text-align: center;
+}
+
+.sign-in__product {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-heading-lg);
+  line-height: var(--lh-heading-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+.sign-in__strapline {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-secondary);
+}
+
+/* The card's own gap is --s-24; the two fields sit closer, at --s-16 (frame 133:48). */
+.sign-in__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-16);
+  width: 100%;
+}
+
+.sign-in__help {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-secondary);
+}

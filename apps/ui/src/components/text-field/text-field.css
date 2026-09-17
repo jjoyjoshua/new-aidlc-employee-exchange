@@ -1,0 +1,129 @@
+/*
+ * Text field — Figma `Text field` (node 129:30), measured against
+ * `HF / SCR-001 · Sign in / ST-01 Default` at 1280 (139:3), 768 (139:36) and 360 (139:395).
+ *
+ * The frame's values, all of them tokens:
+ *   wrapper   flex column, gap --s-8, width 100%
+ *   label     --t-body-sm / --lh-body-sm, --fw-medium, --c-text
+ *   field     --c-surface-raised, --bw-1 solid --c-border-control, height 48px,
+ *             padding-inline --s-16, radius --r-md, gap --s-8
+ *   value     --t-body / --lh-body, --fw-regular, --c-text
+ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+  width: 100%;
+}
+
+.field__label {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+/*
+ * The edge is --c-border-control, never --c-border.
+ *
+ * --c-border is a DECORATIVE divider and sits below 3:1 by design. Any boundary that
+ * identifies a control — a text field, a select, a checkbox — needs --c-border-control, which
+ * clears WCAG 1.4.11 on every surface a form actually sits on. A field outlined in --c-border
+ * is a field whose edge some people cannot see.
+ */
+.field__control {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  width: 100%;
+  min-height: var(--control-lg);
+  padding-inline: var(--s-16);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-control);
+  border-radius: var(--r-md);
+}
+
+.field__input {
+  flex: 1 0 0;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  color: var(--c-text);
+  padding-block: var(--s-8);
+}
+
+.field__input::placeholder {
+  color: var(--c-text-muted);
+}
+
+/* Focus is two parts: the ring plus a --bw-2 gap in the surface colour. Painted on the
+   control wrapper rather than the bare input, so the whole field reads as focused. */
+.field__control:focus-within {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+/*
+ * An invalid field's ring takes the ERROR colour, not the brand green (decided 2026-09-10 in
+ * review). A red border inside a green ring is two outlines in two hues and reads as a
+ * rendering fault.
+ *
+ * Focus is still unmistakable because the geometry changes: an error at rest is one thin
+ * border, an error with focus is a heavier ring plus its --bw-2 offset gap. Removing the ring
+ * instead was rejected — a keyboard user tabbing into an invalid field would have no focus
+ * indicator at all.
+ */
+.field--invalid .field__control {
+  border-color: var(--c-danger-border);
+}
+
+.field--invalid .field__control:focus-within {
+  outline-color: var(--c-danger-border);
+}
+
+/*
+ * Read-only: the quiet fill plus a --c-border-strong edge, used while a request is in flight
+ * (SCR-001 ST-03, frame 139:157).
+ *
+ * The text colour changes too, and this is not cosmetic. `--c-fill-subtle` is a FILL, not a
+ * surface, and tokens.css naming rule 1 is explicit: text over a fill uses --c-text-on-fill.
+ * Leaving --c-text here would have been the kind of miss that only shows up in a contrast
+ * audit — the frame sets it, so it is set.
+ */
+.field--readonly .field__control {
+  background: var(--c-fill-subtle);
+  border-color: var(--c-border-strong);
+  color: var(--c-text-on-fill);
+}
+
+.field--readonly .field__input {
+  color: var(--c-text-on-fill);
+}
+
+/*
+ * The message carries an icon AND text. Colour is never the only signal (NFR-008): a user who
+ * sees no colour difference still gets the icon and the words.
+ */
+.field__message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  color: var(--c-danger-ink);
+}
+
+.field__message-icon {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: var(--s-2);
+}

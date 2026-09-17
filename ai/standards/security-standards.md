@@ -30,6 +30,31 @@ never talks to Supabase for data, so **every** rule in this system is enforced s
 
 ## Authentication and authorization
 
+### Sign-in is the one unauthenticated route, and what protects it
+
+Credentials go to `POST /api/auth/sign-in` on Express, never from the browser to Supabase Auth
+([ADR-003](../../knowledge/decisions/ADR-003-express-mediated-sign-in.md)). Two properties are
+load-bearing and must survive every future change to that endpoint:
+
+- **Convergence.** An unknown email, a wrong password and `is_active = false` return one
+  byte-identical body. There is no early `return res.status(401)` anywhere in the flow; every
+  failure path produces the same value before a response is shaped. Three causes naturally
+  produce three messages, and that is how the guarantee breaks by accident.
+- **A minimum duration floor** on the rejected path (`domain/sign-in-failure-delay.ts`). The
+  deactivated case does strictly more work than either rejection — Supabase *succeeds*, then we
+  read the profile and revoke the session — so without a floor it is measurably slower and the
+  identical body is undone by the clock.
+
+**The floor is not a rate limiter**, and it will be claimed as one in review. It delays each
+response and bounds nothing about concurrency; a hundred parallel attempts still run in
+parallel. BRD-001 specifies no rate limit or lockout, and that gap is recorded rather than
+closed. Sign-in is the only unauthenticated write endpoint in the system.
+
+A session Supabase has already minted for an account we then refuse is **revoked server-side**
+before the refusal returns. Leaving it alive hands a deactivated user a working refresh token.
+
+### Every other route
+
 Supabase Auth issues tokens; **Express decides what they permit.** One middleware on every
 route except sign-in (architecture §5.1):
 
