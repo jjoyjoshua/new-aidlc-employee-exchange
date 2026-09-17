@@ -22,6 +22,9 @@ Any change under these is Complex regardless of diff size:
   silent bad default, which is exactly what `OFFICE_TIMEZONE` must never have (US-034/AC-04)
 - `apps/api/src/http/middleware/**` — the auth chain. Session verification, the inactive-account
   `401`, the 30-day rule, the `must_change_password` `403`, and `requireAdmin` all live here
+- `libs/contracts/**` — the wire contract itself: request/response schemas, the error body and
+  its stable `code` strings. Changing one changes both sides at once, which is the definition
+  of Complex ([ADR-002](../../knowledge/decisions/ADR-002-shared-api-contract-package.md))
 - `supabase/migrations/**` — schema history
 - `eslint.config.mjs` — carries the architecture's import boundaries as `no-restricted-imports`
   rules; weakening one moves a guarantee from tooling back to good intentions
