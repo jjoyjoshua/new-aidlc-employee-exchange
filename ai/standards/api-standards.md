@@ -83,9 +83,24 @@ scheduler retries.
 Unbounded collections take `?page&limit` with a documented maximum. "All bookings" (REQ-012)
 is the one that will grow.
 
-## Open: how the two sides share request/response types
+## How the two sides share request/response types
 
-The server validates with Zod. Whether the React app imports those schemas from a shared
-workspace package, or declares its own types, is **not yet decided** — it changes the shape of
-the system, so it belongs to the Architect as an ADR, not to a story. Settle it before the
-first endpoint ships, and record the answer here.
+**One shared workspace package, `libs/contracts`, and the browser validates responses at
+runtime** ([ADR-002](../../knowledge/decisions/ADR-002-shared-api-contract-package.md),
+2026-09-17).
+
+- Request and response schemas are defined **once**, in Zod, in that package. Types are
+  inferred from them with `z.infer` — never declared alongside them, because two declarations
+  are not a contract
+- The server validates requests with those schemas at the route edge, and types its response
+  builders from them, so a response that no longer matches fails the build
+- The browser parses every response through the schema before the data reaches a component. A
+  mismatch throws at the network boundary naming the field, instead of rendering `undefined`
+- The error body and the stable `code` strings live there too. `password_change_required` is a
+  contract between a middleware and SCR-010; a shared constant makes a typo a compile error
+- The package depends on `zod` and nothing else, and imports nothing from `apps/**`
+
+**What does not go in it: the rules.** "A desk number is a non-empty string of at most N
+characters" is a contract. "This desk number is already taken" is BR-001.4 and BR-001.8, lives
+in `domain/`, and is answered with a `409`. The browser never has the data to evaluate a
+business rule correctly, and duplicating one is how two answers to a single question appear.
