@@ -1,0 +1,43 @@
+# Product CI: lint, typecheck, test, build.
+#
+# Separate from aidlc-check.yml on purpose — that one validates the framework's gates, this
+# one validates the code. Both should be required statuses once branch protection is
+# available on this repository (see AI-DLC.md, "Current limitation").
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        # Includes the architecture's import boundaries (eslint.config.mjs): the service-role
+        # key confined to one module, domain/ kept pure, modules kept out of each other.
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit
+        # High/critical findings are a blocker unless a human accepts the risk and logs it
+        # (security-standards.md).
+        run: npm audit --audit-level=high

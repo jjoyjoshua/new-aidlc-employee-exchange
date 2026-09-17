@@ -1,0 +1,28 @@
+{
+  "name": "employee-desk-booking",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Employee Desk Booking (BRD-001) — React + Express + Supabase",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "check": "node tools/aidlc-check.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.11.0",
+    "vitest": "^4.1.11"
+  }
+}

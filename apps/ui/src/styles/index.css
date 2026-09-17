@@ -1,0 +1,9 @@
+/*
+ * The design system's single source is `inception/design/tokens.css`, imported here where it
+ * lives rather than copied. A copy would be a second source, and a second source drifts.
+ * It is a protected path: changing it is Complex (`ai/standards/task-surfaces.md`), and
+ * `inception/design/tokens.json` is generated from it, never hand-edited.
+ *
+ * Components consume tokens. Never a literal.
+ */
+@import '../../../../inception/design/tokens.css';
