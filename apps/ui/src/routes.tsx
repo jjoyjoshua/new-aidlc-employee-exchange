@@ -15,6 +15,7 @@ import { MyBookings } from './screens/my-bookings/MyBookings.js';
 import { AllBookings } from './screens/all-bookings/AllBookings.js';
 import { AppShell } from './components/app-shell/AppShell.js';
 import { RequireRole } from './lib/auth/require-role.js';
+import { RequireSession } from './lib/auth/require-session.js';
 
 export function AppRoutes() {
   return (
@@ -23,7 +24,15 @@ export function AppRoutes() {
           session returns. */}
       <Route path="/sign-in" element={<SignIn />} />
 
-      <Route element={<AppShell />}>
+      {/* US-002/AC-03 — every screen the shell contains inherits the session guard before it
+          is written; a per-route guard is the one that gets forgotten. */}
+      <Route
+        element={
+          <RequireSession>
+            <AppShell />
+          </RequireSession>
+        }
+      >
         <Route path="/bookings" element={<MyBookings />} />
         <Route
           path="/admin/bookings"

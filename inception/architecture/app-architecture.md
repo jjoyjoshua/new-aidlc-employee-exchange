@@ -231,7 +231,12 @@ decision is visible rather than assumed.
 ### 5.1 Authentication and the session
 
 Supabase Auth issues the tokens; Express decides what they permit. One middleware runs on
-every route except sign-in:
+every route except sign-in **and sign-out** (US-002). Sign-out is exempt from the whole chain,
+not merely from the password-change gate step 5 would otherwise need to allowlist it against:
+the chain decides whether a session may *act*, and sign-out destroys one rather than acting on
+it, so every one of its steps is either already true for that request or actively harmful (a
+deactivated account's live token must still be revocable, which step 2 would prevent). See
+`inception/specs/US-002-sign-out/design-note.md` §2.2 for the full argument.
 
 1. Verify the access token against Supabase.
 2. Load `user_profiles`. **No profile, or `is_active = false` → `401`.** This is what makes

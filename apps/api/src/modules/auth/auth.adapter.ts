@@ -7,7 +7,7 @@
  */
 import { supabase, supabaseAuthClient } from '../../infra/supabase/index.js';
 import { logger } from '../../infra/logger/index.js';
-import type { AuthAdapter, AuthAttempt } from './auth.service.js';
+import type { AuthAdapter, AuthAttempt, RevokeScope } from './auth.service.js';
 
 /**
  * A rejection is a credential answer; an outage is not, and AC-07 exists to keep them apart.
@@ -90,16 +90,15 @@ export const supabaseAuthAdapter: AuthAdapter = {
   },
 
   /**
-   * Revoke a session GoTrue has already minted for an account we then refused (US-001/FR-13).
-   *
-   * Scope is `global`, not `local`: the point is that a deactivated account holds no working
-   * credential anywhere, not that this one token is retired.
+   * Revoke a session GoTrue has already minted — for an account US-001 then refused, or for a
+   * user ending their own session (US-002). `scope` is the caller's to decide; see the
+   * `AuthAdapter` interface for why it is required rather than defaulted.
    *
    * This needs the **service-role** client — admin operations are not available on the anon
    * key. Verified present in @supabase/supabase-js 2.109.0 as `auth.admin.signOut(jwt, scope)`.
    */
-  async revokeSession(accessToken) {
-    const { error } = await supabase().auth.admin.signOut(accessToken, 'global');
+  async revokeSession(accessToken, scope: RevokeScope) {
+    const { error } = await supabase().auth.admin.signOut(accessToken, scope);
     if (error) {
       // Logged, never thrown. The refusal is the security outcome and it is already decided;
       // a failed revoke must not turn into a successful sign-in. But it must not be silent

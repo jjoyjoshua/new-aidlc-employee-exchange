@@ -87,6 +87,33 @@ export function createAuthRouter({ service, nowMs, requireSession }: AuthRouterD
   });
 
   /**
+   * `POST /sign-out` (US-002) — mounted here, unauthenticated, deliberately.
+   *
+   * This reads the bearer token itself and runs **no** `requireSession`. Every step of that
+   * chain either refuses nothing worth refusing for this request or — step 3, a deactivated
+   * account — would refuse the one request that needs to reach the adapter. `requireSession`
+   * decides whether a session may *act*; this route destroys one, which is a different job
+   * (design note §2.2). This is also how AC-04 holds structurally: a future `must_change_password`
+   * gate is added to a chain this route never runs.
+   *
+   * Answers `204` for every input, including a missing, malformed or already-dead token
+   * (US-002/AC-02, US-002/D-02). The caller asked for a session to end; a session that already
+   * authorises nothing has already granted the request.
+   */
+  router.post('/sign-out', async (req, res, next) => {
+    try {
+      const [scheme, token] = (req.headers.authorization ?? '').split(' ');
+      const accessToken = scheme?.toLowerCase() === 'bearer' && token ? token : undefined;
+
+      await service.signOut(accessToken);
+
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * `GET /session` — required by US-001, not optional.
    *
    * AC-03 is a **direct address** request: the user types `/admin/bookings`, the app boots cold

@@ -78,9 +78,12 @@ export function requireSession({ verifier, service }: RequireSessionDeps): Reque
         //     inventing that config here would be building a story nobody has planned.
 
         // 5 — [US-004] must_change_password = true -> 403 password_change_required on every
-        //     route except the password-change route and sign-out. The code string is already
-        //     exported from @desk-booking/contracts so that when US-004 arrives the middleware
-        //     and SCR-010 agree on one constant rather than two typed strings.
+        //     route this chain guards. Sign-out (US-002) needs no allowlist entry here: it is
+        //     mounted outside this chain entirely and never reaches step 5 in the first place
+        //     (app-architecture.md §5.1; inception/specs/US-002-sign-out/design-note.md §2.2).
+        //     The code string is already exported from @desk-booking/contracts so that when
+        //     US-004 arrives the middleware and SCR-010 agree on one constant rather than two
+        //     typed strings.
         //
         //     Consequence while this seam is empty: must_change_password defaults to true, so
         //     between US-001 and US-004 an administrator-set credential is unrestricted. That

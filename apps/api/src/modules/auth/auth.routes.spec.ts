@@ -49,14 +49,20 @@ function appWith(options: {
   tokens?: Record<string, string>;
 }) {
   const rows = options.rows ?? [EMPLOYEE, ADMIN, DEACTIVATED];
-  const revoked: string[] = [];
+  // Mutable, and read by BOTH the verifier and the stub's revoke — so a sign-out that revokes a
+  // token actually makes the NEXT request against it fail, rather than the test asserting
+  // against a side-channel array (design note §10; `ai/standards/testing-standards.md` bans
+  // asserting the mock).
+  const tokens: Record<string, string> = { ...options.tokens };
+  const revoked: Array<{ token: string; scope: string }> = [];
 
   const auth: AuthAdapter = {
     async signInWithPassword(email) {
       return options.byEmail?.[email] ?? { kind: 'rejected' };
     },
-    async revokeSession(token) {
-      revoked.push(token);
+    async revokeSession(token, scope) {
+      revoked.push({ token, scope });
+      delete tokens[token];
     },
   };
 
@@ -71,11 +77,11 @@ function appWith(options: {
 
   const verifier: SessionVerifier = {
     async verify(token) {
-      return options.tokens?.[token];
+      return tokens[token];
     },
   };
 
-  return { app: buildApp({ auth, profiles, verifier, floorMs: FLOOR_MS }), revoked };
+  return { app: buildApp({ auth, profiles, verifier, floorMs: FLOOR_MS }), revoked, tokens };
 }
 
 const post = (app: ReturnType<typeof buildApp>, body: unknown) =>
@@ -135,7 +141,7 @@ describe('POST /api/auth/sign-in — the three causes are indistinguishable (US-
 
     await post(app, { email: 'leaver@company.com', password: 'correct' });
 
-    expect(revoked).toEqual([SESSION.access_token]);
+    expect(revoked).toEqual([{ token: SESSION.access_token, scope: 'global' }]);
   });
 
   it('does not pad a successful sign-in (US-001/AC-01)', async () => {
@@ -333,6 +339,78 @@ describe('/api/admin — an employee is refused at the server, not just in the n
 
     expect(response.status).toBe(401);
     expect(response.body.code).toBe('account_inactive');
+  });
+});
+
+describe('POST /api/auth/sign-out (US-002/AC-02)', () => {
+  it('ends a session — the same token no longer authorises the next request (US-002/AC-02)', async () => {
+    const { app } = appWith({ tokens: { 'access-token': EMPLOYEE.id } });
+
+    const before = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+    expect(before.status).toBe(200);
+
+    const signOut = await request(app).post('/api/auth/sign-out').set('Authorization', 'Bearer access-token');
+    expect(signOut.status).toBe(204);
+
+    const after = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+    expect(after.status).toBe(401);
+  });
+
+  it('revokes with local scope, not global (US-002/D-03)', async () => {
+    const { app, revoked } = appWith({ tokens: { 'access-token': EMPLOYEE.id } });
+
+    await request(app).post('/api/auth/sign-out').set('Authorization', 'Bearer access-token');
+
+    expect(revoked).toEqual([{ token: 'access-token', scope: 'local' }]);
+  });
+
+  it('answers 204 with no bearer token at all (US-002/AC-02, US-002/D-02)', async () => {
+    const { app } = appWith({});
+
+    const response = await request(app).post('/api/auth/sign-out');
+
+    expect(response.status).toBe(204);
+  });
+
+  it('answers 204 for a token that never verifies (US-002/AC-02, US-002/D-02)', async () => {
+    const { app } = appWith({});
+
+    const response = await request(app).post('/api/auth/sign-out').set('Authorization', 'Bearer forged-token');
+
+    expect(response.status).toBe(204);
+  });
+
+  it('runs no session chain — a deactivated account is still revoked, not refused (US-002/AC-04)', async () => {
+    // Structural proof for AC-04: require-session.ts step 3 refuses a deactivated account's
+    // token today. If sign-out ran that chain, this request would be 401 and nothing would be
+    // revoked. It is 204 and revoked instead, which is the property AC-04 depends on once
+    // the forced-password-change story fills the (currently empty) must_change_password step 5.
+    const { app, revoked } = appWith({ tokens: { 'leaver-token': DEACTIVATED.id } });
+
+    const response = await request(app).post('/api/auth/sign-out').set('Authorization', 'Bearer leaver-token');
+
+    expect(response.status).toBe(204);
+    expect(revoked).toEqual([{ token: 'leaver-token', scope: 'local' }]);
+  });
+
+  it('does not touch the stored credential — it still works at the next sign-in (US-002/AC-04)', async () => {
+    // RISK-009: an administrator-set password must still work, and mustChangePassword must
+    // still be true, after the user signs out of the forced password-change screen.
+    const mustChange: UserProfileRow = { ...EMPLOYEE, must_change_password: true };
+    const { app } = appWith({
+      rows: [mustChange],
+      byEmail: { 'priya@company.com': { kind: 'ok', session: SESSION, userId: mustChange.id } },
+    });
+
+    const first = await post(app, { email: 'priya@company.com', password: 'admin-set' });
+    expect(first.body.user.mustChangePassword).toBe(true);
+
+    await request(app).post('/api/auth/sign-out').set('Authorization', `Bearer ${SESSION.access_token}`);
+
+    const second = await post(app, { email: 'priya@company.com', password: 'admin-set' });
+
+    expect(second.status).toBe(200);
+    expect(second.body.user.mustChangePassword).toBe(true);
   });
 });
 

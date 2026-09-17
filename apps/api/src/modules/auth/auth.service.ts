@@ -12,6 +12,7 @@
  */
 import { remainingDelayMs } from '../../domain/sign-in-failure-delay.js';
 import type { AuthenticatedUser, Session } from '@desk-booking/contracts';
+import { logger } from '../../infra/logger/index.js';
 import type { ProfileRepository, UserProfileRow } from './auth.repository.js';
 
 export type { ProfileRepository } from './auth.repository.js';
@@ -26,10 +27,18 @@ export type AuthAttempt =
  * The seam over Supabase Auth. A stub implements this in tests, so the three AC-04 causes are
  * expressible without a network and without mocking the SDK.
  */
+export type RevokeScope = 'local' | 'global';
+
 export interface AuthAdapter {
   signInWithPassword(email: string, password: string): Promise<AuthAttempt>;
-  /** Invalidate a session GoTrue has already minted. See `attemptSignIn`. */
-  revokeSession(accessToken: string): Promise<void>;
+  /**
+   * Invalidate a session GoTrue has already minted. See `attemptSignIn` and `signOut`.
+   *
+   * `scope` is required, never defaulted (US-002/D-03): `'global'` ends the session on every
+   * device, `'local'` ends it on the one that asked. Which is correct depends entirely on the
+   * caller — a default would let the more destructive `'global'` be picked by omission.
+   */
+  revokeSession(accessToken: string, scope: RevokeScope): Promise<void>;
 }
 
 export type SignInOutcome =
@@ -104,7 +113,9 @@ export function createAuthService({ auth, profiles, nowMs, floorMs }: AuthServic
         // This is the easiest line in the story to omit: every other test still passes without
         // it. A failure to revoke must not become a failure to sign in, though — the refusal is
         // the security outcome and it is already decided.
-        await auth.revokeSession(attempt.session.access_token).catch(() => undefined);
+        // 'global': REQ-005 means a deactivated account holds no working credential anywhere,
+        // not merely on the device that was just refused.
+        await auth.revokeSession(attempt.session.access_token, 'global').catch(() => undefined);
         return reject();
       }
 
@@ -117,6 +128,26 @@ export function createAuthService({ auth, profiles, nowMs, floorMs }: AuthServic
     async currentUser(userId: string): Promise<AuthenticatedUser | undefined> {
       const profile = await profiles.findById(userId);
       return profile && profile.is_active ? toUser(profile) : undefined;
+    },
+
+    /**
+     * `POST /api/auth/sign-out` (US-002). Ends the session on **this browser only**
+     * (`'local'`, US-002/D-03) — the story's own words are "the next person to use this
+     * browser", not every device the account is signed in on.
+     *
+     * Runs no session middleware and is called for every input, including a missing or
+     * already-invalid token (US-002/AC-02, US-002/D-02): the caller has already got what they
+     * asked for, and there is no failure state anywhere in the design for a sign-out that
+     * "fails". A missing token skips the adapter call entirely and is logged — the same device
+     * US-001 used for the failure-delay floor: when a guarantee quietly stops holding, one log
+     * line is the operational signal.
+     */
+    async signOut(accessToken: string | undefined): Promise<void> {
+      if (!accessToken) {
+        logger.warn('sign-out called with no bearer token — nothing to revoke');
+        return;
+      }
+      await auth.revokeSession(accessToken, 'local').catch(() => undefined);
     },
   };
 }

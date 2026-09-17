@@ -34,11 +34,11 @@ function build(overrides: {
   nowMs?: () => number;
   floorMs?: number;
 }) {
-  const revoked: string[] = [];
+  const revoked: Array<{ token: string; scope: string }> = [];
   const auth: AuthAdapter = {
     signInWithPassword: vi.fn(async () => ({ kind: 'ok' as const, session: SESSION, userId: PROFILE.id })),
-    revokeSession: vi.fn(async (token: string) => {
-      revoked.push(token);
+    revokeSession: vi.fn(async (token: string, scope: string) => {
+      revoked.push({ token, scope });
     }),
     ...overrides.auth,
   };
@@ -120,16 +120,17 @@ describe('attemptSignIn — convergence (US-001/AC-04)', () => {
     }
   });
 
-  it('revokes the session GoTrue minted for a deactivated account (US-001/AC-04)', async () => {
+  it('revokes the session GoTrue minted for a deactivated account, globally (US-001/AC-04)', async () => {
     // GoTrue has already issued a real refresh token. requireSession would refuse every request
-    // made with it, but leaving it alive contradicts what REQ-005 means.
+    // made with it, but leaving it alive contradicts what REQ-005 means. Scope is 'global'
+    // (US-002/D-03): the account holds no working credential anywhere, not just on this device.
     const { service, revoked } = build({
       profiles: { findById: vi.fn(async () => ({ ...PROFILE, is_active: false })) },
     });
 
     await service.attemptSignIn('priya@company.com', 'correct');
 
-    expect(revoked).toEqual([SESSION.access_token]);
+    expect(revoked).toEqual([{ token: SESSION.access_token, scope: 'global' }]);
   });
 });
 
@@ -203,6 +204,28 @@ describe('attemptSignIn — email normalisation (US-001/AC-01)', () => {
     await service.attemptSignIn('priya@company.com', '  MiXeD Case  ');
 
     expect(auth.signInWithPassword).toHaveBeenCalledWith('priya@company.com', '  MiXeD Case  ');
+  });
+});
+
+/**
+ * US-002 — `signOut` ends a session server-side, `'local'`ly (US-002/D-03: not the same scope
+ * US-001's refusal path uses), and never fails the caller — see the router for why (US-002/AC-02).
+ */
+describe('signOut (US-002/AC-02)', () => {
+  it('revokes the given token with local scope (US-002/AC-02)', async () => {
+    const { service, revoked } = build({});
+
+    await service.signOut('a-real-token');
+
+    expect(revoked).toEqual([{ token: 'a-real-token', scope: 'local' }]);
+  });
+
+  it('calls the adapter no times when no token is present (US-002)', async () => {
+    const { service, auth } = build({});
+
+    await service.signOut(undefined);
+
+    expect(auth.revokeSession).not.toHaveBeenCalled();
   });
 });
 

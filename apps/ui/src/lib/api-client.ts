@@ -28,11 +28,16 @@ export interface ApiClientOptions {
 }
 
 export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClientOptions) {
-  async function request<T>(
+  /**
+   * The half every request shares: attach the bearer, time it out, let a caller abort it, and
+   * turn a transport failure into `unavailable`. `request` and `requestNoContent` (US-002)
+   * differ only in what a *successful* response means — a body to parse, or none at all — so
+   * that is the only thing left to each of them.
+   */
+  async function send(
     path: string,
-    schema: ZodType<T>,
     init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
-  ): Promise<ApiResult<T>> {
+  ): Promise<{ kind: 'response'; response: Response } | { kind: 'unavailable' }> {
     // Two reasons a request ends early: the caller cancelled it (US-001/AC-06's double-submit
     // guard) or it ran out of time (US-001/D-06). Both must abort the same fetch.
     const controller = new AbortController();
@@ -43,14 +48,14 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClien
     const token = getAccessToken();
     if (token) headers.set('Authorization', `Bearer ${token}`);
 
-    let response: Response;
     try {
-      response = await fetch(`${baseUrl}${path}`, {
+      const response = await fetch(`${baseUrl}${path}`, {
         method: init.method ?? 'GET',
         headers,
         signal: controller.signal,
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
       });
+      return { kind: 'response', response };
     } catch {
       // Network failure, DNS failure, timeout, or the caller's own abort. None of them are an
       // answer about the request, so none of them may read as a rejection (AC-07).
@@ -58,6 +63,12 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClien
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** The error-body mapping every non-2xx response goes through, `request` and `requestNoContent` alike. */
+  async function readErrorBody(response: Response): Promise<ApiResult<never>> {
+    // 5xx is our side failing, not an answer the user can act on differently from an outage.
+    if (response.status >= 500) return { kind: 'unavailable' };
 
     let body: unknown;
     try {
@@ -67,21 +78,31 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClien
       return { kind: 'unavailable' };
     }
 
-    if (!response.ok) {
-      // 5xx is our side failing, not an answer the user can act on differently from an outage.
-      if (response.status >= 500) return { kind: 'unavailable' };
+    const error = errorBodySchema.safeParse(body);
+    // An error body we cannot even recognise is not a rejection we can explain. Treating it
+    // as one would put an unexplained code in front of a user.
+    if (!error.success) return { kind: 'unavailable' };
 
-      const error = errorBodySchema.safeParse(body);
-      // An error body we cannot even recognise is not a rejection we can explain. Treating it
-      // as one would put an unexplained code in front of a user.
-      if (!error.success) return { kind: 'unavailable' };
+    return { kind: 'error', status: response.status, code: error.data.code, message: error.data.message };
+  }
 
-      return {
-        kind: 'error',
-        status: response.status,
-        code: error.data.code,
-        message: error.data.message,
-      };
+  async function request<T>(
+    path: string,
+    schema: ZodType<T>,
+    init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+  ): Promise<ApiResult<T>> {
+    const sent = await send(path, init);
+    if (sent.kind === 'unavailable') return { kind: 'unavailable' };
+    const { response } = sent;
+
+    if (!response.ok) return readErrorBody(response);
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      // A proxy's HTML error page is the realistic version of this.
+      return { kind: 'unavailable' };
     }
 
     const parsed = schema.safeParse(body);
@@ -98,7 +119,7 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClien
        * The field path is logged because it is the only thing that makes this debuggable; a
        * silent `unavailable` here would be indistinguishable from a real outage in a bug report.
        */
-            console.warn('[api] response did not match the contract', {
+      console.warn('[api] response did not match the contract', {
         path,
         issues: parsed.error.issues.map((issue) => issue.path.join('.')),
       });
@@ -108,7 +129,32 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClien
     return { kind: 'ok', data: parsed.data };
   }
 
-  return { request };
+  /**
+   * US-002 — for an endpoint whose success has nothing to say (`204`). Succeeds only on a
+   * genuinely empty `2xx` body; anything else on the success path is as much a contract
+   * violation as a `204` arriving where `request()` expected a schema-shaped body, and is
+   * mapped the same way: `unavailable`.
+   */
+  async function requestNoContent(
+    path: string,
+    init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+  ): Promise<ApiResult<void>> {
+    const sent = await send(path, init);
+    if (sent.kind === 'unavailable') return { kind: 'unavailable' };
+    const { response } = sent;
+
+    if (!response.ok) return readErrorBody(response);
+
+    const text = await response.text();
+    if (text.length > 0) {
+      console.warn('[api] expected an empty body, got one', { path });
+      return { kind: 'unavailable' };
+    }
+
+    return { kind: 'ok', data: undefined };
+  }
+
+  return { request, requestNoContent };
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

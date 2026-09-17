@@ -9,7 +9,15 @@
  * surface is refused by `requireAdmin` on the server (US-001/AC-03), and `RequireRole` in the
  * browser is convenience on top of that.
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   signInResponseSchema,
   type AuthenticatedUser,
@@ -26,6 +34,12 @@ export type SignInResult =
 export interface AuthContextValue {
   user: AuthenticatedUser | undefined;
   signIn(email: string, password: string, signal?: AbortSignal): Promise<SignInResult>;
+  /**
+   * Ends the session server-side, then forgets it in this tab (US-002). Proceeds to clear
+   * `user` regardless of what the server answered — a transport failure must not strand
+   * someone on a signed-in screen (US-002/D-04); there is no UI state for a failed sign-out.
+   */
+  signOut(): Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -36,19 +50,39 @@ export interface AuthProviderProps {
   client?: ApiClient;
   /** Where the session goes on success. Defaults to the browser's Supabase client. */
   onSession?: (session: Session) => void | Promise<void>;
+  /**
+   * Forgets the session in the browser's own Supabase client once the server has ended it.
+   * Overridden in tests. Defaults to `supabaseBrowserClient.auth.signOut({ scope: 'local' })` —
+   * `'local'` because the server has already done the revocation (US-002/D-03); this only
+   * clears what supabase-js holds in this tab's storage. Loaded lazily so a test that never
+   * signs out never needs `VITE_SUPABASE_*` to be set.
+   */
+  onSignOut?: () => void | Promise<void>;
 }
 
-const defaultClient = () =>
-  createApiClient({
-    baseUrl: import.meta.env['VITE_API_BASE_URL'] ?? '',
-    // US-001 has no stored session to read yet; US-003 is the story that gives this a body.
-    getAccessToken: () => undefined,
-    timeoutMs: 10_000,
-  });
+const defaultOnSignOut = async (): Promise<void> => {
+  const { supabaseBrowserClient } = await import('../supabase-client.js');
+  await supabaseBrowserClient.auth.signOut({ scope: 'local' });
+};
 
-export function AuthProvider({ children, client, onSession }: AuthProviderProps) {
+export function AuthProvider({ children, client, onSession, onSignOut }: AuthProviderProps) {
   const [user, setUser] = useState<AuthenticatedUser | undefined>(undefined);
-  const api = useMemo(() => client ?? defaultClient(), [client]);
+  /**
+   * The access token for the life of this tab, and nothing more durable than that (US-002/§6.2).
+   * Reading a session back from storage on a cold boot is US-003's; after a reload this ref is
+   * empty, there is no in-memory `user`, and `RequireSession` already redirects to sign-in.
+   */
+  const accessTokenRef = useRef<string | undefined>(undefined);
+  const api = useMemo(
+    () =>
+      client ??
+      createApiClient({
+        baseUrl: import.meta.env['VITE_API_BASE_URL'] ?? '',
+        getAccessToken: () => accessTokenRef.current,
+        timeoutMs: 10_000,
+      }),
+    [client],
+  );
 
   const signIn = useCallback<AuthContextValue['signIn']>(
     async (email, password, signal) => {
@@ -68,13 +102,28 @@ export function AuthProvider({ children, client, onSession }: AuthProviderProps)
       }
 
       await onSession?.(result.data.session);
+      accessTokenRef.current = result.data.session.accessToken;
       setUser(result.data.user);
       return { kind: 'ok', user: result.data.user };
     },
     [api, onSession],
   );
 
-  const value = useMemo<AuthContextValue>(() => ({ user, signIn }), [user, signIn]);
+  const signOut = useCallback<AuthContextValue['signOut']>(async () => {
+    // 1 — while the token is still available to send (US-002/§6.3's ordering).
+    await api.requestNoContent('/api/auth/sign-out', { method: 'POST' });
+    // 2 — forget the browser's own copy. Errors here do not stop sign-out from completing.
+    try {
+      await (onSignOut ?? defaultOnSignOut)();
+    } catch {
+      // Deliberately swallowed — see the docblock on `signOut`.
+    }
+    // 3 — clear local state, unconditionally.
+    accessTokenRef.current = undefined;
+    setUser(undefined);
+  }, [api, onSignOut]);
+
+  const value = useMemo<AuthContextValue>(() => ({ user, signIn, signOut }), [user, signIn, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
