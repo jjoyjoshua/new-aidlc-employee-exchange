@@ -53,7 +53,7 @@ it is visible in the migration and in the dashboard, not in a test.
 | FR-26  | `apps/ui/src/screens/sign-in/SignIn.tsx` | rejection handling, ST-04 | `apps/ui/src/screens/sign-in/SignIn.spec.tsx` | implemented |
 | FR-27  | `apps/ui/src/screens/sign-in/SignIn.tsx` | unavailable handling, ST-05 | `apps/ui/src/screens/sign-in/SignIn.spec.tsx` | implemented |
 | FR-28  | `apps/ui/src/lib/auth/auth-context.tsx` | `AuthProvider`, post-success routing, `defaultOnSession` | `apps/ui/src/screens/sign-in/SignIn.spec.tsx`, `apps/ui/src/lib/auth/auth-context.spec.tsx` | implemented (session-persistence gap fixed 2026-09-18 — see `change-log.md`) |
-| FR-29  | `apps/ui/src/components/app-shell/AppShell.tsx` | `AppShell` | `apps/ui/src/components/app-shell/AppShell.spec.tsx` | implemented |
+| FR-29  | `apps/ui/src/components/app-shell/AppShell.tsx` | `AppShell` — hi-fi rail per Figma node `51:359` (product lockup, `NavIcon`, active bar) | `apps/ui/src/components/app-shell/AppShell.spec.tsx` | implemented |
 | FR-30  | `apps/ui/src/lib/auth/require-role.tsx` | `RequireRole` | `apps/ui/src/components/app-shell/AppShell.spec.tsx` | implemented |
 | FR-31  | `apps/ui/src/lib/api-client.ts` | `createApiClient` | `apps/ui/src/lib/api-client.spec.ts` | implemented |
 | FR-32  | `apps/ui/src/components/` | all seven: `text-field`, `password-field`, `button`, `alert`, `spinner`, `card`, `login-backdrop` | one `.spec.tsx` each | implemented |

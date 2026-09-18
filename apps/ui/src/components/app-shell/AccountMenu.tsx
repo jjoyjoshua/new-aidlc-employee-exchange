@@ -1,78 +1,41 @@
 /**
- * The shell's account menu (US-002/AC-01).
+ * The shell's account footer (US-002/AC-01).
  *
- * A disclosure — `<button aria-expanded aria-controls>` revealing ordinary buttons — not a full
- * `role="menu"` (design note §6.1). A real ARIA menu obliges arrow-key roving, `aria-activedescendant`,
- * typeahead and wrap-around; a half-built one announces affordances it does not have, which is
- * worse for a screen-reader user than this. AC-01 asks for "present and operable by keyboard",
- * which a disclosure meets exactly.
+ * Unconditionally visible — Whoami (avatar + name) and **Sign out**, both always rendered, no
+ * click-to-open step. This supersedes US-002's original disclosure (`D-05`/`FR-09`): that
+ * decision flagged its own open question — "confirm the pattern with UX before building" — and
+ * the approved hi-fi Figma sidebar (file `xjFVgBbMrJUl7Ys3EX3Cbn`, node `51:359`) is that
+ * confirmation, put to the human directly and answered. Recorded as `US-002/D-06`.
  *
- * Holds **Sign out** alone. SCR-002's component table lists Settings beside it, but `/settings`
- * does not exist yet — that row arrives with the Settings screen.
+ * AC-01 ("present and operable by keyboard") holds more directly than before: Tab reaches
+ * **Sign out** with no open step in between.
+ *
+ * Holds **Sign out** alone, still. SCR-002's component table lists Settings beside it, but
+ * `/settings` does not exist yet — that row arrives with the Settings screen (unchanged from
+ * US-002's original scoping).
  */
-import { useEffect, useId, useRef, useState } from 'react';
 import { useAuth } from '../../lib/auth/auth-context.js';
 import './account-menu.css';
 
 export function AccountMenu() {
   const { user, signOut } = useAuth();
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const listId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (target && (listRef.current?.contains(target) || triggerRef.current?.contains(target))) return;
-      setOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
 
   if (!user) return null;
 
-  const close = () => setOpen(false);
-
-  // On the wrapper, not the list: focus is on the trigger when Escape is the very first key
-  // pressed after opening, and the trigger is not a descendant of the list.
-  const onRootKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Escape') return;
-    close();
-    triggerRef.current?.focus();
-  };
+  const initial = user.fullName.trim().charAt(0).toUpperCase();
 
   return (
-    <div className="account-menu" onKeyDown={onRootKeyDown}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className="account-menu__trigger"
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        Account
-      </button>
+    <div className="account-menu">
+      <div className="account-menu__whoami" data-testid="account-menu-whoami">
+        <span className="account-menu__avatar" aria-hidden="true">
+          {initial}
+        </span>
+        <span className="account-menu__name">{user.fullName}</span>
+      </div>
 
-      {open && (
-        <div id={listId} className="account-menu__list" ref={listRef}>
-          <button
-            type="button"
-            className="account-menu__item"
-            onClick={() => {
-              close();
-              void signOut();
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      )}
+      <button type="button" className="account-menu__item" onClick={() => void signOut()}>
+        Sign out
+      </button>
     </div>
   );
 }

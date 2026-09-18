@@ -83,9 +83,29 @@ describe('AppShell (US-001/AC-02)', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('link', { name: 'My bookings' })).toBeInTheDocument();
+    const bookingsLink = await screen.findByRole('link', { name: 'Bookings' });
+    expect(bookingsLink).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Book' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'People' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Desks' })).not.toBeInTheDocument();
+  });
+
+  it('marks the current page on the active nav link, redundantly with the label weight and pill (NFR-008)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/bookings']}>
+        <SignedIn as={EMPLOYEE}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/bookings" element={<h1>My bookings</h1>} />
+            </Route>
+          </Routes>
+        </SignedIn>
+      </MemoryRouter>,
+    );
+
+    const bookingsLink = await screen.findByRole('link', { name: 'Bookings' });
+    expect(bookingsLink).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Book' })).not.toHaveAttribute('aria-current');
   });
 
   it('names its navigation landmark so a screen reader can jump to it (NFR-008)', async () => {

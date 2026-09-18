@@ -340,3 +340,150 @@ Revert the PR. No migration, no stored data, no config — reverting removes exa
 | Question                                         | Owner         | Blocks |
 | ------------------------------------------------ | ------------- | ------ |
 | none — both facts (the missing default, FR-28's inaccurate status) were confirmed by reading the code | — | — |
+
+---
+
+## Addendum — hi-fi sidebar (2026-09-18)
+
+> Medium tier. Does not reopen the Gate D1 stamp above. This addendum gets its own approval line,
+> per `change-log.md`'s rule that an edit after approval needs a dated row. Spans two story
+> packages — this file carries the plan; [`US-002-sign-out/decisions.md`](../US-002-sign-out/decisions.md)
+> carries the one decision that belongs to that story (D-06, superseding D-05/FR-09).
+
+### Addendum approval — Gate D1
+
+| Field                | Value                                    |
+| -------------------- | ----------------------------------------- |
+| Status               | **approved** |
+| Approved by          | Joy Joshua <joy_j@trigent.com> |
+| Approved on          | 2026-09-18 |
+| Plan commit approved | *uncommitted at approval* — base `ba8e765644a61f9fb9bcbf1f11f0b6656bd64ead` |
+
+Approved in the working tree, before this addendum's first commit — the same pattern the two
+addenda above used. Base `ba8e765644a61f9fb9bcbf1f11f0b6656bd64ead` is the HEAD this addendum was
+read against; the commit that introduces this addendum **is** the approved content
+(`git diff ba8e765644a61f9fb9bcbf1f11f0b6656bd64ead -- inception/specs/US-001-sign-in/implementation-plan.md`).
+
+### What this is
+
+`app-shell.css` and `account-menu.css` have both said, since they were written, that they are
+structural stubs waiting for a hi-fi pass their own story could not give them (`app-shell.css`:
+*"Its hi-fi treatment belongs with those stories and their SCR-002 / SCR-005 frames, which this
+story has not been given"*; `account-menu.css`: *"the shell's hi-fi treatment belongs to the
+stories that give it real screens"*). The human has now supplied that pass directly: Figma file
+`xjFVgBbMrJUl7Ys3EX3Cbn`, node `51:359` ("Sidebar" — the component, all 10 nav×density variants)
+and node `38:2` (the SCR-003 frame that places it). Fetched via the Figma MCP `get_design_context`
+tool per the `figma-design-to-code` skill; full raw response (code, tokens, screenshots, asset
+URLs) preserved in this session's transcript.
+
+**No new contract, no schema, no route, no dependency.** `AppShell` and `AccountMenu` keep the
+props and events they have today (none). Every colour, spacing, radius, weight and type value the
+Figma node uses already exists in `tokens.css` (`--c-surface-raised`, `--c-border`, `--c-action`,
+`--c-action-label`, `--c-text`, `--c-text-secondary`, `--c-text-on-fill`, `--c-fill-subtle`,
+`--c-fill-muted`, `--f-body`, `--fw-regular/medium/semibold`, `--t-body(-sm)`,
+`--t-heading(-sm)`, `--s-2/8/12/16/24`, `--r-md/lg/full`) — confirmed against
+`get_variable_defs(51:359)`. That is what keeps this Medium rather than Complex
+(`task-classification.md` Complex-surface #1: a shared component's props/events, or a design
+**token** change — neither happens here).
+
+**One decision this addendum does NOT make unilaterally**, because it changes tested behaviour
+from an already-merged, approved story: the Figma footer (avatar, name, Settings-when-applicable,
+Sign out) is **always visible**, not a click-to-open disclosure. `AccountMenu` was built in
+US-002 as a disclosure (`FR-09`, `Must`, decision `D-05`) with documented accessibility rationale.
+US-002's own design note flagged this as unresolved — *"confirm the pattern with UX before
+building... the second row will [assume nav-item-like behaviour]"* (design-note.md §6.1) — and
+this Figma file is that confirmation arriving. Put to the human directly; answer: **replace the
+disclosure with the static footer**, recorded as `US-002/D-06` (see that story's `decisions.md`),
+superseding `D-05`/`FR-09`'s wording, not its intent (Sign out still present, still keyboard
+operable, still text-only, still no `role="menu"`).
+
+**Nav labels shorten**, per the Figma component's own description: *"the short nav labels the
+wireframes settled on ('Bookings', 'Book' — not 'My bookings', 'Book a desk', which wrap at
+240px)"*. `EMPLOYEE_NAV`'s labels change; the routes do not.
+
+**Out of scope, on purpose:** the `< 768px` bottom bar. The two Figma nodes given are both
+desktop frames (1280px and the isolated component's Expanded/Collapsed variants, which are the
+`>= 768px` shells per `ia.md`'s breakpoint table). No mobile design has been supplied — the bottom
+bar keeps its current text-only stub rendering unchanged. The Settings row **stays absent**: it
+was deliberately left out of `AccountMenu` in US-002 (*"`/settings` does not exist yet — that row
+arrives with the Settings screen"*) and that fact hasn't changed; the Figma node's own
+`Employee-Settings` nav variant is unused here for the same reason.
+
+### Design reference
+
+| Node       | What                                                          |
+| ---------- | -------------------------------------------------------------- |
+| `51:359`   | `Sidebar` component — all 10 `nav` × `density` variants        |
+| `38:2`     | `HF / SCR-003 · Book a desk / ST-01 Default · 1280` — places the sidebar in a real screen |
+| `11:47`    | `Icon / clock` — Bookings                                       |
+| `11:20`    | `Icon / calendar` — Book                                        |
+| `11:65`    | `Icon / grid` — Desks                                           |
+| `11:9`     | `Icon / person` — People                                        |
+
+Component description, verbatim (both the original 2b pass and its 2026-09-08 revision), is
+authoritative for two structural rules the code must follow:
+
+1. **The active indicator is a 3px bar, absolutely positioned** — never a layout child. The
+   component's own changelog notes it was a layout child once and cost a 2–3px misalignment
+   between active and inactive rows; a CSS `::before` on the link, positioned absolutely, is how
+   this addendum implements it, so the bug can't recur.
+2. **Three redundant active cues** (bar shape, medium-weight label, `--c-fill-subtle` pill) —
+   colour is never the only signal, matching `tokens.css`'s own header rule.
+
+### Steps
+
+#### Step 1 — ship the four nav icons as reviewed source SVGs
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-001/FR-29, FR-32 |
+| Files    | `inception/design/assets/icon-{clock,calendar,grid,person}.svg` (new — done, staged); `apps/ui/src/assets/icon-{clock,calendar,grid,person}.svg` (new copies) |
+| Approach | Same convention as `login-backdrop.svg` (US-001/D-12): geometry only, `stroke="currentColor"`, `role="presentation" aria-hidden="true"`, no literal hex. Downloaded from the Figma nodes above (temporary export URLs, ~7-day TTL) and re-hosted here rather than left as remote URLs, per the design-to-code skill's asset rule. One SVG per icon **shape**, not per colour variant — the Figma export produces a separate flattened-colour SVG for each active/inactive state of the same glyph; `currentColor` plus the existing text tokens (`--c-text-secondary` inactive, `--c-text` active) does that with one file instead of eight, which is the adaptation the design-to-code skill asks for ("adapt to the project's conventions") rather than a literal copy |
+| Verify   | Visual match against the `get_design_context` screenshot |
+
+#### Step 2 — `NavIcon`, a small private component to render them
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-001/FR-29 |
+| Files    | `apps/ui/src/components/app-shell/NavIcon.tsx` (new) |
+| Approach | `?raw` imports of the four SVGs (Vite built-in, same as `LoginBackdrop` — no new dependency), injected via `dangerouslySetInnerHTML`. Build-time import of a reviewed repository file, not runtime user input — the same `task-surfaces.md` carve-out `LoginBackdrop.tsx`'s docblock already cites. `<NavIcon name="clock" className="app-shell__icon" />` |
+| Verify   | `npm run typecheck -w apps/ui` |
+
+#### Step 3 — `AppShell` hi-fi rail
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-001/FR-29 |
+| Files    | `apps/ui/src/components/app-shell/AppShell.tsx`, `app-shell.css` (modify) |
+| Approach | `EMPLOYEE_NAV`/`ADMIN_NAV` gain an `icon` field and shorten their labels (`My bookings` → `Bookings`, `Book a desk` → `Book`). Product lockup (`D` mark + "Desk Booking" wordmark, `>= 768px` only) added above the nav list — the `D` mark is a literal placeholder, same status Figma's own component description gives it, flagged with a `// TODO` pending the real logo. Active state stays keyed off `NavLink`'s existing `aria-current="page"` (no new state, no prop threaded from Figma's `nav` enum) with a `::before` bar per the two structural rules above. `>= 1024px`: 240px rail, icon + label. `768–1023px`: 72px rail, icon only, label visually hidden (`sr-only`, not `display:none`) so the accessible name survives — the Figma tooltip node is explicitly documented as off-by-default/for-hover-documentation-only, so it is not built. `< 768px`: unchanged bottom bar, icon hidden via CSS so its current text-only appearance does not change without its own design |
+| Verify   | `npm test -w apps/ui -- AppShell` |
+
+#### Step 4 — `AccountMenu` becomes the static footer (US-002/D-06)
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-002/FR-09 (superseded wording, same AC) |
+| Files    | `apps/ui/src/components/app-shell/AccountMenu.tsx`, `account-menu.css` (modify) |
+| Approach | Remove the disclosure: `open` state, `triggerRef`/`listRef`, the `pointerdown`/`Escape` handlers, `useId`. Render unconditionally: a Whoami row (avatar circle with the user's initial, full name) and a **Sign out** row, both always visible, both inside the `>= 768px` rail's footer (below a `flex: 1 0 0` filler, same as the nav list). No Settings row — `/settings` still doesn't exist; unchanged from US-002's original scoping |
+| Verify   | `npm test -w apps/ui -- AccountMenu` |
+
+#### Step 5 — tests
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-001/FR-29; US-002/FR-09 |
+| Files    | `AppShell.spec.tsx` (modify — line 86's `'My bookings'` link name becomes `'Bookings'`), `AccountMenu.spec.tsx` (rewrite) |
+| Approach | `AppShell.spec.tsx`: update the renamed-label assertion; add one asserting the active link carries `aria-current="page"` and an icon is present. `AccountMenu.spec.tsx`: drop the four disclosure tests (starts closed / opens on click / Escape closes / click outside closes — the mechanism they test no longer exists); keep and adapt the fifth (`activating Sign out reaches the sign-out endpoint`) to find **Sign out** directly, with no trigger click first; add one asserting the Whoami row shows the signed-in user's name |
+| Verify   | `npm test -w apps/ui` — full suite green |
+
+### Rollback
+
+Revert the PR. No migration, no stored data, no config, no contract — reverting restores the two
+structural stubs and the disclosure exactly as they were.
+
+### Open questions
+
+| Question                                         | Owner         | Blocks |
+| ------------------------------------------------ | ------------- | ------ |
+| none — the one real decision (disclosure vs. static footer) was put to the human directly and answered: static footer, replacing US-002/D-05 | — | — |

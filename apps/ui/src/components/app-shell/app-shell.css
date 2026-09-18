@@ -2,14 +2,16 @@
  * The application shell — the navigation every screen except SCR-001 and SCR-010 sits inside.
  *
  * Breakpoints come from `inception/design/ia.md` §Shell, NOT from the frame widths:
- *   >= 1024px   persistent sidebar
- *   768–1023px  icon-only collapsed sidebar
- *   < 768px     bottom bar
+ *   >= 1024px   persistent sidebar, 240px, icon + label
+ *   768–1023px  icon-only collapsed sidebar, 72px, label visually hidden (not removed —
+ *               the accessible name survives for assistive tech; the Figma tooltip node
+ *               that documents the hover/focus label is off by default and not built here)
+ *   < 768px     bottom bar — unchanged pending its own design; no product lockup, no
+ *               account footer, no icons, same text-only links as before
  *
- * **This is a structural stub.** US-001 needs the shell only so AC-02's admin navigation can be
- * present and AC-03 has somewhere to bounce to; the screens it frames are US-010's and US-013's.
- * Its hi-fi treatment belongs with those stories and their SCR-002 / SCR-005 frames, which this
- * story has not been given.
+ * Hi-fi values below come from the approved Figma sidebar (file `xjFVgBbMrJUl7Ys3EX3Cbn`,
+ * node `51:359`) — see `inception/specs/US-001-sign-in/implementation-plan.md`'s "hi-fi
+ * sidebar" addendum. Every value is an existing `tokens.css` token; none were added.
  */
 
 .app-shell {
@@ -24,28 +26,85 @@
   padding: var(--s-24) var(--s-16);
 }
 
-.app-shell__nav {
+.app-shell__sidebar {
   display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: var(--s-8);
   padding: var(--s-8) var(--s-16);
   background: var(--c-surface-raised);
   border-top: var(--bw-1) solid var(--c-border);
 }
 
+.app-shell__brand,
+.app-shell__footer {
+  display: none;
+}
+
+.app-shell__nav-list {
+  display: flex;
+  flex-direction: row;
+  gap: var(--s-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .app-shell__link {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
   padding: var(--s-8) var(--s-12);
   border-radius: var(--r-md);
   font-family: var(--f-body);
   font-size: var(--t-body-sm);
   line-height: var(--lh-body-sm);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-regular);
   color: var(--c-text-secondary);
   text-decoration: none;
+  position: relative;
 }
 
+.app-shell__icon {
+  display: none;
+  flex-shrink: 0;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  color: inherit;
+}
+
+/* The icon SVGs carry no root width/height (same convention as login-backdrop.svg) so they
+   fill this wrapper instead of rendering at the browser's intrinsic 300x150 default. */
+.app-shell__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell__label {
+  color: inherit;
+}
+
+/* The active bar. Absolutely positioned by design (Figma's own changelog: as a layout child it
+   pushed the icon 2px off-centre and left active rows 3px out of alignment with inactive ones —
+   an indicator must never participate in layout). Colour is never the only active signal here:
+   this bar, the medium-weight label, and the fill-subtle pill (below) are three redundant cues. */
 .app-shell__link[aria-current='page'] {
   background: var(--c-fill-subtle);
-  color: var(--c-text-on-fill);
+  color: var(--c-text);
+  font-weight: var(--fw-medium);
+}
+
+.app-shell__link[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--bw-2);
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--c-action);
 }
 
 .app-shell__link:focus-visible {
@@ -59,17 +118,131 @@
     flex-direction: row;
   }
 
-  .app-shell__nav {
+  .app-shell__sidebar {
     flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--s-8);
     border-top: 0;
     border-right: var(--bw-1) solid var(--c-border);
-    padding: var(--s-16) var(--s-8);
+    padding: var(--s-16) var(--s-12);
+    width: 72px;
+  }
+
+  .app-shell__brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-shell__mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-lg);
+    background: var(--c-action);
+    color: var(--c-action-label);
+    font-family: var(--f-body);
+    font-size: var(--t-heading);
+    line-height: var(--lh-heading);
+    font-weight: var(--fw-semibold);
+  }
+
+  .app-shell__wordmark {
+    display: none;
+  }
+
+  .app-shell__nav-list {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-8);
+    width: 100%;
+  }
+
+  .app-shell__link {
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+  }
+
+  .app-shell__icon {
+    display: block;
+  }
+
+  /* Icon-only: the label stays in the accessible tree (so its accessible name survives for
+     assistive tech) but is visually clipped — the classic sr-only technique, not `display:none`. */
+  .app-shell__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .app-shell__footer {
+    display: flex;
+    margin-top: auto;
   }
 }
 
 @media (min-width: 1024px) {
-  .app-shell__nav {
-    min-width: 200px;
+  .app-shell__sidebar {
+    align-items: stretch;
+    width: 240px;
     padding: var(--s-24) var(--s-16);
+  }
+
+  .app-shell__brand {
+    justify-content: flex-start;
+    gap: var(--s-8);
+    padding: 0 var(--s-4);
+  }
+
+  .app-shell__mark {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--r-md);
+    font-size: var(--t-body);
+    line-height: var(--lh-body);
+    font-weight: var(--fw-medium);
+  }
+
+  .app-shell__wordmark {
+    display: block;
+    font-family: var(--f-body);
+    font-size: var(--t-heading-sm);
+    line-height: var(--lh-heading-sm);
+    font-weight: var(--fw-medium);
+    color: var(--c-text);
+    white-space: nowrap;
+  }
+
+  .app-shell__nav-list {
+    align-items: stretch;
+  }
+
+  .app-shell__link {
+    justify-content: flex-start;
+    width: 100%;
+    height: 40px;
+    padding: 0 var(--s-12);
+  }
+
+  .app-shell__label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
   }
 }
