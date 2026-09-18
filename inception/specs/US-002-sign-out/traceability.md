@@ -28,7 +28,7 @@ still a plan.
 | FR-06  | `apps/api/src/modules/auth/auth.service.ts` | `signOut` — no-token branch, warns | `apps/api/src/modules/auth/auth.service.spec.ts` | implemented |
 | FR-07  | `apps/api/src/modules/auth/auth.router.ts` | `POST /sign-out` bypassing `requireSession` | `apps/api/src/modules/auth/auth.routes.spec.ts` — AC-04 structural test | implemented |
 | FR-08  | `apps/api/src/modules/auth/auth.router.ts` | same | `apps/api/src/modules/auth/auth.routes.spec.ts` — AC-04 credential test | implemented |
-| FR-09  | `apps/ui/src/components/app-shell/AccountMenu.tsx` | `AccountMenu` | `apps/ui/src/components/app-shell/AccountMenu.spec.tsx` | implemented |
+| FR-09  | `apps/ui/src/components/app-shell/AccountMenu.tsx` | `AccountMenu` — static footer, `D-06` superseding the original disclosure | `apps/ui/src/components/app-shell/AccountMenu.spec.tsx` | implemented |
 | FR-10  | `apps/ui/src/components/app-shell/AccountMenu.tsx` | same | `apps/ui/src/components/app-shell/AccountMenu.spec.tsx` | implemented |
 | FR-11  | `apps/ui/src/lib/auth/auth-context.tsx` | `AuthProvider`'s `accessTokenRef` | `apps/ui/src/lib/auth/auth-context.spec.tsx` | implemented |
 | FR-12  | `apps/ui/src/lib/auth/auth-context.tsx` | `signOut()` | `apps/ui/src/lib/auth/auth-context.spec.tsx` | implemented |

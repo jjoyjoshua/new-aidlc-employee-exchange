@@ -56,7 +56,7 @@ Each `FR-##` is one testable behaviour, traced to the acceptance criterion it se
 
 | ID    | Requirement                                                                                                                                  | Priority | Serves       | Status      |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ | ----------- |
-| FR-09 | `AppShell` gains an account menu: a disclosure (`<button aria-expanded aria-controls>` revealing ordinary buttons), not an ARIA `role="menu"` | Must     | AC-01        | not started |
+| FR-09 | `AppShell` gains an account menu: unconditionally visible Whoami + **Sign out** rows in the sidebar footer, not a disclosure and not an ARIA `role="menu"` (superseded 2026-09-18 by `D-06`, see `decisions.md` — originally a disclosure per `D-05`) | Must     | AC-01        | not started |
 | FR-10 | The menu holds **Sign out** only. It is reachable by Tab, opens and closes by keyboard, `Escape` closes it and returns focus to the trigger, and a click outside closes it without stealing focus | Must     | AC-01        | not started |
 | FR-11 | `AuthProvider` retains the access token it receives at sign-in (in a ref, not new storage) so `getAccessToken` returns a real value for the lifetime of the tab | Must     | AC-02        | not started |
 | FR-12 | The context exposes `signOut()`: `POST /api/auth/sign-out` first (while the token is still available), then `supabaseBrowserClient.auth.signOut({ scope: 'local' })`, then clear `user` — in that order | Must     | AC-02        | not started |
