@@ -12,6 +12,10 @@ export const errorCodeSchema = z.enum([
   'invalid_credentials',
   'no_session',
   'session_invalid',
+  // NFR-009 — idle expiry, distinct from a token Supabase itself refused (`session_invalid`):
+  // an operator triaging "users are being signed out" needs to tell the two apart, even though
+  // the browser treats every 401 here identically (US-003 design note §4).
+  'session_expired',
   'account_inactive',
   'admin_only',
   // US-004's, exported now: it is a contract between a middleware and SCR-010, which is

@@ -20,7 +20,11 @@ function renderAt(path: string) {
 
   render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider client={client as never} onSession={() => undefined}>
+      <AuthProvider
+        client={client as never}
+        onSession={() => undefined}
+        getStoredSession={async () => undefined}
+      >
         <Routes>
           <Route path="/sign-in" element={<h1>Sign in</h1>} />
           <Route
@@ -45,11 +49,45 @@ function ScreenThatMounts({ onMount }: { onMount: () => void }) {
 }
 
 describe('RequireSession (US-002/AC-03)', () => {
-  it('redirects to sign-in when no user is signed in, and never mounts the screen (US-002/AC-03)', () => {
+  it('redirects to sign-in when no user is signed in, and never mounts the screen (US-002/AC-03)', async () => {
     const { screenMounted } = renderAt('/bookings');
 
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    // NFR-009: with no stored session, the boot resolves to signedOut asynchronously (US-003)
+    // rather than redirecting synchronously on the first render.
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'My bookings' })).not.toBeInTheDocument();
     expect(screenMounted).not.toHaveBeenCalled();
+  });
+
+  it('holds — renders neither screen — while the stored session is still being confirmed (US-003)', () => {
+    const client = {
+      request: () => new Promise(() => undefined),
+      requestNoContent: async () => ({ kind: 'unavailable' as const }),
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/bookings']}>
+        <AuthProvider
+          client={client as never}
+          onSession={() => undefined}
+          getStoredSession={async () => ({ accessToken: 'still-checking' })}
+        >
+          <Routes>
+            <Route path="/sign-in" element={<h1>Sign in</h1>} />
+            <Route
+              path="/bookings"
+              element={
+                <RequireSession>
+                  <h1>My bookings</h1>
+                </RequireSession>
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'My bookings' })).not.toBeInTheDocument();
   });
 });

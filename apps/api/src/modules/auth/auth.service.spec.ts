@@ -17,6 +17,7 @@ const PROFILE: UserProfileRow = {
   role: 'employee',
   is_active: true,
   must_change_password: false,
+  last_seen_at: new Date(0).toISOString(),
 };
 
 const SESSION = { access_token: 'access', refresh_token: 'refresh', expires_at: 1_789_200_000 };
@@ -156,11 +157,11 @@ describe('attemptSignIn — success (US-001/AC-01, US-001/AC-02)', () => {
   });
 
   it('stamps last_seen_at on a successful sign-in (US-001/AC-03)', async () => {
-    const { service, profiles } = build({});
+    const { service, profiles } = build({ nowMs: steppingClock(1_000, 20) });
 
     await service.attemptSignIn('priya@company.com', 'correct');
 
-    expect(profiles.stampLastSeen).toHaveBeenCalledWith(PROFILE.id);
+    expect(profiles.stampLastSeen).toHaveBeenCalledWith(PROFILE.id, new Date(1_000));
   });
 
   it('never revokes the session of an account that signed in successfully (US-001/AC-01)', async () => {
@@ -226,6 +227,61 @@ describe('signOut (US-002/AC-02)', () => {
     await service.signOut(undefined);
 
     expect(auth.revokeSession).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * NFR-009 — `loadSession` replaces `currentUser` (US-003 design note §2.6): its one caller,
+ * `require-session.ts` step 3/4, now also needs the session's age to decide expiry.
+ */
+describe('loadSession (US-003)', () => {
+  it('returns the user and their last-seen instant for an active account', async () => {
+    const { service, profiles } = build({
+      profiles: { findById: vi.fn(async () => ({ ...PROFILE, last_seen_at: new Date(12_345).toISOString() })) },
+    });
+
+    const session = await service.loadSession(PROFILE.id);
+
+    expect(session?.user.id).toBe(PROFILE.id);
+    expect(session?.lastSeenAtMs).toBe(12_345);
+    expect(profiles.findById).toHaveBeenCalledWith(PROFILE.id);
+  });
+
+  it('returns undefined when no profile exists', async () => {
+    const { service } = build({ profiles: { findById: vi.fn(async () => undefined) } });
+
+    expect(await service.loadSession('ghost')).toBeUndefined();
+  });
+
+  it('returns undefined for a deactivated account', async () => {
+    const { service } = build({
+      profiles: { findById: vi.fn(async () => ({ ...PROFILE, is_active: false })) },
+    });
+
+    expect(await service.loadSession(PROFILE.id)).toBeUndefined();
+  });
+});
+
+/**
+ * NFR-009 — a failed renewal write must not fail the request it rides on (US-003 design note
+ * §2.5); the cost of a lost stamp is at most one throttle interval, retried on the next request.
+ */
+describe('markSeen (US-003)', () => {
+  it('writes the given instant through the repository', async () => {
+    const stampLastSeen = vi.fn(async () => undefined);
+    const { service } = build({ profiles: { stampLastSeen } });
+
+    await service.markSeen(PROFILE.id, new Date(99_000));
+
+    expect(stampLastSeen).toHaveBeenCalledWith(PROFILE.id, new Date(99_000));
+  });
+
+  it('does not reject when the write fails — logs and continues', async () => {
+    const { service } = build({
+      profiles: { stampLastSeen: vi.fn(async () => { throw new Error('db is down'); }) },
+    });
+
+    await expect(service.markSeen(PROFILE.id, new Date(0))).resolves.toBeUndefined();
   });
 });
 

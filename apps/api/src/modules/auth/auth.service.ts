@@ -119,15 +119,34 @@ export function createAuthService({ auth, profiles, nowMs, floorMs }: AuthServic
         return reject();
       }
 
-      await profiles.stampLastSeen(profile.id);
+      // Same reading as `startedAtMs` above — not a fresh `nowMs()` call. One clock read per
+      // outcome is the rule `reject()`'s own comment already states for this file.
+      await profiles.stampLastSeen(profile.id, new Date(startedAtMs));
 
       return { kind: 'ok', session: toSession(attempt.session), user: toUser(profile) };
     },
 
-    /** `GET /api/auth/session` — the role comes from the table, never from a JWT claim. */
-    async currentUser(userId: string): Promise<AuthenticatedUser | undefined> {
+    /**
+     * `GET /api/auth/session`, and `require-session.ts` steps 3–4 (US-003/NFR-009). The role
+     * comes from the table, never from a JWT claim. `lastSeenAtMs` is the session's age, parsed
+     * once here so the middleware compares numbers, never a string.
+     */
+    async loadSession(userId: string): Promise<{ user: AuthenticatedUser; lastSeenAtMs: number } | undefined> {
       const profile = await profiles.findById(userId);
-      return profile && profile.is_active ? toUser(profile) : undefined;
+      if (!profile || !profile.is_active) return undefined;
+      return { user: toUser(profile), lastSeenAtMs: new Date(profile.last_seen_at).getTime() };
+    },
+
+    /**
+     * NFR-009's renewal write. Awaited, never rethrown: a transient failure here must not turn
+     * an otherwise-successful authenticated request into a `500` — the same device
+     * `attemptSignIn` uses for a failed revoke (US-003 design note §2.5). The cost of a lost
+     * stamp is at most one throttle interval of un-renewed session; the next request retries it.
+     */
+    async markSeen(userId: string, at: Date): Promise<void> {
+      await profiles.stampLastSeen(userId, at).catch((error: unknown) => {
+        logger.warn('last_seen_at renewal failed', { userId, error });
+      });
     },
 
     /**

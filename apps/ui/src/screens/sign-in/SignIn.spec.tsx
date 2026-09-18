@@ -40,7 +40,7 @@ function renderSignIn(request: ApiClient['request']) {
   const client = { request } as ApiClient;
   return render(
     <MemoryRouter initialEntries={['/sign-in']}>
-      <AuthProvider client={client} onSession={() => undefined}>
+      <AuthProvider client={client} onSession={() => undefined} getStoredSession={async () => undefined}>
         <Routes>
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/bookings" element={<h1>My bookings</h1>} />
@@ -57,6 +57,15 @@ const fill = async (email: string, password: string) => {
 };
 
 const submit = () => userEvent.click(screen.getByRole('button', { name: /^Sign in$/ }));
+
+describe('SCR-001 structural decisions (US-003/AC-05)', () => {
+  it('shows no remember-me or session-length control — the default already is remember-me (US-003/AC-05)', () => {
+    renderSignIn(vi.fn());
+
+    expect(screen.queryByText(/remember me|keep me signed in|stay signed in/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+});
 
 describe('ST-01 Default (US-001/AC-05)', () => {
   it('shows both labelled fields, an enabled Sign in, and the help text (US-001/AC-05)', () => {

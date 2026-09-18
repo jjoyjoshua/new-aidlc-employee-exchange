@@ -23,6 +23,10 @@ const EMPLOYEE: UserProfileRow = {
   role: 'employee',
   is_active: true,
   must_change_password: false,
+  // Recent, not epoch 0: most tests here use the real clock (no `nowMs` override) and must not
+  // accidentally trip NFR-009's 30-day expiry. Tests that exercise the expiry itself set their
+  // own `last_seen_at` and inject `nowMs` explicitly (see the US-003 describe block below).
+  last_seen_at: new Date().toISOString(),
 };
 
 const ADMIN: UserProfileRow = { ...EMPLOYEE, id: '9c858901-8a57-4791-81fe-4c455b099bc9', email: 'marcus@company.com', full_name: 'Marcus Webb', role: 'admin' };
@@ -34,7 +38,13 @@ const SESSION = { access_token: 'access-token', refresh_token: 'refresh-token', 
 const FLOOR_MS = 50;
 
 beforeEach(() => {
-  setConfigForTesting({ NODE_ENV: 'test', PORT: 3000, CORS_ORIGINS: [] } as unknown as Config);
+  setConfigForTesting({
+    NODE_ENV: 'test',
+    PORT: 3000,
+    CORS_ORIGINS: [],
+    SESSION_LIFETIME_DAYS: 30,
+    SESSION_LAST_SEEN_THROTTLE_MINUTES: 60,
+  } as unknown as Config);
 });
 
 /**
@@ -47,6 +57,9 @@ function appWith(options: {
   byEmail?: Record<string, AuthAttempt>;
   rows?: UserProfileRow[];
   tokens?: Record<string, string>;
+  nowMs?: () => number;
+  sessionLifetimeMs?: number;
+  lastSeenThrottleMs?: number;
 }) {
   const rows = options.rows ?? [EMPLOYEE, ADMIN, DEACTIVATED];
   // Mutable, and read by BOTH the verifier and the stub's revoke — so a sign-out that revokes a
@@ -70,8 +83,12 @@ function appWith(options: {
     async findById(id) {
       return rows.find((r) => r.id === id);
     },
-    async stampLastSeen() {
-      /* no-op */
+    async stampLastSeen(id, at) {
+      // NFR-009 — a real write against the stub's own row, not a call recorded on the side: the
+      // next request in the same test must see the renewal (design note §10; `testing-standards.md`
+      // bans asserting the mock).
+      const row = rows.find((r) => r.id === id);
+      if (row) row.last_seen_at = at.toISOString();
     },
   };
 
@@ -81,7 +98,20 @@ function appWith(options: {
     },
   };
 
-  return { app: buildApp({ auth, profiles, verifier, floorMs: FLOOR_MS }), revoked, tokens };
+  return {
+    app: buildApp({
+      auth,
+      profiles,
+      verifier,
+      floorMs: FLOOR_MS,
+      ...(options.nowMs ? { nowMs: options.nowMs } : {}),
+      ...(options.sessionLifetimeMs !== undefined ? { sessionLifetimeMs: options.sessionLifetimeMs } : {}),
+      ...(options.lastSeenThrottleMs !== undefined ? { lastSeenThrottleMs: options.lastSeenThrottleMs } : {}),
+    }),
+    revoked,
+    tokens,
+    rows,
+  };
 }
 
 const post = (app: ReturnType<typeof buildApp>, body: unknown) =>
@@ -446,5 +476,126 @@ describe('GET /api/auth/session (US-001/AC-02)', () => {
     const response = await request(app).get('/api/auth/session');
 
     expect(response.status).toBe(401);
+  });
+});
+
+/**
+ * NFR-009 — a session lasts 30 days from last use, sliding forward on every use.
+ *
+ * A mutable clock so one test can move time forward across several requests without waiting —
+ * the QA note's own instruction, and the reason `buildApp`'s `nowMs`/`sessionLifetimeMs`/
+ * `lastSeenThrottleMs` overrides exist (US-003 design note §3, §10).
+ */
+function mutableClock(startMs: number) {
+  let current = startMs;
+  return { nowMs: () => current, advance: (ms: number) => { current += ms; } };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+describe('session lifetime — sliding 30-day expiry (US-003)', () => {
+  it('does not challenge a session used 29 days ago (US-003/AC-01)', async () => {
+    const T0 = 1_700_000_000_000;
+    const clock = mutableClock(T0);
+    const aged: UserProfileRow = { ...EMPLOYEE, last_seen_at: new Date(T0 - 29 * DAY_MS).toISOString() };
+    const { app } = appWith({
+      rows: [aged],
+      tokens: { 'access-token': aged.id },
+      nowMs: clock.nowMs,
+      sessionLifetimeMs: 30 * DAY_MS,
+      lastSeenThrottleMs: HOUR_MS,
+    });
+
+    const response = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+
+    expect(response.status).toBe(200);
+  });
+
+  it('slides the window forward on use — 40 days after sign-in, still valid because used daily (US-003/AC-02)', async () => {
+    const T0 = 1_700_000_000_000;
+    const clock = mutableClock(T0);
+    const row: UserProfileRow = { ...EMPLOYEE, last_seen_at: new Date(T0 - 20 * DAY_MS).toISOString() };
+    const { app, rows } = appWith({
+      rows: [row],
+      tokens: { 'access-token': row.id },
+      nowMs: clock.nowMs,
+      sessionLifetimeMs: 30 * DAY_MS,
+      lastSeenThrottleMs: HOUR_MS,
+    });
+
+    // Used today: renews last_seen_at to T0.
+    const first = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+    expect(first.status).toBe(200);
+    expect(rows[0]?.last_seen_at).toBe(new Date(T0).toISOString());
+
+    // 20 more days pass — 40 days after the original sign-in, but only 20 since last use.
+    clock.advance(20 * DAY_MS);
+    const second = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+
+    expect(second.status).toBe(200);
+  });
+
+  it('throttles the renewal write to once per configured interval (US-003/AC-02)', async () => {
+    const T0 = 1_700_000_000_000;
+    const clock = mutableClock(T0);
+    const row: UserProfileRow = { ...EMPLOYEE, last_seen_at: new Date(T0).toISOString() };
+    const { app, rows } = appWith({
+      rows: [row],
+      tokens: { 'access-token': row.id },
+      nowMs: clock.nowMs,
+      sessionLifetimeMs: 30 * DAY_MS,
+      lastSeenThrottleMs: HOUR_MS,
+    });
+
+    clock.advance(30 * 60 * 1000);
+    await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+    expect(rows[0]?.last_seen_at).toBe(new Date(T0).toISOString());
+
+    clock.advance(60 * 60 * 1000);
+    await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+    expect(rows[0]?.last_seen_at).toBe(new Date(T0 + 90 * 60 * 1000).toISOString());
+  });
+
+  it('refuses a session unused for 31 days, and does not renew the refused request (US-003/AC-03)', async () => {
+    const T0 = 1_700_000_000_000;
+    const clock = mutableClock(T0);
+    const row: UserProfileRow = { ...EMPLOYEE, last_seen_at: new Date(T0 - 31 * DAY_MS).toISOString() };
+    const original = row.last_seen_at;
+    const { app, rows } = appWith({
+      rows: [row],
+      tokens: { 'access-token': row.id },
+      nowMs: clock.nowMs,
+      sessionLifetimeMs: 30 * DAY_MS,
+      lastSeenThrottleMs: HOUR_MS,
+    });
+
+    const response = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('session_expired');
+    // The stamping bug this order guards against: a stamp here would resurrect the very session
+    // the rule just refused (design note §2.3).
+    expect(rows[0]?.last_seen_at).toBe(original);
+  });
+
+  it('never challenges a session across day 1, day 15 and day 29 of the window (US-003/AC-04)', async () => {
+    const T0 = 1_700_000_000_000;
+    const clock = mutableClock(T0);
+    const row: UserProfileRow = { ...EMPLOYEE, last_seen_at: new Date(T0).toISOString() };
+    const { app } = appWith({
+      rows: [row],
+      tokens: { 'access-token': row.id },
+      nowMs: clock.nowMs,
+      sessionLifetimeMs: 30 * DAY_MS,
+      lastSeenThrottleMs: HOUR_MS,
+    });
+
+    // Day 1, then day 15 (+14), then day 29 (+14) — each request also renews the window.
+    for (const advanceByMs of [1 * DAY_MS, 14 * DAY_MS, 14 * DAY_MS]) {
+      clock.advance(advanceByMs);
+      const response = await request(app).get('/api/auth/session').set('Authorization', 'Bearer access-token');
+      expect(response.status).toBe(200);
+    }
   });
 });

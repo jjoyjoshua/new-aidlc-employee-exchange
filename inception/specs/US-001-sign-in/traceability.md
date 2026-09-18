@@ -42,7 +42,7 @@ it is visible in the migration and in the dashboard, not in a test.
 | FR-15  | `apps/api/src/modules/auth/auth.router.ts` | generic 400 body | `apps/api/src/modules/auth/auth.routes.spec.ts` | implemented |
 | FR-16  | `apps/api/src/modules/auth/auth.router.ts` | `GET /session` handler | `apps/api/src/modules/auth/auth.routes.spec.ts` | implemented |
 | FR-17  | `apps/api/src/http/middleware/require-session.ts` | `requireSession` | `apps/api/src/modules/auth/auth.routes.spec.ts` | implemented |
-| FR-18  | `apps/api/src/modules/auth/auth.repository.ts` | `stampLastSeen` + US-003 seam | `apps/api/src/modules/auth/auth.service.spec.ts` | implemented |
+| FR-18  | — | requireSession's per-request stamp + 30-day comparison | — | closed by US-003 |
 | FR-19  | `apps/api/src/http/middleware/require-session.ts` | US-004 seam (steps 4 and 5) | — (seam only; US-004 proves it) | seam only |
 | FR-20  | `apps/api/src/http/app.ts` | the `/api/admin` mount | `apps/api/src/modules/auth/auth.routes.spec.ts` | implemented |
 | FR-21  | `apps/api/src/http/middleware/require-admin.ts` | `requireAdmin` | `apps/api/src/modules/auth/auth.routes.spec.ts` | implemented |
