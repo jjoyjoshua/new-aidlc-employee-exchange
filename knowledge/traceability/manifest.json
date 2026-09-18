@@ -552,7 +552,18 @@
         "AC-07",
         "AC-08"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/booking-window.spec.ts",
+        "libs/contracts/src/auth.spec.ts",
+        "apps/api/src/domain/booking-window.spec.ts",
+        "apps/api/src/modules/auth/auth.routes.spec.ts",
+        "apps/ui/src/lib/auth/auth-context.spec.tsx",
+        "apps/ui/src/lib/format-office-date.spec.ts",
+        "apps/ui/src/components/date-strip/DateStrip.spec.tsx",
+        "apps/ui/src/components/date-picker/DatePicker.spec.tsx",
+        "apps/ui/src/screens/book-a-desk/use-availability.spec.ts",
+        "apps/ui/src/screens/book-a-desk/BookADesk.spec.tsx"
+      ],
       "screens": [
         "SCR-003"
       ]

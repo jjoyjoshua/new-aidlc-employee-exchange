@@ -1,0 +1,182 @@
+/*
+ * DateStrip — Figma `Date strip` (node 28:392).
+ *
+ * Measured, not chosen (SCR-003 structural decisions, 2026-09-08): 7 chips fit the 1280 card,
+ * 5 fit the 768 card, 3 fit the 360 card. All 7 days stay in the DOM at every width — only
+ * their visibility is media-queried — so the full window is always reachable by keyboard and
+ * always readable to a screen reader, and paging always moves by exactly one day.
+ */
+
+.date-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-16);
+  width: 100%;
+  padding: var(--s-16);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.date-strip__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-8);
+  width: 100%;
+}
+
+.date-strip__page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 10px;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-control);
+  border-radius: var(--r-md);
+  color: var(--c-text);
+}
+
+.date-strip__page svg {
+  width: 20px;
+  height: 20px;
+}
+
+.date-strip__page:disabled {
+  color: var(--c-text-disabled);
+  border-color: var(--c-border);
+}
+
+.date-strip__page:focus-visible,
+.date-strip__chip:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+.date-strip__days {
+  display: flex;
+  gap: var(--s-8);
+  justify-content: center;
+  overflow: hidden;
+}
+
+.date-strip__chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  flex-shrink: 0;
+  width: 76px;
+  height: 100px;
+  padding: var(--s-8) var(--s-4);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-control);
+  border-radius: var(--r-md);
+  font-family: var(--f-body);
+  text-align: center;
+}
+
+.date-strip__weekday {
+  font-size: var(--t-label);
+  line-height: var(--lh-label);
+  color: var(--c-text-muted);
+}
+
+.date-strip__day {
+  font-size: var(--t-heading-sm);
+  line-height: var(--lh-heading-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+.date-strip__chip--selected {
+  background: var(--c-selected);
+  border-color: var(--c-selected);
+}
+
+.date-strip__chip--selected .date-strip__weekday {
+  color: var(--c-action-label-secondary);
+}
+
+.date-strip__chip--selected .date-strip__day {
+  color: var(--c-action-label);
+}
+
+.date-strip__chip--refused {
+  background: var(--c-fill-subtle);
+  border-color: var(--c-border);
+  cursor: default;
+}
+
+.date-strip__chip--refused .date-strip__weekday,
+.date-strip__chip--refused .date-strip__day {
+  color: var(--c-text-disabled);
+}
+
+.date-strip__reason {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-label);
+  line-height: var(--lh-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-muted);
+}
+
+.date-strip__reason svg {
+  width: 16px;
+  height: 16px;
+}
+
+.date-strip__pick-another {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: var(--s-8) var(--s-16);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-control);
+  border-radius: var(--r-md);
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+.date-strip__pick-another svg {
+  width: 20px;
+  height: 20px;
+}
+
+.date-strip__pick-another:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+/* 360: three chips. 768 and up: widened progressively — see the 768 rule below. */
+.date-strip__chip:nth-child(n + 4) {
+  display: none;
+}
+
+/* 768–1279: five chips. */
+@media (min-width: 768px) {
+  .date-strip__chip:nth-child(n + 4) {
+    display: flex;
+  }
+
+  .date-strip__chip:nth-child(n + 6) {
+    display: none;
+  }
+}
+
+/* 1280 and up: all seven chips. */
+@media (min-width: 1280px) {
+  .date-strip__chip:nth-child(n + 6) {
+    display: flex;
+  }
+}

@@ -6,6 +6,21 @@
  */
 import { z } from 'zod';
 import { newPasswordSchema } from './password.js';
+import { officeDateSchema } from './booking-window.js';
+
+/**
+ * The office's own clock, as the browser is allowed to know it (NFR-001). `today` is the
+ * server's answer, not the device's — sent rather than derived from the device's clock with
+ * `Intl`, because a skewed device clock would render a window starting a day late and let an
+ * employee pick a date the server refuses only after she commits (SCR-003's PRIN-2). It is
+ * stale only across an office midnight with the tab left open, which US-005's edge cases
+ * explicitly do not require re-deriving.
+ */
+export const officeSchema = z.object({
+  timezone: z.string().min(1),
+  today: officeDateSchema,
+});
+export type Office = z.infer<typeof officeSchema>;
 
 /** `db-design.md` §1.1 — the `user_role` enum. */
 export const userRoleSchema = z.enum(['employee', 'admin']);
@@ -71,10 +86,11 @@ export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 export const signInResponseSchema = z.object({
   session: sessionSchema,
   user: authenticatedUserSchema,
+  office: officeSchema,
 });
 export type SignInResponse = z.infer<typeof signInResponseSchema>;
 
-export const sessionResponseSchema = z.object({ user: authenticatedUserSchema });
+export const sessionResponseSchema = z.object({ user: authenticatedUserSchema, office: officeSchema });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
 /**

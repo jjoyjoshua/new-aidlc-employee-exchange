@@ -181,7 +181,9 @@ export default tseslint.config(
               group: ['@desk-booking/api', '@desk-booking/ui', '**/apps/**', '../**/apps/**'],
               message:
                 'libs/contracts depends on zod and nothing else (ADR-002). It describes what ' +
-                'crosses the wire; the rules live in apps/api/src/domain.',
+                'crosses the wire, plus the rules both sides must evaluate identically ' +
+                '(evaluatePasswordPolicy, booking-window) — persistence, HTTP and auth stay in ' +
+                'apps/api/src/domain.',
             },
           ],
         },

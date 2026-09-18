@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { officeDateSchema } from './booking-window.js';
 import {
+  officeSchema,
   signInRequestSchema,
   signInResponseSchema,
+  sessionResponseSchema,
   setPasswordRequestSchema,
   setPasswordResponseSchema,
 } from './auth.js';
@@ -65,6 +68,30 @@ describe('signInRequestSchema', () => {
   });
 });
 
+describe('officeDateSchema (US-005)', () => {
+  it('accepts a YYYY-MM-DD string', () => {
+    expect(officeDateSchema.safeParse('2026-09-18').success).toBe(true);
+  });
+
+  it('rejects a string that is not YYYY-MM-DD', () => {
+    expect(officeDateSchema.safeParse('18-09-2026').success).toBe(false);
+    expect(officeDateSchema.safeParse('2026-9-18').success).toBe(false);
+    expect(officeDateSchema.safeParse('not-a-date').success).toBe(false);
+  });
+});
+
+describe('officeSchema (US-005/AC-07)', () => {
+  it('accepts a timezone name and an office-local date', () => {
+    const result = officeSchema.safeParse({ timezone: 'Asia/Kolkata', today: '2026-09-18' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty timezone', () => {
+    expect(officeSchema.safeParse({ timezone: '', today: '2026-09-18' }).success).toBe(false);
+  });
+});
+
 describe('signInResponseSchema', () => {
   const valid = {
     session: { accessToken: 'a', refreshToken: 'r', expiresAt: 1789200000 },
@@ -75,7 +102,14 @@ describe('signInResponseSchema', () => {
       role: 'employee',
       mustChangePassword: false,
     },
+    office: { timezone: 'Asia/Kolkata', today: '2026-09-18' },
   };
+
+  it('requires office alongside user and session (US-005/AC-07)', () => {
+    const { office: _office, ...withoutOffice } = valid;
+
+    expect(signInResponseSchema.safeParse(withoutOffice).success).toBe(false);
+  });
 
   it('accepts a response that gained a field, so an old tab survives a deploy (US-001/AC-07)', () => {
     const result = signInResponseSchema.safeParse({ ...valid, issuedBy: 'a-newer-server' });
@@ -97,6 +131,29 @@ describe('signInResponseSchema', () => {
     const result = signInResponseSchema.safeParse({ ...valid, user: userWithoutRole });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('sessionResponseSchema (US-005/AC-07)', () => {
+  const valid = {
+    user: {
+      id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+      email: 'priya@company.com',
+      fullName: 'Priya Sharma',
+      role: 'employee',
+      mustChangePassword: false,
+    },
+    office: { timezone: 'Asia/Kolkata', today: '2026-09-18' },
+  };
+
+  it('accepts user plus office (US-005/AC-07)', () => {
+    expect(sessionResponseSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('requires office alongside user (US-005/AC-07)', () => {
+    const { office: _office, ...withoutOffice } = valid;
+
+    expect(sessionResponseSchema.safeParse(withoutOffice).success).toBe(false);
   });
 });
 

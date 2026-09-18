@@ -1,0 +1,51 @@
+/*
+ * BookADesk — SCR-003, US-005's slice (ST-01, ST-02, ST-03: the date controls). The desk list
+ * and confirm action US-006/US-007 add below this are not this file's concern yet.
+ */
+
+.book-a-desk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-24);
+  max-width: 1104px;
+}
+
+.book-a-desk__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-16);
+}
+
+.book-a-desk__header h1 {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-heading-lg);
+  line-height: var(--lh-heading-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+.book-a-desk__timezone {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .book-a-desk__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-2);
+  }
+}
+
+/* Figma "Popover anchor" (node 44:4385) — centres the calendar under the full-width strip. */
+.book-a-desk__picker-anchor {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}

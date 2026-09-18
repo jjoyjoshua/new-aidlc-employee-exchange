@@ -17,6 +17,9 @@ import { AuthProvider, useAuth } from './auth-context.js';
  */
 
 const SESSION = { accessToken: 'the-session-token', refreshToken: 'r', expiresAt: 1_789_200_000 };
+// US-005/AC-07 — every sign-in and session-check fixture in this file carries `office`, since
+// both response schemas now require it.
+const OFFICE = { timezone: 'Asia/Kolkata', today: '2026-09-18' };
 const USER = {
   id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
   email: 'priya@company.com',
@@ -40,11 +43,12 @@ afterEach(() => {
 });
 
 function Harness() {
-  const { user, signIn, signOut, setPassword } = useAuth();
+  const { user, office, signIn, signOut, setPassword } = useAuth();
   const [setPasswordResult, setSetPasswordResult] = useState('idle');
   return (
     <div>
       <div data-testid="user">{user ? user.email : 'none'}</div>
+      <div data-testid="office">{office ? `${office.timezone} ${office.today}` : 'no-office'}</div>
       <div data-testid="mustChangePassword">{user ? String(user.mustChangePassword) : 'n/a'}</div>
       <div data-testid="setPasswordResult">{setPasswordResult}</div>
       <button onClick={() => void signIn('priya@company.com', 'correct')}>sign in</button>
@@ -78,17 +82,18 @@ function renderHarness(onSignOut: () => void = () => undefined) {
  */
 describe('AuthProvider — cold-boot rehydration (US-003)', () => {
   function BootHarness() {
-    const { user, status } = useAuth();
+    const { user, office, status } = useAuth();
     return (
       <div>
         <div data-testid="status">{status}</div>
         <div data-testid="user">{user ? user.email : 'none'}</div>
+        <div data-testid="office">{office ? `${office.timezone} ${office.today}` : 'no-office'}</div>
       </div>
     );
   }
 
   it('renders signed in after a stored session is confirmed by the server, with no password prompt (US-003/AC-01)', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { user: USER }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { user: USER, office: OFFICE }));
 
     render(
       <AuthProvider getStoredSession={async () => ({ accessToken: SESSION.accessToken })}>
@@ -96,8 +101,24 @@ describe('AuthProvider — cold-boot rehydration (US-003)', () => {
       </AuthProvider>,
     );
 
-    expect(await screen.findByTestId('status')).toHaveTextContent('signedIn');
+    expect(await screen.findByText('signedIn')).toBeInTheDocument();
     expect(screen.getByTestId('user')).toHaveTextContent('priya@company.com');
+  });
+
+  it('exposes office from the session-check response after cold-boot rehydration (US-005/AC-07, US-005/FR-01)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { user: USER, office: OFFICE }));
+
+    render(
+      <AuthProvider getStoredSession={async () => ({ accessToken: SESSION.accessToken })}>
+        <BootHarness />
+      </AuthProvider>,
+    );
+
+    // `findByTestId` resolves as soon as the element EXISTS — and the office div is rendered
+    // unconditionally, with a 'no-office' fallback, from the very first render. Asserting its
+    // content only after that resolves is a race with the boot effect's own async chain.
+    // `findByText` instead polls for the CONTENT itself, which is the thing actually awaited.
+    expect(await screen.findByText('Asia/Kolkata 2026-09-18')).toBeInTheDocument();
   });
 
   it('resolves straight to signed out with no network call when nothing is stored', async () => {
@@ -107,7 +128,7 @@ describe('AuthProvider — cold-boot rehydration (US-003)', () => {
       </AuthProvider>,
     );
 
-    expect(await screen.findByTestId('status')).toHaveTextContent('signedOut');
+    expect(await screen.findByText('signedOut')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -126,7 +147,7 @@ describe('AuthProvider — cold-boot rehydration (US-003)', () => {
       </AuthProvider>,
     );
 
-    expect(await screen.findByTestId('status')).toHaveTextContent('signedOut');
+    expect(await screen.findByText('signedOut')).toBeInTheDocument();
     expect(screen.getByTestId('user')).toHaveTextContent('none');
     expect(onSignOut).toHaveBeenCalled();
   });
@@ -144,15 +165,27 @@ describe('AuthProvider — cold-boot rehydration (US-003)', () => {
       </AuthProvider>,
     );
 
-    expect(await screen.findByTestId('status')).toHaveTextContent('signedOut');
+    expect(await screen.findByText('signedOut')).toBeInTheDocument();
     expect(onSignOut).not.toHaveBeenCalled();
+  });
+});
+
+describe('sign-in exposes office (US-005/FR-01)', () => {
+  it('sets office from the sign-in response (US-005/AC-07)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }));
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+
+    expect(await screen.findByText('Asia/Kolkata 2026-09-18')).toBeInTheDocument();
   });
 });
 
 describe('signOut — the request carries the token this tab actually holds (US-002/AC-02)', () => {
   it('sends the bearer token obtained at sign-in, not none', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     renderHarness();
@@ -170,7 +203,7 @@ describe('signOut — the request carries the token this tab actually holds (US-
 
   it('clears the signed-in user after the server confirms', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     renderHarness();
@@ -186,7 +219,7 @@ describe('signOut — the request carries the token this tab actually holds (US-
   it('still clears local state when the sign-out request fails to reach the server (US-002/D-04)', async () => {
     // A transport failure must not strand someone on a signed-in screen. There is no UI state
     // for a failed sign-out anywhere in the design.
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER })).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE })).mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     renderHarness();
 
@@ -200,7 +233,7 @@ describe('signOut — the request carries the token this tab actually holds (US-
 
   it('still clears local state when forgetting the browser copy fails', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     renderHarness(() => {
@@ -221,7 +254,7 @@ const MUST_CHANGE_USER = { ...USER, mustChangePassword: true };
 describe('setPassword (US-004)', () => {
   it('sets the returned user, with the mark cleared, before resolving (US-004/AC-06, US-004/AC-07)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER, office: OFFICE }))
       .mockResolvedValueOnce(jsonResponse(200, { user: { ...MUST_CHANGE_USER, mustChangePassword: false } }));
 
     renderHarness();
@@ -237,7 +270,7 @@ describe('setPassword (US-004)', () => {
 
   it('sends only newPassword in the body — no confirm field crosses the wire (design note §2.2)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER, office: OFFICE }))
       .mockResolvedValueOnce(jsonResponse(200, { user: { ...MUST_CHANGE_USER, mustChangePassword: false } }));
 
     renderHarness();
@@ -255,7 +288,7 @@ describe('setPassword (US-004)', () => {
 
   it('maps password_same_as_current to same-as-current, leaving the mark untouched (US-004/AC-05)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER, office: OFFICE }))
       .mockResolvedValueOnce(
         jsonResponse(422, {
           statusCode: 422,
@@ -277,7 +310,7 @@ describe('setPassword (US-004)', () => {
 
   it('maps every other server refusal to failed — ST-06 is one state for all of them (US-004)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER, office: OFFICE }))
       .mockResolvedValueOnce(
         jsonResponse(503, { statusCode: 503, code: 'service_unavailable', message: 'unavailable' }),
       );
@@ -298,7 +331,7 @@ describe('setPassword (US-004)', () => {
     // signOut's token handling — by asserting what actually crosses the wire next.
     const freshSession = { accessToken: 'fresh-token', refreshToken: 'fresh-refresh', expiresAt: 1_789_200_000 };
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER, office: OFFICE }))
       .mockResolvedValueOnce(
         jsonResponse(200, { user: { ...MUST_CHANGE_USER, mustChangePassword: false }, session: freshSession }),
       )
@@ -320,7 +353,7 @@ describe('setPassword (US-004)', () => {
 
   it('maps a transport failure to failed as well (US-004 edge case — a save failure that is not AC-05)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER, office: OFFICE }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     renderHarness();
