@@ -53,6 +53,11 @@ describe('ERROR_CODES', () => {
     expect(ERROR_CODES.password_change_not_required).not.toBe(ERROR_CODES.password_change_required);
   });
 
+  it('carries date_not_bookable, for a well-formed date the window rules refuse (US-006)', () => {
+    expect(ERROR_CODES.date_not_bookable).toBe('date_not_bookable');
+    expect(errorCodeSchema.parse('date_not_bookable')).toBe('date_not_bookable');
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

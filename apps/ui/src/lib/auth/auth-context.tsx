@@ -81,6 +81,14 @@ export interface AuthContextValue {
    * change on the very next render. Does not navigate; the screen does (design note §7.3).
    */
   setPassword(newPassword: string): Promise<SetPasswordResult>;
+  /**
+   * US-006/D-08. The authenticated client every screen beyond `auth` needs for its own reads —
+   * `fetch-availability.ts` is the first caller. It is the exact same instance `signIn`/
+   * `setPassword` already use above, exposed rather than re-built per screen: `getAccessToken`
+   * must read `accessTokenRef`, which only this provider holds, so a screen constructing its own
+   * client would either duplicate that ref or read a token that never updates after sign-in.
+   */
+  api: ApiClient;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -280,8 +288,8 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, office, status, signIn, signOut, setPassword }),
-    [user, office, status, signIn, signOut, setPassword],
+    () => ({ user, office, status, signIn, signOut, setPassword, api }),
+    [user, office, status, signIn, signOut, setPassword, api],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

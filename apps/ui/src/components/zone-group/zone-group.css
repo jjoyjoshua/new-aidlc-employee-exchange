@@ -1,0 +1,37 @@
+/*
+ * ZoneGroup — Figma `Zone group` frame. Heading text (`ZONE A`, --t-label/--fw-semibold,
+ * uppercase via CSS rather than the string itself so the accessible name stays "Zone A") above a
+ * card: `--c-surface-raised`, `--bw-1` solid `--c-border`, `--r-lg`, no internal padding — the
+ * rows go edge to edge, separated by `--c-border` dividers (`Desk row`'s own documentation).
+ */
+
+.zone-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+}
+
+.zone-group__heading {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-label);
+  line-height: var(--lh-label);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.zone-group__card {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.zone-group__divider {
+  height: 1px;
+  background: var(--c-border);
+}

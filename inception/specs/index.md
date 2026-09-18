@@ -9,6 +9,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-003 | Stay signed in for 30 days | Complex | planned | [`US-003-thirty-day-session/`](US-003-thirty-day-session/) |
 | US-004 | Replace an administrator-set password at first sign-in | Complex | planned | [`US-004-replace-administrator-set-password/`](US-004-replace-administrator-set-password/) |
 | US-005 | Choose a booking date inside the window | Complex | planned | [`US-005-choose-a-booking-date/`](US-005-choose-a-booking-date/) |
+| US-006 | See desk availability for the chosen date | Complex | approved | [`US-006-see-desk-availability/`](US-006-see-desk-availability/) |
 
 ## How to update
 

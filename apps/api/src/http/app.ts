@@ -22,6 +22,7 @@ import { requireHttps } from './middleware/require-https.js';
 export interface AppDeps {
   authRouter: Router;
   adminRouter: Router;
+  bookingsRouter: Router;
   requireSession: RequestHandler;
 }
 
@@ -76,8 +77,11 @@ export function createApp(deps: AppDeps): Express {
   // guard rather than 404 from the router.
   app.use('/api/admin', deps.requireSession, requireAdmin, deps.adminRouter);
 
-  // app.use('/api/bookings', bookingsRouter);
-  // ...
+  // US-006. The guard mounts on the mount point, same reasoning as `/api/admin` above: every
+  // future `bookings` route (US-007's POST included) inherits it before it is written. The
+  // enforced `session` instance, not the password-change-exempt one — a user with
+  // `must_change_password` set must not browse availability.
+  app.use('/api/bookings', deps.requireSession, deps.bookingsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

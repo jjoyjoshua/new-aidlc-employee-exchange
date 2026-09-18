@@ -1,13 +1,25 @@
 /*
- * BookADesk — SCR-003, US-005's slice (ST-01, ST-02, ST-03: the date controls). The desk list
- * and confirm action US-006/US-007 add below this are not this file's concern yet.
+ * BookADesk — SCR-003. US-005 built the date controls (ST-01, ST-02, ST-03); US-006 adds the
+ * count line, the zone list, and the loading/empty/error states below them. The confirm action
+ * (US-007) is not this file's concern yet.
+ *
+ * `--desk-row-height` is defined once, here, and read by both `DeskRow` and `SkeletonRow` — the
+ * single shared source that keeps loading from shifting the layout (US-006/AC-07).
  */
 
 .book-a-desk {
+  --desk-row-height: 56px;
   display: flex;
   flex-direction: column;
   gap: var(--s-24);
   max-width: 1104px;
+}
+
+.book-a-desk__skeleton-list,
+.book-a-desk__zones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-24);
 }
 
 .book-a-desk__header {

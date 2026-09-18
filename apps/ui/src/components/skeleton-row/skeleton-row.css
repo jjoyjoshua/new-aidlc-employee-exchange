@@ -1,0 +1,29 @@
+/*
+ * SkeletonRow — US-006/AC-07. Same height as `DeskRow`, via `--desk-row-height`
+ * (`book-a-desk.css`), so nothing shifts when the real rows replace these.
+ */
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  height: var(--desk-row-height, 56px);
+  padding: var(--s-16) var(--s-16) var(--s-16) var(--s-12);
+}
+
+.skeleton-row__bar {
+  display: block;
+  border-radius: var(--r-sm);
+  background: var(--c-fill-subtle);
+}
+
+.skeleton-row__bar--number {
+  width: 40px;
+  height: var(--icon-sm);
+}
+
+.skeleton-row__bar--chip {
+  width: 88px;
+  height: 24px;
+  border-radius: var(--r-full);
+}

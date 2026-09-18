@@ -17,6 +17,9 @@ import { supabaseAuthAdapter } from './modules/auth/auth.adapter.js';
 import { profileRepository, type ProfileRepository } from './modules/auth/auth.repository.js';
 import { createAuthRouter } from './modules/auth/auth.router.js';
 import { createAuthService, type AuthAdapter } from './modules/auth/auth.service.js';
+import { availabilityRepository, type AvailabilityRepository } from './modules/bookings/bookings.repository.js';
+import { createBookingsRouter } from './modules/bookings/bookings.router.js';
+import { createBookingsService } from './modules/bookings/bookings.service.js';
 import { SIGN_IN_MIN_FAILURE_MS } from './domain/sign-in-failure-delay.js';
 import { supabase } from './infra/supabase/index.js';
 import { config } from './config/index.js';
@@ -49,6 +52,8 @@ export interface BuildAppOptions {
   lastSeenThrottleMs?: number;
   /** US-005/AC-07 test seam — overrides the configured `OFFICE_TIMEZONE`. */
   officeTimezone?: string;
+  /** US-006 test seam — overrides the real `desks`/`bookings` reads. */
+  availability?: AvailabilityRepository;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -78,14 +83,23 @@ export function buildApp(options: BuildAppOptions = {}): Express {
   const session = requireSession({ ...sharedDeps, passwordChangeGate: 'enforced' });
   const sessionForPasswordChange = requireSession({ ...sharedDeps, passwordChangeGate: 'exempt' });
 
+  const officeTimezone = options.officeTimezone ?? config().OFFICE_TIMEZONE;
+
+  const bookingsService = createBookingsService({
+    availability: options.availability ?? availabilityRepository,
+    nowMs,
+    officeTimezone,
+  });
+
   return createApp({
     authRouter: createAuthRouter({
       service,
       nowMs,
       requireSession: sessionForPasswordChange,
-      officeTimezone: options.officeTimezone ?? config().OFFICE_TIMEZONE,
+      officeTimezone,
     }),
     adminRouter,
+    bookingsRouter: createBookingsRouter({ service: bookingsService }),
     requireSession: session,
   });
 }

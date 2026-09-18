@@ -1,0 +1,50 @@
+/*
+ * EmptyState — Figma `Empty state` (node 32:187), "No desks" context.
+ * `--c-surface-raised`, `--bw-1` solid `--c-border-strong`, `--r-lg`, `shadow/1`,
+ * `px-24 py-48`, gap `--s-16`, centred text, 40px icon.
+ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-16);
+  padding: var(--s-48) var(--s-24);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  text-align: center;
+}
+
+.empty-state__icon {
+  display: block;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  color: var(--c-text-muted);
+}
+
+.empty-state__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.empty-state__title {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-heading-sm);
+  line-height: var(--lh-heading-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+.empty-state__body {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-secondary);
+}

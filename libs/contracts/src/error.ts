@@ -29,6 +29,10 @@ export const errorCodeSchema = z.enum([
   // change in this release (BRD-001 §10), so the endpoint refuses an account that is not
   // marked. One character from its opposite in a switch, which is why both are constants.
   'password_change_not_required',
+  // US-006 — a well-formed, real calendar date that the date-window rules refuse: before today,
+  // beyond the 30-day window, or a weekend (V-02, V-03). 422, not 400: the request parsed fine,
+  // the rule said no (US-006 design note §2.7). Also US-007's, for the same two rules on a POST.
+  'date_not_bookable',
   'route_not_found',
   'service_unavailable',
   'internal_error',
