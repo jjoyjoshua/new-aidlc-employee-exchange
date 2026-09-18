@@ -721,7 +721,18 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/bookings.spec.ts",
+        "apps/api/src/domain/booking-history.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/bookings.service.spec.ts",
+        "apps/api/src/modules/bookings/bookings.routes.spec.ts",
+        "apps/ui/src/components/status-chip/StatusChip.spec.tsx",
+        "apps/ui/src/screens/my-bookings/BookingRow.spec.tsx",
+        "apps/ui/src/screens/my-bookings/copy.spec.ts",
+        "apps/ui/src/screens/my-bookings/use-my-bookings.spec.ts",
+        "apps/ui/src/screens/my-bookings/MyBookings.spec.tsx"
+      ],
       "screens": [
         "SCR-002"
       ]

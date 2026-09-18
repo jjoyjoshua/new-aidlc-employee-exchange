@@ -57,6 +57,7 @@ interface RecordedCall {
   limit?: number;
   gte?: [string, unknown];
   lte?: [string, unknown];
+  lt?: [string, unknown];
 }
 
 type FakeResponse = { data: unknown; error: { code: string; message: string } | null };
@@ -85,6 +86,10 @@ function fakeSupabase(responses: Record<string, FakeResponse | ((call: RecordedC
       },
       order(column: string, opts?: { ascending?: boolean }) {
         call.order.push({ column, ascending: opts?.ascending ?? true });
+        return builder;
+      },
+      lt(column: string, value: unknown) {
+        call.lt = [column, value];
         return builder;
       },
       insert(row: unknown) {
@@ -483,6 +488,119 @@ describe('availabilityRepository.findMyLastBookedDeskId — US-008/FR-02, FR-03'
       // most recent booking_date; only the created_at desc key picks the confirmed row, which
       // replaced the cancelled one, over whichever row the fixture lists first.
       expect(result).toBe(REBOOKED_DESK_ID);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.listMyBookingsInWindow — US-010/AC-01, AC-03, AC-04, AC-05', () => {
+  it('selects id, booking_date, status and the joined desk_number, filtered to the caller and the date floor, ALL statuses, ordered booking_date desc then created_at desc, with no upper bound when `to` is omitted', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: [{ id: 'b1', booking_date: '2026-09-16', status: 'confirmed', desks: { desk_number: 'A-02' } }], error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.listMyBookingsInWindow('user-1', '2026-08-19');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'id, booking_date, status, desks(desk_number)',
+          eq: [['user_id', 'user-1']],
+          gte: ['booking_date', '2026-08-19'],
+          order: [
+            { column: 'booking_date', ascending: false },
+            { column: 'created_at', ascending: false },
+          ],
+        },
+      ]);
+      expect(result).toEqual([{ id: 'b1', booking_date: '2026-09-16', status: 'confirmed', desk_number: 'A-02' }]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('applies an upper bound with .lte() only when `to` is given (an older page, design note §1.3)', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: [], error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await availabilityRepository.listMyBookingsInWindow('user-1', '2026-07-20', '2026-08-19');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'id, booking_date, status, desks(desk_number)',
+          eq: [['user_id', 'user-1']],
+          gte: ['booking_date', '2026-07-20'],
+          lte: ['booking_date', '2026-08-19'],
+          order: [
+            { column: 'booking_date', ascending: false },
+            { column: 'created_at', ascending: false },
+          ],
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('applies no status filter — a Cancelled row is history and this read must return it too (US-010/AC-04, AC-05)', async () => {
+    const { calls, client } = fakeSupabase({ bookings: { data: [], error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      await availabilityRepository.listMyBookingsInWindow('user-1', '2026-08-19');
+      // No .eq('status', ...) anywhere in the recorded predicate.
+      const statusFilters = calls.flatMap((c) => c.eq).filter(([column]) => column === 'status');
+      expect(statusFilters).toEqual([]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.findMyNewestBookingBefore — US-010/AC-03', () => {
+  it('selects booking_date only, filtered to the caller and strictly before the given date, ordered desc, limited to 1', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: { booking_date: '2026-07-30' }, error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.findMyNewestBookingBefore('user-1', '2026-08-19');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'booking_date',
+          eq: [['user_id', 'user-1']],
+          lt: ['booking_date', '2026-08-19'],
+          order: [
+            { column: 'booking_date', ascending: false },
+            { column: 'created_at', ascending: false },
+          ],
+          limit: 1,
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ booking_date: '2026-07-30' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined when the caller has nothing older (US-010/AC-03 edge case — the control disappears)', async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.findMyNewestBookingBefore('user-1', '2026-08-19');
+      expect(result).toBeUndefined();
     } finally {
       setSupabaseForTesting(undefined);
     }

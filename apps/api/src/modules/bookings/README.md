@@ -56,4 +56,26 @@ is not re-read**, since the active desk list is already in hand from the same ca
 `domain/` function: pure, and where AC-06 (weekends, the window edge, BR-001.1) is provable with no
 database. No migration, no new route, no new error code.
 
+**US-010** adds `GET /api/bookings` — the employee's own booking history, upcoming and past. No
+new cross-table read: it reuses the `bookings` → `desks(desk_number)` embed
+`findMyConfirmedBooking` (US-007) already established, and both new repository methods
+(`listMyBookingsInWindow`, `findMyNewestBookingBefore`) are served by
+`bookings_user_id_booking_date_idx`, which was already built with this exact read in mind
+(`0003_bookings.sql:77`, comment: "REQ-009, REQ-034"). No migration.
+
+Paging is a **date floor**, not `page`/`limit` (that shape is the admin list's, US-013, a
+different resource behind a different guard): no `before` reads `[today − 30, ∞)`; `?before=`
+anchors on the caller's newest booking strictly before it and reads the 30-day window ending
+there. See the story's design note (`inception/specs/US-010-view-my-bookings/design-note.md` §1)
+for the full argument against `page`/`limit` and a fixed-row-count cursor.
+
+**Completed is derived here, never stored** — `apps/api/src/domain/booking-history.ts`'s
+`bookingDisplayStatus`, applied once per response by `listMyBookings`. This *supersedes*
+`inception/architecture/db-design.md` §1.3's plan for a `bookings_with_status` database view,
+which turned out not to be expressible: the view's `CASE` needs the office's today, and that is
+neither `current_date` (the database server's own zone, not the office's — NFR-001) nor
+something a plain SQL view can take as a parameter. **ADR-007** records the supersession — see it
+before adding a second implementation of this rule (US-011, US-013 and US-014 all render a
+booking's status and must call `bookingDisplayStatus`, never re-derive it).
+
 See `../README.md` for what this module owns and the boundary it must respect.

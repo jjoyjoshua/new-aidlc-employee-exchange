@@ -14,6 +14,7 @@ import {
   availabilityQuerySchema,
   bookingCreateSchema,
   cancelBookingParamsSchema,
+  myBookingsQuerySchema,
   type DateRefusal,
 } from '@desk-booking/contracts';
 import { ERROR_CODES, badRequest, conflict, notFound, unauthorized, unprocessable } from '../../http/errors.js';
@@ -52,6 +53,33 @@ function requireUser(req: { user?: { id: string; email: string } }) {
 
 export function createBookingsRouter({ service }: BookingsRouterDeps): Router {
   const router = Router();
+
+  /**
+   * US-010/AC-01, AC-03, AC-09. `?before=` is the only query field — `.strict()` rejects
+   * anything else (including `userId`/`limit`) at the route edge, before the service is reached
+   * (design note §1.1, §1.4). A repository failure is NOT caught into an empty page here: it
+   * propagates to `next(error)` like every other failure in this router, which is what makes
+   * `items: []` (AC-06, a real "never booked") distinguishable from ST-06's load error
+   * (design note §1.5).
+   */
+  router.get('/', async (req, res, next) => {
+    try {
+      const parsed = myBookingsQuerySchema.safeParse(req.query);
+
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const user = requireUser(req);
+      const result = await service.listMyBookings(user.id, parsed.data.before);
+
+      // The entire body is one caller's — same reasoning as GET /availability (design note §1.5).
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/availability', async (req, res, next) => {
     try {

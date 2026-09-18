@@ -149,6 +149,12 @@ export const throwingAvailabilityRepository: AvailabilityRepository = {
   async listMyConfirmedDatesInRange() {
     throw new Error('must not be called for a refused date');
   },
+  async listMyBookingsInWindow() {
+    throw new Error('must not be called for a refused date');
+  },
+  async findMyNewestBookingBefore() {
+    throw new Error('must not be called for a refused date');
+  },
 };
 
 /** Empty/undefined answers everywhere — no active desks, no bookings, no matching desk. For
@@ -182,6 +188,12 @@ export const emptyAvailabilityRepository: AvailabilityRepository = {
   async listMyConfirmedDatesInRange() {
     return [];
   },
+  async listMyBookingsInWindow() {
+    return [];
+  },
+  async findMyNewestBookingBefore() {
+    return undefined;
+  },
 };
 
 /**
@@ -200,3 +212,39 @@ export function fullyBookedDesks(): DeskRow[] {
     { id: '00000000-0000-4000-8000-f00000000003', desk_number: 'A-03' },
   ];
 }
+
+/**
+ * US-010. `MyBookingRow`-shaped rows for the "my bookings" list, dated relative to
+ * `bookings.routes.spec.ts`'s `TODAY` ('2026-09-16', a Wednesday). Every date below is a
+ * literal, never computed by calling `historyFloor`/`addDays` — the same discipline
+ * `CANCEL_THEN_REBOOK_SAME_DATE_ROWS` above already follows.
+ *
+ * Includes design note §7.1's trap on purpose: a Cancelled row dated in the FUTURE. A DEV who
+ * sections the Upcoming list by `date >= today` instead of `status === 'confirmed'` puts this
+ * row in Upcoming, with nothing to cancel — every other fixture in this file has no future-dated
+ * Cancelled row, so that mistake would pass unnoticed without this one.
+ */
+export const MY_BOOKINGS_FUTURE_CANCELLED_ROW = {
+  id: '00000000-0000-4000-8000-c00000000001',
+  booking_date: '2026-09-23', // next week, relative to TODAY
+  status: 'cancelled' as const,
+  desk_number: 'C-09',
+};
+
+/** A Confirmed row dated exactly at the 30-day floor (2026-08-17 = TODAY − 30) — AC-03's
+ *  inclusive edge: this row IS on the default page. */
+export const MY_BOOKINGS_AT_FLOOR_ROW = {
+  id: '00000000-0000-4000-8000-c00000000002',
+  booking_date: '2026-08-17',
+  status: 'confirmed' as const,
+  desk_number: 'A-04',
+};
+
+/** A Confirmed row dated one day older than the floor (2026-08-16) — AC-03's excluded edge:
+ *  reachable only through "load older", never on the default page. */
+export const MY_BOOKINGS_BEFORE_FLOOR_ROW = {
+  id: '00000000-0000-4000-8000-c00000000003',
+  booking_date: '2026-08-16',
+  status: 'confirmed' as const,
+  desk_number: 'A-05',
+};

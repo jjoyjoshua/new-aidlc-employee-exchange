@@ -1,0 +1,143 @@
+/*
+ * MyBookings — SCR-002. Layout confirmed against the real hi-fi frames (node `95:2` and
+ * siblings, US-010's design note §4.7) — the written spec matched exactly, no corrections.
+ *
+ * `--desk-row-height` scoped here, read by both `BookingRow` and `SkeletonRow` (US-006's own
+ * precedent, `book-a-desk.css`) — the single shared source that keeps loading from shifting
+ * the layout (AC-08).
+ */
+
+.my-bookings {
+  --desk-row-height: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-24);
+}
+
+.my-bookings__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-16);
+}
+
+.my-bookings__header h1 {
+  flex: 1 0 0;
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-heading-lg);
+  line-height: var(--lh-heading-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+/* AC-10 — the office timezone, stated once. */
+.my-bookings__timezone {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+/* AC-08's single live-region announcement — no visible counterpart on this screen. Same
+   visually-hidden technique `AvailabilityCount`/`PolicyChecklist` use; no global sr-only
+   utility exists in this codebase, so each component defines its own. */
+.my-bookings__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.my-bookings__skeleton-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.my-bookings__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-12);
+}
+
+.my-bookings__section-heading {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-heading-sm);
+  line-height: var(--lh-heading-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+/* The row-list surface — `--c-surface-raised`, `--bw-1` solid `--c-border-strong`, `--r-lg`,
+   shadow/1 — the same card treatment `EmptyState` and `TodayBooking` use, so Upcoming and Past
+   read as one visual language (design note §4.7). Rows are borderless; the card supplies the
+   white, the edge and the dividers (Figma `Booking row`'s own documentation). */
+.my-bookings__card {
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.my-bookings__divider {
+  height: 1px;
+  background: var(--c-border);
+}
+
+/* ST-05's TODAY card — its own surface above the Upcoming list, not a row inside it (design
+   note, confirmed against the real frame `102:5940`). */
+.my-bookings__today-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+  padding: var(--s-24);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.my-bookings__today-eyebrow {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-label);
+  line-height: var(--lh-label);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.08em;
+  color: var(--c-text-muted);
+}
+
+/* TODAY's own row carries no outer padding of its own — the card above already supplies it. */
+.my-bookings__today-card .booking-row {
+  padding: 0;
+  height: auto;
+  min-height: 0;
+}
+
+/* Past bookings — a native <details>/<summary> disclosure (decisions.md D-07): genuinely
+   functional keyboard- and screen-reader-accessible collapse, open by default, matching the
+   confirmed "expanded on desktop" frame. True responsive default-collapsed-on-mobile is not
+   tested by any AC in this story and is deferred, not silently dropped. */
+.my-bookings__past-toggle {
+  cursor: pointer;
+  list-style: none;
+}
+
+.my-bookings__past-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.my-bookings__past {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-12);
+}

@@ -1,0 +1,61 @@
+/*
+ * BookingRow — SCR-002 `Booking row` (Figma node `83:5041`). `p-16`, gap `--s-12`. No `Cancel`
+ * control (`decisions.md` D-05), so one geometry serves every row — Upcoming, Today and Past
+ * alike — unlike the approved frame's two heights (80px with Cancel, 60px without).
+ *
+ * Height feeds `--desk-row-height`, the same custom property `SkeletonRow` reads (scoped in
+ * `my-bookings.css`), so the loading skeleton (AC-08) does not shift the layout when real rows
+ * replace it.
+ */
+
+.booking-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  height: var(--desk-row-height, 56px);
+  min-height: 44px;
+  padding: var(--s-16);
+}
+
+.booking-row__main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.booking-row__desk {
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+.booking-row__separator {
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  color: var(--c-text-muted);
+}
+
+.booking-row__date {
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-secondary);
+}
+
+.booking-row__spacer {
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+/* ST-05's TODAY card (design note) — a larger desk number, confirmed against the real frame
+ * (`102:5940`): `heading/semibold`, 20px, not the ordinary row's `body/medium` 16px. */
+.booking-row--emphasis .booking-row__desk {
+  font-size: var(--t-heading);
+  line-height: var(--lh-heading);
+  font-weight: var(--fw-semibold);
+}

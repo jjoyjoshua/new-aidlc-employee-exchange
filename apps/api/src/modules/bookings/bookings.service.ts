@@ -12,12 +12,14 @@ import {
   lastBookableDate,
   refusalFor,
   type AvailabilityResponse,
+  type BookingDisplayStatus,
   type DateRefusal,
   type DeskAvailability,
   type MyBooking,
   type OfficeDate,
 } from '@desk-booking/contracts';
 import { officeToday } from '../../domain/booking-window.js';
+import { bookingDisplayStatus, historyFloor } from '../../domain/booking-history.js';
 import { pickNextFreeDays } from '../../domain/next-free-days.js';
 import type { AvailabilityRepository } from './bookings.repository.js';
 
@@ -54,6 +56,14 @@ export type CreateBookingOutcome =
   | { kind: 'user_conflict' };
 
 export type CancelBookingOutcome = { kind: 'ok' } | { kind: 'not_found' };
+
+/** US-010. `GET /api/bookings`'s shape, pre-serialization — the router hands this straight to
+ *  `myBookingsResponseSchema`. */
+export interface MyBookingsListing {
+  today: OfficeDate;
+  items: Array<{ id: string; deskNumber: string; date: OfficeDate; status: BookingDisplayStatus }>;
+  nextBefore: OfficeDate | null;
+}
 
 export function createBookingsService({ availability, nowMs, officeTimezone }: BookingsServiceDeps) {
   return {
@@ -189,6 +199,49 @@ export function createBookingsService({ availability, nowMs, officeTimezone }: B
     async cancelBooking(userId: string, bookingId: string): Promise<CancelBookingOutcome> {
       const cancelled = await availability.cancelOwnedBooking(userId, bookingId, new Date(nowMs()));
       return cancelled ? { kind: 'ok' } : { kind: 'not_found' };
+    },
+
+    /**
+     * US-010/AC-01, AC-03, AC-04. Architect design note §5 (this story's folder in
+     * `inception/specs/`). No `before` -> the default page: `[historyFloor(today), unbounded]`.
+     * A `before` -> anchor on the caller's newest booking strictly before it (design note §1.3);
+     * no such booking means the control should not have been there, and the honest answer is an
+     * empty page with `nextBefore: null` — never an error.
+     *
+     * `nextBefore` is always the FLOOR of the page just read, not the oldest item's date: the two
+     * differ whenever the oldest row on the page is not exactly on the floor, and taking it from
+     * `items` would skip every booking between the two (design note §5, §7.4).
+     */
+    async listMyBookings(userId: string, before: OfficeDate | undefined): Promise<MyBookingsListing> {
+      const today = officeToday(nowMs(), officeTimezone);
+
+      let from: OfficeDate;
+      let to: OfficeDate | undefined;
+      if (before === undefined) {
+        from = historyFloor(today);
+        to = undefined; // unbounded above — the default page carries future bookings too
+      } else {
+        const anchor = await availability.findMyNewestBookingBefore(userId, before);
+        if (!anchor) return { today, items: [], nextBefore: null };
+        to = anchor.booking_date;
+        from = historyFloor(to);
+      }
+
+      const [rows, older] = await Promise.all([
+        availability.listMyBookingsInWindow(userId, from, to),
+        availability.findMyNewestBookingBefore(userId, from),
+      ]);
+
+      return {
+        today,
+        items: rows.map((row) => ({
+          id: row.id,
+          deskNumber: row.desk_number,
+          date: row.booking_date,
+          status: bookingDisplayStatus(row.status, row.booking_date, today),
+        })),
+        nextBefore: older ? from : null,
+      };
     },
   };
 }
