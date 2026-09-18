@@ -12,6 +12,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { SignIn } from './screens/sign-in/SignIn.js';
 import { MyBookings } from './screens/my-bookings/MyBookings.js';
+import { BookADesk } from './screens/book-a-desk/BookADesk.js';
 import { AllBookings } from './screens/all-bookings/AllBookings.js';
 import { SetPassword } from './screens/set-password/SetPassword.js';
 import { AppShell } from './components/app-shell/AppShell.js';
@@ -48,6 +49,9 @@ export function AppRoutes() {
         }
       >
         <Route path="/bookings" element={<MyBookings />} />
+        {/* US-005 — SCR-003's date controls only (ST-01/02/03); reserved by US-001 design
+            note §9.1. The desk list and confirm action are US-006's and US-007's. */}
+        <Route path="/book" element={<BookADesk />} />
         <Route
           path="/admin/bookings"
           element={

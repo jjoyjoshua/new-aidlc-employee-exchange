@@ -7,7 +7,7 @@
  * job is to not undo it by shaping three responses from one outcome.
  */
 import { Router, type RequestHandler } from 'express';
-import { signInRequestSchema, setPasswordRequestSchema } from '@desk-booking/contracts';
+import { signInRequestSchema, setPasswordRequestSchema, type Office } from '@desk-booking/contracts';
 import {
   ERROR_CODES,
   badRequest,
@@ -19,6 +19,7 @@ import {
 } from '../../http/errors.js';
 import { sleep } from '../../infra/clock/index.js';
 import { SIGN_IN_MIN_FAILURE_MS } from '../../domain/sign-in-failure-delay.js';
+import { officeToday } from '../../domain/booking-window.js';
 import { logger } from '../../infra/logger/index.js';
 import type { AuthService } from './auth.service.js';
 import '../../http/request-user.js';
@@ -38,10 +39,17 @@ export interface AuthRouterDeps {
   nowMs: () => number;
   /** Applied to `GET /session` only — `POST /sign-in` is the unauthenticated route. */
   requireSession: RequestHandler;
+  /** US-005/AC-07 — the configured office zone. Threaded in rather than read from `config()`
+   *  here, so `buildApp({ officeTimezone })` is the test seam, exactly as `sessionLifetimeMs` is
+   *  for NFR-009 (`composition.ts`). */
+  officeTimezone: string;
 }
 
-export function createAuthRouter({ service, nowMs, requireSession }: AuthRouterDeps): Router {
+export function createAuthRouter({ service, nowMs, requireSession, officeTimezone }: AuthRouterDeps): Router {
   const router = Router();
+
+  /** US-005/AC-07 — the office's own clock and zone, sent on every boot response. */
+  const office = (): Office => ({ timezone: officeTimezone, today: officeToday(nowMs(), officeTimezone) });
 
   router.post('/sign-in', async (req, res, next) => {
     try {
@@ -88,7 +96,7 @@ export function createAuthRouter({ service, nowMs, requireSession }: AuthRouterD
         throw unauthorized(ERROR_CODES.invalid_credentials, REFUSAL_MESSAGE);
       }
 
-      res.json({ session: outcome.session, user: outcome.user });
+      res.json({ session: outcome.session, user: outcome.user, office: office() });
     } catch (error) {
       next(error);
     }
@@ -195,7 +203,7 @@ export function createAuthRouter({ service, nowMs, requireSession }: AuthRouterD
       next(new HttpError(401, ERROR_CODES.no_session, 'Sign in to continue.'));
       return;
     }
-    res.json({ user });
+    res.json({ user, office: office() });
   });
 
   return router;

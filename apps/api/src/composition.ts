@@ -47,6 +47,8 @@ export interface BuildAppOptions {
   sessionLifetimeMs?: number;
   /** NFR-009 test seam — overrides the configured `SESSION_LAST_SEEN_THROTTLE_MINUTES`, in milliseconds. */
   lastSeenThrottleMs?: number;
+  /** US-005/AC-07 test seam — overrides the configured `OFFICE_TIMEZONE`. */
+  officeTimezone?: string;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -77,7 +79,12 @@ export function buildApp(options: BuildAppOptions = {}): Express {
   const sessionForPasswordChange = requireSession({ ...sharedDeps, passwordChangeGate: 'exempt' });
 
   return createApp({
-    authRouter: createAuthRouter({ service, nowMs, requireSession: sessionForPasswordChange }),
+    authRouter: createAuthRouter({
+      service,
+      nowMs,
+      requireSession: sessionForPasswordChange,
+      officeTimezone: options.officeTimezone ?? config().OFFICE_TIMEZONE,
+    }),
     adminRouter,
     requireSession: session,
   });

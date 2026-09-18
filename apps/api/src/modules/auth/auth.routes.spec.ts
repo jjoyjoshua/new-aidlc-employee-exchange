@@ -44,6 +44,7 @@ beforeEach(() => {
     CORS_ORIGINS: [],
     SESSION_LIFETIME_DAYS: 30,
     SESSION_LAST_SEEN_THROTTLE_MINUTES: 60,
+    OFFICE_TIMEZONE: 'Asia/Kolkata',
   } as unknown as Config);
 });
 
@@ -68,6 +69,8 @@ function appWith(options: {
   nowMs?: () => number;
   sessionLifetimeMs?: number;
   lastSeenThrottleMs?: number;
+  /** US-005/AC-07 test seam — overrides the configured `OFFICE_TIMEZONE`. */
+  officeTimezone?: string;
 }) {
   const rows = options.rows ?? [EMPLOYEE, ADMIN, DEACTIVATED];
   // Mutable, and read by BOTH the verifier and the stub's revoke — so a sign-out that revokes a
@@ -143,6 +146,7 @@ function appWith(options: {
       ...(options.nowMs ? { nowMs: options.nowMs } : {}),
       ...(options.sessionLifetimeMs !== undefined ? { sessionLifetimeMs: options.sessionLifetimeMs } : {}),
       ...(options.lastSeenThrottleMs !== undefined ? { lastSeenThrottleMs: options.lastSeenThrottleMs } : {}),
+      ...(options.officeTimezone !== undefined ? { officeTimezone: options.officeTimezone } : {}),
     }),
     revoked,
     tokens,
@@ -512,6 +516,57 @@ describe('GET /api/auth/session (US-001/AC-02)', () => {
     const response = await request(app).get('/api/auth/session');
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe('office date and timezone on the boot responses (US-005/AC-07)', () => {
+  // 19:30 UTC on 2 October is already 01:00 on 3 October in Asia/Kolkata (UTC+5:30) — the
+  // injected zone and clock must win, never the test runner's own.
+  const instant = Date.parse('2026-10-02T19:30:00Z');
+
+  it('POST /api/auth/sign-in returns office.today derived from the injected zone and clock (US-005/AC-07)', async () => {
+    const okForPriya: Record<string, AuthAttempt> = {
+      'priya@company.com': { kind: 'ok', session: SESSION, userId: EMPLOYEE.id },
+    };
+    const { app } = appWith({
+      byEmail: okForPriya,
+      officeTimezone: 'Asia/Kolkata',
+      nowMs: () => instant,
+    });
+
+    const response = await post(app, { email: 'priya@company.com', password: 'whatever' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.office).toEqual({ timezone: 'Asia/Kolkata', today: '2026-10-03' });
+  });
+
+  it('GET /api/auth/session returns office.today derived from the injected zone and clock (US-005/AC-07)', async () => {
+    const { app } = appWith({
+      tokens: { 'employee-token': EMPLOYEE.id },
+      officeTimezone: 'Asia/Kolkata',
+      nowMs: () => instant,
+    });
+
+    const response = await request(app)
+      .get('/api/auth/session')
+      .set('Authorization', 'Bearer employee-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.office).toEqual({ timezone: 'Asia/Kolkata', today: '2026-10-03' });
+  });
+
+  it('a different configured zone changes office.today for the same instant (US-005/AC-07)', async () => {
+    const { app } = appWith({
+      tokens: { 'employee-token': EMPLOYEE.id },
+      officeTimezone: 'UTC',
+      nowMs: () => instant,
+    });
+
+    const response = await request(app)
+      .get('/api/auth/session')
+      .set('Authorization', 'Bearer employee-token');
+
+    expect(response.body.office).toEqual({ timezone: 'UTC', today: '2026-10-02' });
   });
 });
 

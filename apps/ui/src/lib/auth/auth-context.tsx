@@ -25,6 +25,7 @@ import {
   setPasswordResponseSchema,
   signInResponseSchema,
   type AuthenticatedUser,
+  type Office,
   type Session,
 } from '@desk-booking/contracts';
 import { createApiClient, type ApiClient, type ApiResult } from '../api-client.js';
@@ -54,6 +55,12 @@ export type SetPasswordResult =
 
 export interface AuthContextValue {
   user: AuthenticatedUser | undefined;
+  /**
+   * US-005/AC-07 — the office's own zone and calendar date, as of this boot. Set from whichever
+   * of the sign-in or session-check responses supplied it; `undefined` only while `status` is
+   * `'booting'` or `'signedOut'`, exactly like `user`.
+   */
+  office: Office | undefined;
   /**
    * NFR-009. `'booting'` while the stored session (if any) is being confirmed with the server —
    * `RequireSession` holds rather than redirecting during this phase, or every cold boot would
@@ -114,6 +121,7 @@ const defaultGetStoredSession = async (): Promise<StoredSession | undefined> => 
 
 export function AuthProvider({ children, client, onSession, onSignOut, getStoredSession }: AuthProviderProps) {
   const [user, setUser] = useState<AuthenticatedUser | undefined>(undefined);
+  const [office, setOffice] = useState<Office | undefined>(undefined);
   const [status, setStatus] = useState<AuthContextValue['status']>('booting');
   /**
    * The access token for the life of this tab, and nothing more durable than that (US-002/§6.2).
@@ -156,6 +164,7 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
 
       if (result.kind === 'ok') {
         setUser(result.data.user);
+        setOffice(result.data.office);
         setStatus('signedIn');
         return;
       }
@@ -190,7 +199,7 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
 
   const signIn = useCallback<AuthContextValue['signIn']>(
     async (email, password, signal) => {
-      const result: ApiResult<{ session: Session; user: AuthenticatedUser }> = await api.request(
+      const result: ApiResult<{ session: Session; user: AuthenticatedUser; office: Office }> = await api.request(
         '/api/auth/sign-in',
         signInResponseSchema,
         { method: 'POST', body: { email, password }, ...(signal ? { signal } : {}) },
@@ -208,6 +217,7 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
       await onSession?.(result.data.session);
       accessTokenRef.current = result.data.session.accessToken;
       setUser(result.data.user);
+      setOffice(result.data.office);
       setStatus('signedIn');
       return { kind: 'ok', user: result.data.user };
     },
@@ -226,6 +236,7 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
     // 3 — clear local state, unconditionally.
     accessTokenRef.current = undefined;
     setUser(undefined);
+    setOffice(undefined);
     setStatus('signedOut');
   }, [api, onSignOut]);
 
@@ -261,8 +272,8 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, signIn, signOut, setPassword }),
-    [user, status, signIn, signOut, setPassword],
+    () => ({ user, office, status, signIn, signOut, setPassword }),
+    [user, office, status, signIn, signOut, setPassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
