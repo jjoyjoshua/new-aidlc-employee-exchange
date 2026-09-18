@@ -9,6 +9,7 @@
  * Protected path: any change here is Complex (`ai/standards/task-surfaces.md`).
  */
 import { z } from 'zod';
+import { SESSION_LIFETIME_DAYS_MAX, LAST_SEEN_THROTTLE_MINUTES_DEFAULT } from '../domain/session-lifetime.js';
 
 const nonEmpty = (what: string) => z.string().trim().min(1, `${what} is required`);
 
@@ -63,7 +64,37 @@ const schema = z.object({
     .trim()
     .min(1)
     .transform((value) => value.split(',').map((origin) => origin.trim()).filter(Boolean)),
-});
+
+  /**
+   * NFR-009 — optional and defaulted, deliberately: the correct value is the requirement
+   * itself, known and identical in every environment, so a required key would break every
+   * existing deployment to make it retype `30` (US-003 design note §3(a)). The ceiling is
+   * `domain/session-lifetime.ts`'s own constant, so NFR-009's number appears once (§3(b)); an
+   * operator may shorten the window during an incident, never lengthen it past what RISK-010
+   * was accepted against.
+   */
+  SESSION_LIFETIME_DAYS: z.coerce.number().int().min(1).max(SESSION_LIFETIME_DAYS_MAX).default(SESSION_LIFETIME_DAYS_MAX),
+  /** A cost knob (how much write traffic a renewal is worth), not a requirement — db-design.md
+   *  §1.1. Bounded to at most a day so a typo cannot silently disable renewal for a week. */
+  SESSION_LAST_SEEN_THROTTLE_MINUTES: z.coerce.number().int().min(1).max(1440).default(LAST_SEEN_THROTTLE_MINUTES_DEFAULT),
+})
+  /**
+   * At throttle >= lifetime, `last_seen_at` is never refreshed before the session expires, so
+   * sliding renewal silently becomes a fixed window from sign-in — exactly what AC-02 forbids,
+   * reachable by a plausible typo (minutes instead of hours). Refusing to boot turns that into
+   * a process that will not start, which is what this module is for (US-003 design note §3).
+   */
+  .superRefine((value, ctx) => {
+    const lifetimeMs = value.SESSION_LIFETIME_DAYS * 24 * 60 * 60 * 1000;
+    const throttleMs = value.SESSION_LAST_SEEN_THROTTLE_MINUTES * 60 * 1000;
+    if (throttleMs >= lifetimeMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SESSION_LAST_SEEN_THROTTLE_MINUTES'],
+        message: 'SESSION_LAST_SEEN_THROTTLE_MINUTES must be less than SESSION_LIFETIME_DAYS, or sessions never renew',
+      });
+    }
+  });
 
 export type Config = z.infer<typeof schema>;
 

@@ -6,6 +6,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | ----- | ------- | ---- | ------ | ------ |
 | US-001 | Sign in with email and password | Complex | planned | [`US-001-sign-in/`](US-001-sign-in/) |
 | US-002 | Sign out | Complex | planned | [`US-002-sign-out/`](US-002-sign-out/) |
+| US-003 | Stay signed in for 30 days | Complex | planned | [`US-003-thirty-day-session/`](US-003-thirty-day-session/) |
 
 ## How to update
 

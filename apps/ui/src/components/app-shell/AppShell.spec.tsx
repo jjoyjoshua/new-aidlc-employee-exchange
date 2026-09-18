@@ -32,7 +32,7 @@ function SignedIn({ as, children }: { as: AuthenticatedUser; children: ReactNode
   };
 
   return (
-    <AuthProvider client={client as never} onSession={() => undefined}>
+    <AuthProvider client={client as never} onSession={() => undefined} getStoredSession={async () => undefined}>
       <Primer>{children}</Primer>
     </AuthProvider>
   );

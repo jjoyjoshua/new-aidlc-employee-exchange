@@ -51,11 +51,96 @@ function Harness() {
 
 function renderHarness(onSignOut: () => void = () => undefined) {
   return render(
-    <AuthProvider onSession={() => undefined} onSignOut={onSignOut}>
+    <AuthProvider
+      onSession={() => undefined}
+      onSignOut={onSignOut}
+      // No stored session for these tests — they start from a clean sign-in, not a cold boot
+      // (US-003's own boot sequence is covered separately below).
+      getStoredSession={async () => undefined}
+    >
       <Harness />
     </AuthProvider>,
   );
 }
+
+/**
+ * NFR-009 — a cold boot (a page reload) must not ask for a password again while a session is
+ * still inside its 30-day window, and must land on sign-in when it is not. `getStoredSession`
+ * is the injectable seam over `supabaseBrowserClient` — a test never needs `VITE_SUPABASE_*`
+ * (US-003 design note §5.1).
+ */
+describe('AuthProvider — cold-boot rehydration (US-003)', () => {
+  function BootHarness() {
+    const { user, status } = useAuth();
+    return (
+      <div>
+        <div data-testid="status">{status}</div>
+        <div data-testid="user">{user ? user.email : 'none'}</div>
+      </div>
+    );
+  }
+
+  it('renders signed in after a stored session is confirmed by the server, with no password prompt (US-003/AC-01)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { user: USER }));
+
+    render(
+      <AuthProvider getStoredSession={async () => ({ accessToken: SESSION.accessToken })}>
+        <BootHarness />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByTestId('status')).toHaveTextContent('signedIn');
+    expect(screen.getByTestId('user')).toHaveTextContent('priya@company.com');
+  });
+
+  it('resolves straight to signed out with no network call when nothing is stored', async () => {
+    render(
+      <AuthProvider getStoredSession={async () => undefined}>
+        <BootHarness />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByTestId('status')).toHaveTextContent('signedOut');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('signs out when the server refuses the stored session (US-003/AC-03)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ statusCode: 401, code: 'session_expired', message: 'Your session has ended. Sign in again.' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const onSignOut = vi.fn(async () => undefined);
+
+    render(
+      <AuthProvider getStoredSession={async () => ({ accessToken: 'a-dead-token' })} onSignOut={onSignOut}>
+        <BootHarness />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByTestId('status')).toHaveTextContent('signedOut');
+    expect(screen.getByTestId('user')).toHaveTextContent('none');
+    expect(onSignOut).toHaveBeenCalled();
+  });
+
+  it('does not forget the stored session when the server is unreachable — an outage is not an expiry (US-003)', async () => {
+    // Renders SCR-001 like any other "not signed in this tab" outcome, but — unlike AC-03's
+    // expiry — never tells the browser's own Supabase client to forget the session, so the
+    // NEXT boot (once the server is reachable again) can still succeed (design note §5.1, step 5).
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const onSignOut = vi.fn(async () => undefined);
+
+    render(
+      <AuthProvider getStoredSession={async () => ({ accessToken: SESSION.accessToken })} onSignOut={onSignOut}>
+        <BootHarness />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByTestId('status')).toHaveTextContent('signedOut');
+    expect(onSignOut).not.toHaveBeenCalled();
+  });
+});
 
 describe('signOut — the request carries the token this tab actually holds (US-002/AC-02)', () => {
   it('sends the bearer token obtained at sign-in, not none', async () => {

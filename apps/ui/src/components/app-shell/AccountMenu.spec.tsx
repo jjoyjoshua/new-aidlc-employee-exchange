@@ -44,7 +44,12 @@ function renderMenu() {
   };
 
   render(
-    <AuthProvider client={client as never} onSession={() => undefined} onSignOut={() => undefined}>
+    <AuthProvider
+      client={client as never}
+      onSession={() => undefined}
+      onSignOut={() => undefined}
+      getStoredSession={async () => undefined}
+    >
       <Primer>
         <AccountMenu />
       </Primer>

@@ -81,3 +81,50 @@ describe('loadConfig', () => {
     expect(config.CORS_ORIGINS).toEqual(['https://a.example', 'https://b.example']);
   });
 });
+
+/**
+ * NFR-009 — the 30-day session window and its hourly renewal throttle are configuration, not a
+ * literal, per the story's own instruction. Both are optional and defaulted: the correct value
+ * is the requirement itself, known and identical in every environment (US-003 design note §3(a)).
+ */
+describe('loadConfig — session lifetime (NFR-009)', () => {
+  it('defaults to a 30-day lifetime and a 60-minute throttle when neither is set (US-003/AC-01)', () => {
+    const config = loadConfig(valid);
+    expect(config.SESSION_LIFETIME_DAYS).toBe(30);
+    expect(config.SESSION_LAST_SEEN_THROTTLE_MINUTES).toBe(60);
+  });
+
+  it('accepts a shortened lifetime, e.g. for an incident (US-003/AC-01)', () => {
+    const config = loadConfig({ ...valid, SESSION_LIFETIME_DAYS: '7' });
+    expect(config.SESSION_LIFETIME_DAYS).toBe(7);
+  });
+
+  it('refuses a lifetime below 1 day', () => {
+    expect(() => loadConfig({ ...valid, SESSION_LIFETIME_DAYS: '0' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses a lifetime past the 30-day ceiling RISK-010 was accepted against', () => {
+    expect(() => loadConfig({ ...valid, SESSION_LIFETIME_DAYS: '31' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses a throttle below 1 minute', () => {
+    expect(() => loadConfig({ ...valid, SESSION_LAST_SEEN_THROTTLE_MINUTES: '0' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses a throttle above 1440 minutes (one day)', () => {
+    expect(() => loadConfig({ ...valid, SESSION_LAST_SEEN_THROTTLE_MINUTES: '1441' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses a throttle that meets or exceeds the lifetime — AC-02 would silently stop holding (US-003/AC-02)', () => {
+    // At this setting last_seen_at is never refreshed before the session expires, so sliding
+    // renewal silently becomes a fixed window from sign-in — the exact behaviour AC-02 forbids.
+    expect(() =>
+      loadConfig({ ...valid, SESSION_LIFETIME_DAYS: '1', SESSION_LAST_SEEN_THROTTLE_MINUTES: '1440' }),
+    ).toThrow(ConfigurationError);
+  });
+
+  it('accepts a throttle just below the lifetime (US-003/AC-02)', () => {
+    const config = loadConfig({ ...valid, SESSION_LIFETIME_DAYS: '1', SESSION_LAST_SEEN_THROTTLE_MINUTES: '1439' });
+    expect(config.SESSION_LAST_SEEN_THROTTLE_MINUTES).toBe(1439);
+  });
+});

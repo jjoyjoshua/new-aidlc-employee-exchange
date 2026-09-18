@@ -19,6 +19,7 @@ import { createAuthRouter } from './modules/auth/auth.router.js';
 import { createAuthService, type AuthAdapter } from './modules/auth/auth.service.js';
 import { SIGN_IN_MIN_FAILURE_MS } from './domain/sign-in-failure-delay.js';
 import { supabase } from './infra/supabase/index.js';
+import { config } from './config/index.js';
 
 /**
  * Verifies a bearer token with Supabase and returns its subject.
@@ -42,6 +43,10 @@ export interface BuildAppOptions {
   verifier?: SessionVerifier;
   nowMs?: () => number;
   floorMs?: number;
+  /** NFR-009 test seam — overrides the configured `SESSION_LIFETIME_DAYS`, in milliseconds. */
+  sessionLifetimeMs?: number;
+  /** NFR-009 test seam — overrides the configured `SESSION_LAST_SEEN_THROTTLE_MINUTES`, in milliseconds. */
+  lastSeenThrottleMs?: number;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -58,6 +63,9 @@ export function buildApp(options: BuildAppOptions = {}): Express {
   const session = requireSession({
     verifier: options.verifier ?? supabaseSessionVerifier,
     service,
+    nowMs,
+    sessionLifetimeMs: options.sessionLifetimeMs ?? config().SESSION_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
+    lastSeenThrottleMs: options.lastSeenThrottleMs ?? config().SESSION_LAST_SEEN_THROTTLE_MINUTES * 60 * 1000,
   });
 
   return createApp({

@@ -38,6 +38,11 @@ describe('ERROR_CODES', () => {
     expect(ERROR_CODES.password_change_required).toBe('password_change_required');
   });
 
+  it('carries session_expired, distinct from session_invalid (US-003/AC-03)', () => {
+    expect(ERROR_CODES.session_expired).toBe('session_expired');
+    expect(errorCodeSchema.parse('session_expired')).toBe('session_expired');
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });
