@@ -19,7 +19,7 @@ describe('BookingRow (US-010/AC-01, AC-05)', () => {
     expect(screen.getByText('Cancelled')).toBeInTheDocument();
   });
 
-  it('renders no Cancel control (decisions.md D-05 — US-011 owns cancellation, not this story)', () => {
+  it('renders no Cancel control (decisions.md D-05 — cancellation is a later story’s, not this one)', () => {
     render(<BookingRow deskNumber="A-01" date="2026-09-16" status="confirmed" />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
