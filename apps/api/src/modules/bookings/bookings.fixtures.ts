@@ -143,6 +143,12 @@ export const throwingAvailabilityRepository: AvailabilityRepository = {
   async findMyLastBookedDeskId() {
     throw new Error('must not be called for a refused date');
   },
+  async listConfirmedDeskIdsInRange() {
+    throw new Error('must not be called for a refused date');
+  },
+  async listMyConfirmedDatesInRange() {
+    throw new Error('must not be called for a refused date');
+  },
 };
 
 /** Empty/undefined answers everywhere — no active desks, no bookings, no matching desk. For
@@ -170,4 +176,27 @@ export const emptyAvailabilityRepository: AvailabilityRepository = {
   async findMyLastBookedDeskId() {
     return undefined;
   },
+  async listConfirmedDeskIdsInRange() {
+    return [];
+  },
+  async listMyConfirmedDatesInRange() {
+    return [];
+  },
 };
+
+/**
+ * US-009. A fully-booked selected date, with a controlled stretch of free/full working days
+ * after it — the QA note's own data shape (`spec.md`): AC-02's "two free days", AC-05's "fewer
+ * than two", and AC-06's weekend/already-booked skips all need the SAME kind of dataset, varied
+ * only by which desk ids `takenByDate` marks taken on which candidate day.
+ *
+ * `desks` here is deliberately small (3) — the lookahead's cost argument (design note §1.2) does
+ * not depend on desk count, and a small, enumerable set keeps each test's expected dates legible.
+ */
+export function fullyBookedDesks(): DeskRow[] {
+  return [
+    { id: '00000000-0000-4000-8000-f00000000001', desk_number: 'A-01' },
+    { id: '00000000-0000-4000-8000-f00000000002', desk_number: 'A-02' },
+    { id: '00000000-0000-4000-8000-f00000000003', desk_number: 'A-03' },
+  ];
+}

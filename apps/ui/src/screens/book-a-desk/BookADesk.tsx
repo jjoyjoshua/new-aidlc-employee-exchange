@@ -30,8 +30,15 @@ import { createFetchAvailability } from './fetch-availability.js';
 import { useBookDesk, type CreateBookingFetcher } from './use-book-desk.js';
 import { createCreateBooking } from './create-booking.js';
 import { groupByZone } from './zones.js';
-import { NO_DESKS_EXIST, AVAILABILITY_LOAD_FAILED, DESK_JUST_TAKEN, BOOKING_UNCERTAIN } from './copy.js';
-import { formatOfficeDateLabel } from '../../lib/format-office-date.js';
+import {
+  NO_DESKS_EXIST,
+  AVAILABILITY_LOAD_FAILED,
+  DESK_JUST_TAKEN,
+  BOOKING_UNCERTAIN,
+  FULLY_BOOKED,
+  FULLY_BOOKED_LEAD,
+} from './copy.js';
+import { formatOfficeDateLabel, formatOfficeDateLong } from '../../lib/format-office-date.js';
 import './book-a-desk.css';
 
 export interface BookADeskProps {
@@ -250,9 +257,51 @@ function BookADeskContent({
             onCancelled={availability.retry}
           />
         ) : availability.data.desks.length === 0 ? (
-          // AC-09, checked FIRST — US-009's fully-booked branch (US-009 owns "every desk is
-          // taken") slots in AFTER this one, never before it (design note §2.6).
+          // AC-09, checked FIRST — the fully-booked branch below (US-009) slots in AFTER this
+          // one, never before it (US-006 design note §2.6): an office with no desks at all would
+          // otherwise render "every desk is taken", which is a different fact.
           <EmptyState title={NO_DESKS_EXIST.title} body={NO_DESKS_EXIST.body} />
+        ) : availability.data.desks.every((d) => d.status === 'taken') && !confirmFailure ? (
+          // US-009/AC-01, AC-04. The count line stays (it already reads "0 of N desks free");
+          // the confirm bar is absent by construction — this branch never reaches the one below
+          // that renders it.
+          //
+          // `!confirmFailure` (US-009/D-07): a desk-just-taken or ambiguous-failure alert
+          // (US-007/AC-08, AC-10) can itself be what makes the refetched list fully booked —
+          // e.g. the office's one remaining desk was the one just taken. Those alerts live in
+          // the ordinary-list branch below; this guard keeps that branch reachable so the alert
+          // and the (now fully-booked) list still render, exactly as before US-009 existed. A
+          // fully-booked EMPTY load (no prior confirm attempt) is unaffected — confirmFailure is
+          // only ever set by handleConfirm and cleared on the next date/desk change.
+          <>
+            <AvailabilityCount status="ready" date={availability.data.date} freeCount={0} totalCount={availability.data.desks.length} />
+            <EmptyState
+              title={FULLY_BOOKED(dateLabel)}
+              body={FULLY_BOOKED_LEAD(availability.data.nextFreeDays.length)}
+              actions={
+                <>
+                  {availability.data.nextFreeDays.map((date) => (
+                    <Button
+                      key={date}
+                      variant="secondary"
+                      onClick={() => selectDate(date)}
+                      aria-label={`Book a desk on ${formatOfficeDateLong(date)}`}
+                    >
+                      {formatOfficeDateLabel(date)}
+                    </Button>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      if (!busy) setPickerOpen(true);
+                    }}
+                  >
+                    Pick another date
+                  </Button>
+                </>
+              }
+            />
+          </>
         ) : (
           <>
             <AvailabilityCount

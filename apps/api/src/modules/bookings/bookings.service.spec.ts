@@ -5,6 +5,7 @@ import {
   activeDesks,
   activeDeskRow,
   emptyAvailabilityRepository,
+  fullyBookedDesks,
   inactiveDeskRow,
   partiallyTakenDeskIds,
   throwingAvailabilityRepository,
@@ -61,7 +62,10 @@ describe('bookings.service.getAvailability — the projection (US-006/AC-02, AC-
 
     const outcome = await service.getAvailability(TODAY, CALLER_ID);
 
-    expect(outcome).toEqual({ kind: 'ok', data: { date: TODAY, desks: [], myBooking: null, usualDeskId: null } });
+    expect(outcome).toEqual({
+      kind: 'ok',
+      data: { date: TODAY, desks: [], myBooking: null, usualDeskId: null, nextFreeDays: [] },
+    });
   });
 });
 
@@ -370,6 +374,195 @@ describe('bookings.service.createBooking — the insert outcome (US-007/FR-01, F
     const outcome = await service.createBooking(CALLER_ID, { date: TODAY, deskId: desk.id });
 
     expect(outcome).toEqual({ kind: 'user_conflict' });
+  });
+});
+
+describe('bookings.service.getAvailability — nextFreeDays (US-009/AC-01, AC-02, AC-06)', () => {
+  it('offers the next two working days with a free desk when the selected date is fully booked', async () => {
+    const desks = fullyBookedDesks();
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return desks;
+      },
+      async listConfirmedDeskIds() {
+        return desks.map((d) => d.id); // every desk taken on TODAY
+      },
+      async listConfirmedDeskIdsInRange(from, to) {
+        expect(from).toBe('2026-09-17');
+        expect(to).toBe('2026-10-16'); // lastBookableDate(TODAY)
+        // Thu 17 Sep is ALSO fully booked; Fri 18 and Mon 21 (weekend between) are free.
+        return desks.map((d) => ({ booking_date: '2026-09-17', desk_id: d.id }));
+      },
+      async listMyConfirmedDatesInRange() {
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { nextFreeDays: ['2026-09-18', '2026-09-21'] } });
+  });
+
+  it('skips a date the caller already holds a confirmed booking on, even when it is free (US-009/AC-06, BR-001.1)', async () => {
+    const desks = fullyBookedDesks();
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return desks;
+      },
+      async listConfirmedDeskIds() {
+        return desks.map((d) => d.id);
+      },
+      async listConfirmedDeskIdsInRange() {
+        return []; // every candidate day has a free desk by occupancy alone
+      },
+      async listMyConfirmedDatesInRange() {
+        return ['2026-09-17', '2026-09-18']; // the caller already holds Thu and Fri
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { nextFreeDays: ['2026-09-21', '2026-09-22'] } });
+  });
+
+  it('never runs the range reads when there are no active desks at all (US-009/AC-07)', async () => {
+    let rangeCalls = 0;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return [];
+      },
+      async listConfirmedDeskIdsInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+      async listMyConfirmedDatesInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { nextFreeDays: [] } });
+    expect(rangeCalls).toBe(0);
+  });
+
+  it('never runs the range reads when the selected date is not fully booked', async () => {
+    const desks = activeDesks();
+    const takenIds = partiallyTakenDeskIds(desks);
+    let rangeCalls = 0;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return desks;
+      },
+      async listConfirmedDeskIds() {
+        return takenIds;
+      },
+      async listConfirmedDeskIdsInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+      async listMyConfirmedDatesInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { nextFreeDays: [] } });
+    expect(rangeCalls).toBe(0);
+  });
+
+  it("never runs the range reads when the caller already holds a booking for the date (ST-10 outranks ST-04, design note §2.6/§4.1)", async () => {
+    const desks = fullyBookedDesks();
+    const [firstDesk] = desks;
+    if (!firstDesk) throw new Error('fixture must provide at least one desk');
+    let rangeCalls = 0;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return desks;
+      },
+      async listConfirmedDeskIds() {
+        return desks.map((d) => d.id);
+      },
+      async findMyConfirmedBooking() {
+        return { id: 'booking-1', desk_id: firstDesk.id, desk_number: firstDesk.desk_number };
+      },
+      async listConfirmedDeskIdsInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+      async listMyConfirmedDatesInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { nextFreeDays: [] } });
+    expect(rangeCalls).toBe(0);
+  });
+
+  it("never runs the range reads when the selected date is the window's last bookable day (US-009/AC-05, the from > to guard)", async () => {
+    const desks = fullyBookedDesks();
+    let rangeCalls = 0;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return desks;
+      },
+      async listConfirmedDeskIds() {
+        return desks.map((d) => d.id);
+      },
+      async listConfirmedDeskIdsInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+      async listMyConfirmedDatesInRange() {
+        rangeCalls += 1;
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability('2026-10-16', CALLER_ID); // TODAY + 30, the window's edge
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { nextFreeDays: [] } });
+    expect(rangeCalls).toBe(0);
+  });
+
+  it('propagates a failed range read rather than resolving nextFreeDays: [] (honest failure — [] is itself a legitimate answer, AC-05)', async () => {
+    const desks = fullyBookedDesks();
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return desks;
+      },
+      async listConfirmedDeskIds() {
+        return desks.map((d) => d.id);
+      },
+      async listConfirmedDeskIdsInRange() {
+        throw new Error('range read failed');
+      },
+      async listMyConfirmedDatesInRange() {
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    await expect(service.getAvailability(TODAY, CALLER_ID)).rejects.toThrow('range read failed');
   });
 });
 

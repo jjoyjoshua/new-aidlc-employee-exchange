@@ -20,14 +20,16 @@ export function createFetchAvailability(api: ApiClient): AvailabilityFetcher {
 
     if (result.kind !== 'ok') return { kind: 'failed' };
 
-    // `myBooking`/`usualDeskId` always parse to `X | null` (the schema's `.default(null)`
-    // guarantees it), but inferring `T` from `ZodType<T>` at the call site above widens both to
-    // include `undefined` — a TypeScript/Zod generic-inference quirk, not a real possibility at
-    // runtime. Rebuilding the fields closes the gap without touching `api-client.ts`.
+    // `myBooking`/`usualDeskId`/`nextFreeDays` always parse to their defaulted shape (the
+    // schema's `.default(...)` guarantees it), but inferring `T` from `ZodType<T>` at the call
+    // site above widens all three to include `undefined` — a TypeScript/Zod generic-inference
+    // quirk, not a real possibility at runtime. Rebuilding the fields closes the gap without
+    // touching `api-client.ts`.
     const data: AvailabilityResponse = {
       ...result.data,
       myBooking: result.data.myBooking ?? null,
       usualDeskId: result.data.usualDeskId ?? null,
+      nextFreeDays: result.data.nextFreeDays ?? [],
     };
     return { kind: 'ok', data };
   };

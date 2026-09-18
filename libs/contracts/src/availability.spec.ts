@@ -118,4 +118,31 @@ describe('availabilityResponseSchema', () => {
     expect(result.success).toBe(true);
     expect(result.data?.usualDeskId).toBeNull();
   });
+
+  it('an OLD fixture with no nextFreeDays key at all still parses, defaulting to [] (additive field, US-009/AC-05)', () => {
+    const result = availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [DESK], myBooking: null });
+    expect(result.success).toBe(true);
+    expect(result.data?.nextFreeDays).toEqual([]);
+  });
+
+  it('parses a populated nextFreeDays (US-009/AC-02 — two suggested days)', () => {
+    const result = availabilityResponseSchema.safeParse({
+      date: '2026-09-16',
+      desks: [DESK],
+      myBooking: null,
+      nextFreeDays: ['2026-09-17', '2026-09-18'],
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.nextFreeDays).toEqual(['2026-09-17', '2026-09-18']);
+  });
+
+  it('rejects more than two entries in nextFreeDays (US-009/AC-02 — at most two)', () => {
+    const result = availabilityResponseSchema.safeParse({
+      date: '2026-09-16',
+      desks: [DESK],
+      myBooking: null,
+      nextFreeDays: ['2026-09-17', '2026-09-18', '2026-09-21'],
+    });
+    expect(result.success).toBe(false);
+  });
 });

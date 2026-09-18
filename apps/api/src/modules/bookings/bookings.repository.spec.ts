@@ -55,6 +55,8 @@ interface RecordedCall {
   single?: boolean;
   maybeSingle?: boolean;
   limit?: number;
+  gte?: [string, unknown];
+  lte?: [string, unknown];
 }
 
 type FakeResponse = { data: unknown; error: { code: string; message: string } | null };
@@ -71,6 +73,14 @@ function fakeSupabase(responses: Record<string, FakeResponse | ((call: RecordedC
       },
       eq(column: string, value: unknown) {
         call.eq.push([column, value]);
+        return builder;
+      },
+      gte(column: string, value: unknown) {
+        call.gte = [column, value];
+        return builder;
+      },
+      lte(column: string, value: unknown) {
+        call.lte = [column, value];
         return builder;
       },
       order(column: string, opts?: { ascending?: boolean }) {
@@ -154,6 +164,63 @@ describe('availabilityRepository.listConfirmedDeskIds — the whole of US-006/AC
         },
       ]);
       expect(result).toEqual(['d1', 'd2']);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.listConfirmedDeskIdsInRange — US-009/AC-06, ADR-004 unchanged', () => {
+  it('selects booking_date and desk_id only — no user_id, no * — over an inclusive range, confirmed only', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: [{ booking_date: '2026-09-10', desk_id: 'd1' }], error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.listConfirmedDeskIdsInRange('2026-09-10', '2026-10-09');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'booking_date, desk_id',
+          eq: [['status', 'confirmed']],
+          gte: ['booking_date', '2026-09-10'],
+          lte: ['booking_date', '2026-10-09'],
+          order: [],
+        },
+      ]);
+      expect(result).toEqual([{ booking_date: '2026-09-10', desk_id: 'd1' }]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.listMyConfirmedDatesInRange — US-009/AC-06, BR-001.1', () => {
+  it('selects booking_date only, filtered to the caller, over an inclusive range, confirmed only', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: [{ booking_date: '2026-09-11' }], error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.listMyConfirmedDatesInRange('user-1', '2026-09-10', '2026-10-09');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'booking_date',
+          eq: [
+            ['user_id', 'user-1'],
+            ['status', 'confirmed'],
+          ],
+          gte: ['booking_date', '2026-09-10'],
+          lte: ['booking_date', '2026-10-09'],
+          order: [],
+        },
+      ]);
+      expect(result).toEqual(['2026-09-11']);
     } finally {
       setSupabaseForTesting(undefined);
     }

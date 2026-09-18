@@ -47,4 +47,13 @@ booked desk id (across all dates and statuses, via the new `findMyLastBookedDesk
 already filtered server-side to eligibility — present only when that desk is also `available` in
 `desks[]` for the requested date. The browser does one `===`, never re-derives the rule.
 
+**US-009** adds `nextFreeDays` to the same `getAvailability` response: the next two working days,
+inside the booking window, with at least one free desk — populated only when the selected date is
+fully booked and the caller holds no booking for it (ST-10 outranks ST-04). Two new range reads,
+`listConfirmedDeskIdsInRange`/`listMyConfirmedDatesInRange`, both scoped to `bookings` — **`desks`
+is not re-read**, since the active desk list is already in hand from the same call's first read
+(Architect design note §1.2). The candidate scan itself (`pickNextFreeDays`) is the module's first
+`domain/` function: pure, and where AC-06 (weekends, the window edge, BR-001.1) is provable with no
+database. No migration, no new route, no new error code.
+
 See `../README.md` for what this module owns and the boundary it must respect.

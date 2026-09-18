@@ -12,6 +12,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-006 | See desk availability for the chosen date | Complex | approved | [`US-006-see-desk-availability/`](US-006-see-desk-availability/) |
 | US-007 | Book an available desk | Complex | implemented | [`US-007-book-an-available-desk/`](US-007-book-an-available-desk/) |
 | US-008 | See which desk I booked last | Complex | approved | [`US-008-see-my-last-booked-desk/`](US-008-see-my-last-booked-desk/) |
+| US-009 | Be offered the next free days when everything is taken | Complex | implemented | [`US-009-next-free-days-when-fully-booked/`](US-009-next-free-days-when-fully-booked/) |
 
 ## How to update
 
