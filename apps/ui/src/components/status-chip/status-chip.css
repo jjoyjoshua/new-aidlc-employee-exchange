@@ -32,6 +32,14 @@
   color: var(--c-state-taken-ink);
 }
 
+/* US-007/AC-01. `--c-selected` is the same forest token DateStrip's selected chip already uses
+ * (`date-strip.css`) — one "this is the chosen one" colour across the screen, not a second. */
+.status-chip--selected {
+  background: var(--c-selected);
+  border-color: var(--c-selected);
+  color: var(--c-action-label);
+}
+
 .status-chip__icon {
   flex: none;
   width: var(--icon-sm);

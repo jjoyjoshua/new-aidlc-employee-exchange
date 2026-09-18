@@ -23,3 +23,22 @@
   font-weight: var(--fw-medium);
   color: var(--c-text);
 }
+
+/*
+ * US-007/AC-01. An AVAILABLE row renders as a native <button role="radio">, so it needs the
+ * usual button reset — full-width, left-aligned, no border/background of its own (the zone
+ * card still supplies the white and the edge, unchanged from the `Rest` variant's own rule).
+ */
+.desk-row--selectable {
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The left selection bar (Figma `Desk row`'s "radio-on indicator") — a border-inset accent
+ * rather than a layout-shifting left border, so selecting a row never nudges its own content. */
+.desk-row--selected {
+  box-shadow: inset 3px 0 0 var(--c-selected);
+}

@@ -14,6 +14,7 @@ export * from './auth.js';
 export * from './password.js';
 export * from './booking-window.js';
 export * from './availability.js';
+export * from './bookings.js';
 
 /**
  * Zod is re-exported **through** this package on purpose.

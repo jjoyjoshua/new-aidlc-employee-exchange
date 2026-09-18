@@ -5,16 +5,16 @@
  * fixes them for the next nine screens. They are scoped to what SCR-001 and SCR-010 actually
  * need and nothing beyond — no speculative props.
  *
- * `danger` is outlined rather than solid on this component. The palette does have a
- * `--c-danger-action` fill, but it is for the destructive *dialog* confirm (SCR-002, SCR-003),
- * and introducing it here would be a token decision taken by a component. When a screen needs
- * the solid destructive button, it gets a variant then.
+ * `danger` (US-007/AC-07) is the solid `--c-danger-action` fill — the destructive *dialog*
+ * confirm SCR-002 ST-07 and SCR-003 ST-10's cancel dialog need. It did not exist before this
+ * story: introducing it earlier, before a screen needed it, would have been a token decision
+ * taken by a component with no caller to prove it against.
  */
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Spinner } from '../spinner/Spinner.js';
 import './button.css';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ButtonSize = 'md' | 'lg';
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {

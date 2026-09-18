@@ -7,18 +7,21 @@
  * person icon is the signal, never an occupant's name (US-006/AC-06 — the employee view stays
  * anonymous; this icon is generic, not tied to any person).
  *
- * `Selected` (the third variant in Figma, forest-coloured) is US-007's — nothing here selects.
+ * `Selected` (US-007/AC-01) is the third variant, forest-coloured via the shared `--c-selected`
+ * token (the same one `DateStrip`'s selected chip already uses) — reusing the check-circle icon
+ * rather than a new one: "the desk is free for the selected date" and "you have selected this
+ * desk" are the same underlying fact from the employee's point of view, just at a later step.
  */
 import personMarkup from '../../assets/icon-person.svg?raw';
 import './status-chip.css';
 
-export type DeskStatus = 'available' | 'taken';
+export type DeskStatus = 'available' | 'taken' | 'selected';
 
 export interface StatusChipProps {
   status: DeskStatus;
 }
 
-const LABEL: Record<DeskStatus, string> = { available: 'Available', taken: 'Taken' };
+const LABEL: Record<DeskStatus, string> = { available: 'Available', taken: 'Taken', selected: 'Selected' };
 
 function CheckCircleIcon() {
   // Figma `Icon / check-circle` (node 11:5) — "the desk is free for the selected date". Same
@@ -39,7 +42,7 @@ function PersonIcon() {
 export function StatusChip({ status }: StatusChipProps) {
   return (
     <span className={`status-chip status-chip--${status}`}>
-      {status === 'available' ? <CheckCircleIcon /> : <PersonIcon />}
+      {status === 'taken' ? <PersonIcon /> : <CheckCircleIcon />}
       <span>{LABEL[status]}</span>
     </span>
   );

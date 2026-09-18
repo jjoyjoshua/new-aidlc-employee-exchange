@@ -4,7 +4,14 @@ import { buildApp } from '../../composition.js';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 import type { SessionVerifier } from '../../http/middleware/require-session.js';
 import type { AvailabilityRepository } from './bookings.repository.js';
-import { activeDesks, partiallyTakenDeskIds, RETIRED_DESK_NUMBER } from './bookings.fixtures.js';
+import {
+  activeDeskRow,
+  activeDesks,
+  emptyAvailabilityRepository,
+  inactiveDeskRow,
+  partiallyTakenDeskIds,
+  RETIRED_DESK_NUMBER,
+} from './bookings.fixtures.js';
 
 /**
  * Against the real `createApp`, through supertest — matching `auth.routes.spec.ts`'s own reason
@@ -54,14 +61,7 @@ const PAST = '2026-09-15'; // today - 1
 /** Any instant that resolves to TODAY in Asia/Kolkata (UTC+5:30). */
 const NOW_MS = () => Date.parse(`${TODAY}T12:00:00Z`);
 
-const noRows: AvailabilityRepository = {
-  async listActiveDesks() {
-    return [];
-  },
-  async listConfirmedDeskIds() {
-    return [];
-  },
-};
+const noRows: AvailabilityRepository = emptyAvailabilityRepository;
 
 beforeEach(() => {
   setConfigForTesting({
@@ -106,12 +106,21 @@ const availability = (app: ReturnType<typeof buildApp>, query: string, token = E
     .get(`/api/bookings/availability${query}`)
     .set('Authorization', `Bearer ${token}`);
 
+const createBooking = (app: ReturnType<typeof buildApp>, body: Record<string, unknown>, token = EMPLOYEE_TOKEN) =>
+  request(app).post('/api/bookings').set('Authorization', `Bearer ${token}`).send(body);
+
+const cancelBooking = (app: ReturnType<typeof buildApp>, id: string, token = EMPLOYEE_TOKEN) =>
+  request(app)
+    .post(`/api/bookings/${id}/cancel`)
+    .set('Authorization', `Bearer ${token}`);
+
 describe('GET /api/bookings/availability — US-006/AC-03 (taken desks shown, not hidden)', () => {
   it('returns a booked desk as taken, without shrinking the array from the free-day case (US-006/AC-03)', async () => {
     const desks = activeDesks();
     const takenIds = partiallyTakenDeskIds(desks);
     const app = appWith({
       availability: {
+        ...emptyAvailabilityRepository,
         async listActiveDesks() {
           return desks;
         },
@@ -138,6 +147,7 @@ describe('GET /api/bookings/availability — US-006/AC-06 (a taken desk never sa
     const takenIds = [firstDesk.id];
     const app = appWith({
       availability: {
+        ...emptyAvailabilityRepository,
         async listActiveDesks() {
           return desks;
         },
@@ -167,6 +177,7 @@ describe('GET /api/bookings/availability — US-006/AC-04, pass-through check ON
     const desks = activeDesks(); // already excludes RETIRED_DESK_NUMBER — see bookings.fixtures.ts
     const app = appWith({
       availability: {
+        ...emptyAvailabilityRepository,
         async listActiveDesks() {
           return desks;
         },
@@ -252,5 +263,229 @@ describe('GET /api/bookings/availability — the session chain (defence, not a s
     const response = await availability(app, `?date=${TODAY}`, MUST_CHANGE_PASSWORD_TOKEN);
     expect(response.status).toBe(403);
     expect(response.body.code).toBe('password_change_required');
+  });
+});
+
+const DESK_ID = '11111111-1111-4111-8111-111111111111';
+const DESK = activeDeskRow(DESK_ID, 'A-02');
+
+describe('GET /api/bookings/availability — Cache-Control (US-007, Architect design note §2.3, F-4)', () => {
+  it('sets Cache-Control: private, no-store, since the body is now caller-specific (myBooking)', async () => {
+    const app = appWith({});
+
+    const response = await availability(app, `?date=${TODAY}`);
+
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('POST /api/bookings — a valid request creates a Confirmed booking (US-007/AC-03, AC-04)', () => {
+  it("returns 201 with the booking and confirmationEmail equal to the authenticated caller's email (US-007/AC-03)", async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          return { kind: 'ok', id: 'new-booking-id' };
+        },
+      },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      id: 'new-booking-id',
+      deskId: DESK_ID,
+      deskNumber: 'A-02',
+      date: TODAY,
+      status: 'confirmed',
+      confirmationEmail: EMPLOYEE.email,
+    });
+  });
+});
+
+describe('POST /api/bookings — the date guard is enforced server-side, bypassing the client entirely (US-007/AC-11)', () => {
+  const refusesBeforeAnyDeskLookup: AvailabilityRepository = {
+    ...emptyAvailabilityRepository,
+    async getDeskById() {
+      throw new Error('must not be called — the date guard must refuse first');
+    },
+    async insertConfirmedBooking() {
+      throw new Error('must not be called — the date guard must refuse first');
+    },
+  };
+
+  it('422s date_not_bookable for a weekend date even when posted directly (US-007/AC-11)', async () => {
+    const app = appWith({ availability: refusesBeforeAnyDeskLookup });
+    const response = await createBooking(app, { date: SATURDAY, deskId: DESK_ID });
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('date_not_bookable');
+  });
+
+  it('422s date_not_bookable for a past date even when posted directly (US-007/AC-11)', async () => {
+    const app = appWith({ availability: refusesBeforeAnyDeskLookup });
+    const response = await createBooking(app, { date: PAST, deskId: DESK_ID });
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('date_not_bookable');
+  });
+
+  it('422s date_not_bookable for a date beyond the 30-day window even when posted directly (US-007/AC-11)', async () => {
+    const app = appWith({ availability: refusesBeforeAnyDeskLookup });
+    const response = await createBooking(app, { date: TOO_FAR_AHEAD, deskId: DESK_ID });
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('date_not_bookable');
+  });
+});
+
+describe('POST /api/bookings — the desk guard (US-007/AC-12)', () => {
+  it('404s desk_not_found for a deskId that does not exist', async () => {
+    const app = appWith({
+      availability: { ...emptyAvailabilityRepository, async getDeskById() { return undefined; } },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('desk_not_found');
+  });
+
+  it('422s desk_inactive for a deskId naming an inactive desk, even when posted directly (US-007/AC-12)', async () => {
+    const inactive = inactiveDeskRow();
+    const app = appWith({
+      availability: { ...emptyAvailabilityRepository, async getDeskById() { return inactive; } },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: inactive.id });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('desk_inactive');
+  });
+});
+
+describe('POST /api/bookings — the two conflict outcomes (US-007/AC-05, AC-08)', () => {
+  it('409s desk_already_booked when the desk-per-day index fires (US-007/AC-08)', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          return { kind: 'desk_conflict' };
+        },
+      },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('desk_already_booked');
+  });
+
+  it('409s already_booked_that_date when the user-per-day index fires (US-007/AC-05)', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          return { kind: 'user_conflict' };
+        },
+      },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('already_booked_that_date');
+  });
+});
+
+describe('POST /api/bookings — two sequential requests, same user and date (US-007/AC-09 — Architect design note §8, F-7; the real-Postgres arbitration lives in bookings.repository.concurrency.spec.ts)', () => {
+  it('the first succeeds 201; the second — same user, same date, a different desk — is refused 409 already_booked_that_date', async () => {
+    let attempts = 0;
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          attempts += 1;
+          return attempts === 1 ? { kind: 'ok', id: `booking-${attempts}` } : { kind: 'user_conflict' };
+        },
+      },
+    });
+
+    const first = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+    expect(first.status).toBe(201);
+
+    const second = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe('already_booked_that_date');
+  });
+});
+
+describe('POST /api/bookings — request validation and the session chain (defence, not a story AC)', () => {
+  it('400s a malformed body', async () => {
+    const app = appWith({});
+    const response = await createBooking(app, { date: TODAY });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('400s an unknown field (bookingCreateSchema is .strict())', async () => {
+    const app = appWith({});
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID, status: 'confirmed' });
+    expect(response.status).toBe(400);
+  });
+
+  it('401s with no bearer token', async () => {
+    const app = appWith({});
+    const response = await request(app).post('/api/bookings').send({ date: TODAY, deskId: DESK_ID });
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('no_session');
+  });
+});
+
+describe('POST /api/bookings/:id/cancel — US-007/AC-07, FR-06 (D-03: one undiscriminated 404)', () => {
+  it('cancels the caller\'s own confirmed booking and returns 200 with an empty body, and a second cancel of the same id returns 404 booking_not_found (US-007/AC-07)', async () => {
+    const bookingId = '22222222-2222-4222-8222-222222222222';
+    let cancelled = false;
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async cancelOwnedBooking() {
+          if (cancelled) return undefined;
+          cancelled = true;
+          return { id: bookingId };
+        },
+      },
+    });
+
+    const first = await cancelBooking(app, bookingId);
+    expect(first.status).toBe(200);
+    expect(first.text).toBe('');
+
+    const second = await cancelBooking(app, bookingId);
+    expect(second.status).toBe(404);
+    expect(second.body.code).toBe('booking_not_found');
+  });
+
+  it('400s a non-uuid id', async () => {
+    const app = appWith({});
+    const response = await cancelBooking(app, 'not-a-uuid');
+    expect(response.status).toBe(400);
+  });
+
+  it('401s with no bearer token', async () => {
+    const app = appWith({});
+    const response = await request(app).post('/api/bookings/11111111-1111-4111-8111-111111111111/cancel');
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('no_session');
   });
 });

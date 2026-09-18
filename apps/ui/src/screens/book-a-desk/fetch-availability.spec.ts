@@ -3,7 +3,7 @@ import { createFetchAvailability } from './fetch-availability.js';
 import type { ApiClient } from '../../lib/api-client.js';
 import type { AvailabilityResponse } from '@desk-booking/contracts';
 
-const RESPONSE: AvailabilityResponse = { date: '2026-09-16', desks: [] };
+const RESPONSE: AvailabilityResponse = { date: '2026-09-16', desks: [], myBooking: null };
 
 describe('createFetchAvailability', () => {
   it('maps an ok ApiResult to an ok outcome, requesting the date as a query param', async () => {

@@ -93,6 +93,25 @@
   border-color: transparent;
 }
 
+/* US-007/AC-07. The solid destructive fill, added 2026-09-08 in the design file — the
+   confirm action inside a destructive dialog (SCR-002 ST-07, SCR-003 ST-10), never the
+   default state of an inline action. */
+.button--danger {
+  background: var(--c-danger-action);
+  color: var(--c-danger-action-label);
+  border-color: var(--c-danger-action);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: var(--c-danger-action-hover);
+  border-color: var(--c-danger-action-hover);
+}
+
+.button--danger:active:not(:disabled) {
+  background: var(--c-danger-action-pressed);
+  border-color: var(--c-danger-action-pressed);
+}
+
 /*
  * Disabled, revised 2026-09-08 in the design file.
  *

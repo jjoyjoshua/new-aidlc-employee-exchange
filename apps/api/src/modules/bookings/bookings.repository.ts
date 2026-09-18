@@ -16,6 +16,30 @@ export interface DeskRow {
   desk_number: string;
 }
 
+/** The `desks` columns US-007/FR-04's active/exists guard reads. Never `select('*')` — same
+ *  rule as `DeskRow` above. `desk_number` travels too so FR-01's `201` response can name the
+ *  desk without a second query — the service already has this row by the time it inserts. */
+export interface DeskActiveRow {
+  id: string;
+  desk_number: string;
+  is_active: boolean;
+}
+
+/** US-007/FR-05. What `findMyConfirmedBooking` hands back — the caller's own booking, joined
+ *  to the desk number `myBooking`'s wire shape needs, nothing else (design note §2.2). */
+export interface MyConfirmedBookingRow {
+  id: string;
+  desk_id: string;
+  desk_number: string;
+}
+
+/** US-007/FR-02. `insertConfirmedBooking`'s outcome — a discriminated result, never a guess.
+ *  See the constraint-violation mapping in `insertConfirmedBooking` for what each kind means. */
+export type InsertBookingOutcome =
+  | { kind: 'ok'; id: string }
+  | { kind: 'desk_conflict' }
+  | { kind: 'user_conflict' };
+
 export interface AvailabilityRepository {
   /** US-006/AC-04. `.eq('is_active', true)` is the WHOLE of this criterion — an inactive desk
    *  must never appear here, as taken or as free. Ordered by `desk_number`, which is also
@@ -26,6 +50,23 @@ export interface AvailabilityRepository {
    *  never read, not merely never sent (design note §2.5): there is no column here to forget to
    *  strip in a later refactor. */
   listConfirmedDeskIds(date: OfficeDate): Promise<string[]>;
+  /** US-007/FR-04. `undefined` for a missing id — an inactive desk is still a real row and is
+   *  returned as `{ is_active: false }`, never conflated with "does not exist". */
+  getDeskById(id: string): Promise<DeskActiveRow | undefined>;
+  /** US-007/FR-05, AC-06. Filtered to `user_id`, `booking_date` and `status = 'confirmed'` —
+   *  never a wider select (design note §2.2's three-part argument for why a leak here is safe
+   *  even so, and why the filter must not be dropped regardless). `undefined` means the caller
+   *  holds no Confirmed booking for that date. */
+  findMyConfirmedBooking(userId: string, date: OfficeDate): Promise<MyConfirmedBookingRow | undefined>;
+  /** US-007/FR-02, D-01, D-04. No availability check precedes this — the two partial unique
+   *  indexes in `0003_bookings.sql` are what arbitrate. See the implementation for the mapping
+   *  contract (Architect design note §1.2): only a recognised `23505` naming one of the two
+   *  known indexes becomes an outcome; everything else throws. */
+  insertConfirmedBooking(userId: string, deskId: string, date: OfficeDate): Promise<InsertBookingOutcome>;
+  /** US-007/FR-06, AC-07, D-03. One `UPDATE ... RETURNING`, scoped to id/owner/confirmed —
+   *  no read-then-write window (design note §3.2). `undefined` covers "no such booking", "not
+   *  the caller's" and "not currently confirmed" alike, deliberately undiscriminated (D-03). */
+  cancelOwnedBooking(userId: string, bookingId: string, cancelledAt: Date): Promise<{ id: string } | undefined>;
 }
 
 export const availabilityRepository: AvailabilityRepository = {
@@ -49,5 +90,108 @@ export const availabilityRepository: AvailabilityRepository = {
 
     if (error) throw new Error(`bookings lookup failed: ${error.message}`);
     return ((data ?? []) as Array<{ desk_id: string }>).map((row) => row.desk_id);
+  },
+
+  async getDeskById(id) {
+    const { data, error } = await supabase()
+      .from('desks')
+      .select('id, desk_number, is_active')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw new Error(`desk lookup failed: ${error.message}`);
+    return (data as DeskActiveRow | null) ?? undefined;
+  },
+
+  async findMyConfirmedBooking(userId, date) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('id, desk_id, desks(desk_number)')
+      .eq('user_id', userId)
+      .eq('booking_date', date)
+      .eq('status', 'confirmed')
+      .maybeSingle();
+
+    if (error) throw new Error(`bookings lookup failed: ${error.message}`);
+    if (!data) return undefined;
+
+    // `unknown` first, per the compiler's own hint: supabase-js's query-builder types default a
+    // relationship embed to an ARRAY when no generated `Database` schema type is supplied (this
+    // project does not generate one), because it cannot see the foreign key's cardinality from
+    // the select string alone. At runtime PostgREST embeds a many-to-one relation (many
+    // `bookings` rows to one `desks` row) as a single object, never an array — this cast states
+    // the actual wire shape, not the generic default the type-level parser guessed.
+    const row = data as unknown as { id: string; desk_id: string; desks: { desk_number: string } | null };
+    return { id: row.id, desk_id: row.desk_id, desk_number: row.desks?.desk_number ?? '' };
+  },
+
+  /**
+   * D-01, D-04. No `SELECT` precedes this insert — the two partial unique indexes are the only
+   * thing that decides who wins a race for the same desk or the same user's second booking of
+   * the day. What follows is the mapping contract Architect design note §1.2 requires:
+   *
+   *   - Gate on the SQLSTATE first. `23505` is "unique violation"; anything else (the
+   *     `bookings_weekday_only`/`bookings_cancelled_*` CHECK constraints are `23514`, a missing
+   *     desk's FK is `23503`) means the code is wrong, not that the user is — THROW, do not map
+   *     it to a conflict. It reaches `error-handler.ts`, which logs it and returns a bare 500.
+   *   - Match the violated index by its BARE NAME inside `error.message`, never the surrounding
+   *     English sentence — Postgres localises that via `lc_messages`; the quoted identifier is
+   *     not localised.
+   *   - A `23505` that names neither known index is NOT an outcome either. Falling through to
+   *     `desk_conflict` here would tell an employee "someone else took that desk" when the truth
+   *     is unknown — a wrong answer nobody notices is worse than an honest 500 (design note
+   *     §1.2, Architect finding F-1). THROW.
+   *
+   * Proven against a real Postgres instance, not only this fake-client mapping, by
+   * `bookings.repository.concurrency.spec.ts` (Step 3, design note §1.3, F-2).
+   */
+  async insertConfirmedBooking(userId, deskId, date) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .insert({ user_id: userId, desk_id: deskId, booking_date: date })
+      .select('id')
+      .single();
+
+    if (!error) return { kind: 'ok', id: (data as { id: string }).id };
+
+    if (error.code !== '23505') {
+      throw new Error(`booking insert failed: ${error.message}`);
+    }
+    if (error.message.includes('bookings_one_confirmed_per_desk_per_day')) return { kind: 'desk_conflict' };
+    if (error.message.includes('bookings_one_confirmed_per_user_per_day')) return { kind: 'user_conflict' };
+
+    throw new Error(`unrecognised unique violation: ${error.message}`);
+  },
+
+  /**
+   * D-03, design note §3.2. One `UPDATE ... WHERE id = ? AND user_id = ? AND status = 'confirmed'
+   * RETURNING id` — no read-then-write window, so two concurrent cancels of the same booking
+   * produce exactly one returned row and one empty result, the database arbitrating exactly as
+   * the insert's unique indexes do. `cancelledAt` is the caller's clock reading, never this
+   * module's own (same convention as `auth.repository.ts`'s `stampLastSeen`) — the value
+   * compared upstream and the value written here must come from the same instant.
+   *
+   * The schema requires `cancelled_at`/`cancellation_source` to be set in the SAME `UPDATE` as
+   * `status = 'cancelled'` (`bookings_cancelled_at_matches_status`, `bookings_cancelled_has_source`).
+   * If either were forgotten here, Postgres rejects the write with a `23514` — which propagates
+   * as an unhandled error (a 500), never silently as `404 booking_not_found` (design note §1.2).
+   */
+  async cancelOwnedBooking(userId, bookingId, cancelledAt) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .update({
+        status: 'cancelled',
+        cancelled_at: cancelledAt.toISOString(),
+        cancelled_by: userId,
+        cancellation_source: 'owner',
+      })
+      .eq('id', bookingId)
+      .eq('user_id', userId)
+      .eq('status', 'confirmed')
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw new Error(`booking cancel failed: ${error.message}`);
+    return (data as { id: string } | null) ?? undefined;
   },
 };

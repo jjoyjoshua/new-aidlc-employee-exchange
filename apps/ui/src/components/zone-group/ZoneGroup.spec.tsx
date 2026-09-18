@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { ZoneGroup } from './ZoneGroup.js';
 import type { DeskAvailability } from '@desk-booking/contracts';
 
@@ -21,5 +22,23 @@ describe('ZoneGroup (US-006/AC-05)', () => {
 
     const numbers = screen.getAllByText(/^A-\d{2}$/).map((el) => el.textContent);
     expect(numbers).toEqual(['A-01', 'A-02']);
+  });
+});
+
+describe('ZoneGroup — threads selection through to DeskRow (US-007/AC-01, AC-02)', () => {
+  it('marks the desk matching selectedDeskId as Selected and no other', () => {
+    render(<ZoneGroup letter="A" desks={[desk('A-01'), desk('A-02')]} selectedDeskId="A-02" />);
+
+    expect(screen.getByRole('radio', { name: /A-02/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: /A-01/ })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('calls onSelectDesk with the desk id when an available row is activated', async () => {
+    const onSelectDesk = vi.fn();
+    render(<ZoneGroup letter="A" desks={[desk('A-01')]} onSelectDesk={onSelectDesk} />);
+
+    await userEvent.click(screen.getByRole('radio', { name: /A-01/ }));
+
+    expect(onSelectDesk).toHaveBeenCalledWith('A-01');
   });
 });

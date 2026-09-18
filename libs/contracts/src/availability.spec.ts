@@ -37,18 +37,40 @@ describe('deskAvailabilityStatusSchema', () => {
 
 describe('availabilityResponseSchema', () => {
   const DESK = { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', deskNumber: 'A-01', status: 'available' as const };
+  const MY_BOOKING = { id: '9c858901-8a57-4791-81fe-4c455b099bc9', deskId: DESK.id, deskNumber: 'A-01' };
 
   it('parses a response carrying a mix of available and taken desks', () => {
     const result = availabilityResponseSchema.safeParse({
       date: '2026-09-16',
       desks: [DESK, { ...DESK, id: '9c858901-8a57-4791-81fe-4c455b099bc9', deskNumber: 'A-02', status: 'taken' }],
+      myBooking: null,
     });
 
     expect(result.success).toBe(true);
   });
 
   it('parses an empty desks array (US-006/AC-09 — no active desks)', () => {
-    expect(availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [] }).success).toBe(true);
+    expect(availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [], myBooking: null }).success).toBe(
+      true,
+    );
+  });
+
+  it('parses myBooking: null (US-007/AC-06 — no existing booking for the date)', () => {
+    const result = availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [DESK], myBooking: null });
+    expect(result.success).toBe(true);
+    expect(result.data?.myBooking).toBeNull();
+  });
+
+  it('parses a populated myBooking (US-007/AC-06 — the caller already holds a booking that date)', () => {
+    const result = availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [DESK], myBooking: MY_BOOKING });
+    expect(result.success).toBe(true);
+    expect(result.data?.myBooking).toEqual(MY_BOOKING);
+  });
+
+  it('an OLD fixture with no myBooking key at all still parses, defaulting to null (additive field, ADR-002)', () => {
+    const result = availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [DESK] });
+    expect(result.success).toBe(true);
+    expect(result.data?.myBooking).toBeNull();
   });
 
   it('rejects a desk with a third status value', () => {
