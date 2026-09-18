@@ -92,7 +92,7 @@ describe('RequirePasswordChange (US-004/AC-03)', () => {
     expect(screenMounted).not.toHaveBeenCalled();
   });
 
-  it('holds — renders nothing — while the stored session is still being confirmed (US-003 parity)', () => {
+  it('holds — renders nothing — while the stored session is still being confirmed', () => {
     const client = {
       request: () => new Promise(() => undefined),
       requestNoContent: async () => ({ kind: 'unavailable' as const }),

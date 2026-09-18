@@ -462,7 +462,8 @@
         "apps/ui/src/lib/auth/auth-context.spec.tsx",
         "apps/ui/src/lib/auth/require-session.spec.tsx",
         "apps/ui/src/components/app-shell/AccountMenu.spec.tsx",
-        "apps/ui/src/components/app-shell/AppShell.spec.tsx"
+        "apps/ui/src/components/app-shell/AppShell.spec.tsx",
+        "apps/ui/src/screens/set-password/SetPassword.spec.tsx"
       ],
       "screens": [
         "SCR-002",

@@ -5,8 +5,8 @@ import { MyBookings } from './MyBookings.js';
 
 /**
  * US-004/AC-07 — the confirmation SCR-010 ST-05 carries onto its destination screen. `MyBookings`
- * is still a stub (US-010's content is a separate story); this is the one piece of behaviour
- * US-004 adds to it.
+ * is still a stub — its full content belongs to a later story — and this is the one piece of
+ * behaviour US-004 adds to it.
  */
 describe('MyBookings — the password-saved toast (US-004/AC-07)', () => {
   it('renders the confirmation when it arrives via navigation state', () => {
