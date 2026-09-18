@@ -5,6 +5,7 @@ import {
   isWeekend,
   lastBookableDate,
   nextBookableDate,
+  officeDateSchema,
   refusalFor,
 } from './booking-window.js';
 
@@ -77,6 +78,25 @@ describe('refusalFor (US-005/AC-02, AC-03, AC-04)', () => {
     // 2026-10-24 is a Saturday, and today + 30 is 2026-10-16, so it is both out of range and a
     // weekend. The out-of-range reason must win.
     expect(refusalFor('2026-10-24', TODAY)).toBe('too-far-ahead');
+  });
+});
+
+describe('officeDateSchema (US-006/D-02)', () => {
+  it('rejects dates that do not exist on the calendar, although they match the YYYY-MM-DD shape', () => {
+    expect(officeDateSchema.safeParse('2026-02-30').success).toBe(false); // February has 28/29 days
+    expect(officeDateSchema.safeParse('2026-13-01').success).toBe(false); // no 13th month
+    expect(officeDateSchema.safeParse('2026-00-10').success).toBe(false); // no 0th month
+    expect(officeDateSchema.safeParse('2026-02-00').success).toBe(false); // no 0th day
+  });
+
+  it('accepts real calendar dates, including a leap-year 29 February', () => {
+    expect(officeDateSchema.safeParse('2026-02-28').success).toBe(true);
+    expect(officeDateSchema.safeParse('2028-02-29').success).toBe(true); // 2028 is a leap year
+  });
+
+  it('still rejects a value that does not even match the shape', () => {
+    expect(officeDateSchema.safeParse('not-a-date').success).toBe(false);
+    expect(officeDateSchema.safeParse('2026/09/16').success).toBe(false);
   });
 });
 

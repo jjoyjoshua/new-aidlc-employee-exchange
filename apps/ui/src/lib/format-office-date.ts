@@ -47,3 +47,14 @@ export function formatMonthYear(date: OfficeDate): string {
 export function formatOfficeDateLabel(date: OfficeDate): string {
   return `${formatWeekdayShort(date)} ${getDayOfMonth(date)} ${formatMonthShort(date)}`;
 }
+
+/**
+ * "Wednesday 9 September" — the long form US-006's live region announces (AC-10). The visible
+ * count line uses the short `formatOfficeDateLabel` form; a screen-reader user gets the fuller
+ * sentence instead, in the announced text only (design note §4.3).
+ */
+export function formatOfficeDateLong(date: OfficeDate): string {
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'UTC' }).format(toUtcInstant(date));
+  const month = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }).format(toUtcInstant(date));
+  return `${weekday} ${getDayOfMonth(date)} ${month}`;
+}

@@ -1,0 +1,25 @@
+/*
+ * DeskRow — Figma `Desk row` (node 22:148). 56px tall, `pl-12 pr-16 py-16`, gap `--s-12`.
+ *
+ * "A row INSIDE a zone card — not a card itself... carries no border, no radius and no fill of
+ * its own at rest: the zone card supplies the white and the edge" (the component's own Figma
+ * documentation). `--desk-row-height` is shared with `SkeletonRow` so loading never shifts the
+ * layout (US-006/AC-07) — defined once, in `book-a-desk.css`.
+ */
+
+.desk-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  height: var(--desk-row-height, 56px);
+  min-height: 44px; /* PRIN-4 — the row is the touch target */
+  padding: var(--s-16) var(--s-16) var(--s-16) var(--s-12);
+}
+
+.desk-row__number {
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}

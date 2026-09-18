@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   formatMonthYear,
   formatOfficeDateLabel,
+  formatOfficeDateLong,
   formatWeekdayNarrow,
   getDayOfMonth,
 } from './format-office-date.js';
@@ -25,6 +26,18 @@ describe('formatOfficeDateLabel (US-005/AC-07, D-03)', () => {
     process.env.TZ = 'America/New_York';
 
     expect(formatOfficeDateLabel('2026-10-03')).toBe('Sat 3 Oct');
+  });
+});
+
+describe('formatOfficeDateLong (US-006/AC-10)', () => {
+  it('renders the full weekday, day and full month, for the announced text', () => {
+    expect(formatOfficeDateLong('2026-09-09')).toBe('Wednesday 9 September');
+  });
+
+  it('never shifts the day backward for a viewer west of Greenwich — the same trap D-03 closed', () => {
+    process.env.TZ = 'America/New_York';
+
+    expect(formatOfficeDateLong('2026-09-09')).toBe('Wednesday 9 September');
   });
 });
 

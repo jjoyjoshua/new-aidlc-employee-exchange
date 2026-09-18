@@ -1,11 +1,35 @@
 import { z } from 'zod';
 
 /**
+ * A real calendar date, not merely a `YYYY-MM-DD`-shaped string. `2026-02-30` matches the shape
+ * regex, and every downstream consumer then misbehaves differently: `isWeekend` would answer for
+ * 2 March (`Date.UTC` rolls over), and `booking_date = '2026-02-30'` makes Postgres error, which
+ * reaches the client as an unhandled 500. US-006 design note §2.2 — the first story where a
+ * client-supplied date crosses the wire, rather than one the server generated itself.
+ */
+function isRealCalendarDate(value: string): boolean {
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year && probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day
+  );
+}
+
+/**
  * An office-local calendar date. No instant, no zone — design note (US-005) §1.1. Every
  * function in this module is civil-date arithmetic: the same answer in Kolkata, in London and
  * in a CI runner pinned to UTC, because none of it ever touches a timezone.
+ *
+ * Applied to requests and responses alike (US-006/D-02): nothing legitimate — `officeToday`, the
+ * UI's own window — can ever produce an impossible date, so one definition of "a valid office
+ * date" is worth more than two.
  */
-export const officeDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const officeDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isRealCalendarDate, 'Not a real calendar date');
 export type OfficeDate = z.infer<typeof officeDateSchema>;
 
 /**
