@@ -7,7 +7,7 @@
  * the service, matching the convention `auth.repository.ts` set on the first module.
  */
 import { supabase } from '../../infra/supabase/index.js';
-import type { OfficeDate } from '@desk-booking/contracts';
+import type { BookingStatus, OfficeDate } from '@desk-booking/contracts';
 
 /** The `desks` columns this module reads. Never `select('*')` — a wider select is how an
  *  occupant column or a write-side field would leak into a read this module does not own. */
@@ -30,6 +30,15 @@ export interface DeskActiveRow {
 export interface MyConfirmedBookingRow {
   id: string;
   desk_id: string;
+  desk_number: string;
+}
+
+/** US-010/AC-01, AC-03, AC-04, AC-05. One row of `listMyBookingsInWindow` — the STORED status;
+ *  the derivation to Completed happens in the service (`booking-history.ts`), not here. */
+export interface MyBookingRow {
+  id: string;
+  booking_date: OfficeDate;
+  status: BookingStatus;
   desk_number: string;
 }
 
@@ -78,6 +87,24 @@ export interface AvailabilityRepository {
   /** US-009/AC-06, BR-001.1. The caller's OWN confirmed dates in the range — `booking_date` only,
    *  filtered to `user_id`, the shape `findMyConfirmedBooking` established (US-007). */
   listMyConfirmedDatesInRange(userId: string, from: OfficeDate, to: OfficeDate): Promise<OfficeDate[]>;
+  /** US-010/AC-01, AC-03, AC-04, AC-05. The caller's own bookings in an INCLUSIVE date window,
+   *  newest first. `to === undefined` means unbounded above — the default page carries future
+   *  bookings too (design note §1.2). ALL statuses: a Cancelled row is history and SCR-002
+   *  renders it (ST-10) — there is no `.eq('status', ...)` here.
+   *
+   *  Filtered to `user_id`, never a parameter. `desk_number` travels through the embed so a desk
+   *  renamed since shows its CURRENT number (BR-001.19, RISK-012 — the story's accepted
+   *  consequence), matching `findMyConfirmedBooking`'s join.
+   *
+   *  Ordered `booking_date desc, created_at desc` — the second key is load-bearing, not
+   *  belt-and-braces (design note §5): cancel-then-rebook (BR-001.2) can leave two rows sharing
+   *  the same `booking_date` for the same user, and only `created_at desc` gives a stable order. */
+  listMyBookingsInWindow(userId: string, from: OfficeDate, to?: OfficeDate): Promise<MyBookingRow[]>;
+  /** US-010/AC-03. The single newest booking of the caller's STRICTLY before a date, or
+   *  `undefined` when nothing is older. Two uses, one shape (design note §1.3): the "is there
+   *  anything older" probe that decides whether the Show-older control exists at all, and the
+   *  anchor for the next page's window. `booking_date` ONLY — nothing else is needed. */
+  findMyNewestBookingBefore(userId: string, before: OfficeDate): Promise<{ booking_date: OfficeDate } | undefined>;
   /** US-008/AC-03. The caller's most recently booked desk id across ALL dates and ALL statuses —
    *  derived from history, never a stored preference (there is no favourite-desk column and this
    *  story adds none). `desk_id` ONLY: no `user_id`, no dates, no status.
@@ -266,5 +293,56 @@ export const availabilityRepository: AvailabilityRepository = {
 
     if (error) throw new Error(`bookings lookup failed: ${error.message}`);
     return (data as { desk_id: string } | null)?.desk_id ?? undefined;
+  },
+
+  /**
+   * US-010/AC-01, AC-03, AC-04, AC-05, design note §5. `to` is applied with `.lte()` only when
+   * given — the default page (no `to`) is unbounded above, on purpose (§1.2).
+   */
+  async listMyBookingsInWindow(userId, from, to) {
+    let query = supabase()
+      .from('bookings')
+      .select('id, booking_date, status, desks(desk_number)')
+      .eq('user_id', userId)
+      .gte('booking_date', from)
+      .order('booking_date', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (to !== undefined) query = query.lte('booking_date', to);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`bookings lookup failed: ${error.message}`);
+
+    // See findMyConfirmedBooking's comment above for why this cast is necessary and correct.
+    const rows = (data ?? []) as unknown as Array<{
+      id: string;
+      booking_date: OfficeDate;
+      status: BookingStatus;
+      desks: { desk_number: string } | null;
+    }>;
+    // Unlike findMyConfirmedBooking, a missing embed is NOT defaulted to '' here: `desk_id` is
+    // `not null references desks (id) on delete restrict` (0003_bookings.sql:27), so every
+    // booking has a desk and a missing embed means something is structurally wrong. Manufacturing
+    // '' would turn an impossible state into a browser parse failure (deskNumber: z.string().min(1)
+    // rejects it) instead of a loud server error (design note §5).
+    return rows.map((row) => {
+      if (!row.desks) throw new Error(`booking ${row.id} has no joined desk — desk_id is NOT NULL, this is a bug`);
+      return { id: row.id, booking_date: row.booking_date, status: row.status, desk_number: row.desks.desk_number };
+    });
+  },
+
+  /** US-010/AC-03, design note §1.3, §5. `booking_date` only — nothing else is read. */
+  async findMyNewestBookingBefore(userId, before) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('booking_date')
+      .eq('user_id', userId)
+      .lt('booking_date', before)
+      .order('booking_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw new Error(`bookings lookup failed: ${error.message}`);
+    return (data as { booking_date: OfficeDate } | null) ?? undefined;
   },
 };

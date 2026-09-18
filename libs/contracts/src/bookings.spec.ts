@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { bookingCreateSchema, bookingSchema, cancelBookingParamsSchema } from './bookings.js';
+import {
+  bookingCreateSchema,
+  bookingDisplayStatusSchema,
+  bookingSchema,
+  bookingStatusSchema,
+  cancelBookingParamsSchema,
+  myBookingListItemSchema,
+  myBookingsQuerySchema,
+  myBookingsResponseSchema,
+} from './bookings.js';
 
 const VALID_DESK_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
@@ -52,6 +61,76 @@ describe('bookingSchema (US-007/AC-03, AC-04)', () => {
 
   it('tolerates an unexpected additive field (ADR-002 asymmetry, not .strict())', () => {
     expect(bookingSchema.safeParse({ ...VALID, futureField: 'ignored' }).success).toBe(true);
+  });
+});
+
+describe('myBookingsQuerySchema (US-010/AC-03)', () => {
+  it('accepts no query at all (the default page)', () => {
+    expect(myBookingsQuerySchema.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts a well-formed before date', () => {
+    expect(myBookingsQuerySchema.safeParse({ before: '2026-08-19' }).success).toBe(true);
+  });
+
+  it('rejects a malformed before date', () => {
+    expect(myBookingsQuerySchema.safeParse({ before: 'not-a-date' }).success).toBe(false);
+  });
+
+  it('rejects an unknown field', () => {
+    expect(myBookingsQuerySchema.safeParse({ before: '2026-08-19', limit: 10 }).success).toBe(false);
+  });
+});
+
+describe('bookingDisplayStatusSchema — a distinct schema from bookingStatusSchema, never merged (US-010/AC-04, ADR-007)', () => {
+  it('accepts confirmed, completed and cancelled', () => {
+    expect(bookingDisplayStatusSchema.safeParse('confirmed').success).toBe(true);
+    expect(bookingDisplayStatusSchema.safeParse('completed').success).toBe(true);
+    expect(bookingDisplayStatusSchema.safeParse('cancelled').success).toBe(true);
+  });
+
+  it('bookingStatusSchema — the stored, two-value shape — rejects completed', () => {
+    expect(bookingStatusSchema.safeParse('completed').success).toBe(false);
+  });
+});
+
+describe('myBookingListItemSchema (US-010/AC-01, AC-04, AC-05)', () => {
+  const VALID = {
+    id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    deskNumber: 'A-02',
+    date: '2026-09-16',
+    status: 'completed' as const,
+  };
+
+  it('parses a well-formed item, including a completed status', () => {
+    expect(myBookingListItemSchema.safeParse(VALID).success).toBe(true);
+  });
+
+  it('rejects an empty deskNumber', () => {
+    expect(myBookingListItemSchema.safeParse({ ...VALID, deskNumber: '' }).success).toBe(false);
+  });
+});
+
+describe('myBookingsResponseSchema (US-010/AC-01, AC-03)', () => {
+  it('parses an empty page with nextBefore null', () => {
+    const result = myBookingsResponseSchema.safeParse({ today: '2026-09-18', items: [], nextBefore: null });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults nextBefore to null when the key is missing (additive-safe, ADR-002)', () => {
+    const result = myBookingsResponseSchema.safeParse({ today: '2026-09-18', items: [] });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.nextBefore).toBeNull();
+  });
+
+  it('tolerates an unexpected additive field (not .strict(), matching every other response)', () => {
+    const result = myBookingsResponseSchema.safeParse({
+      today: '2026-09-18',
+      items: [],
+      nextBefore: null,
+      futureField: 'ignored',
+    });
+    expect(result.success).toBe(true);
   });
 });
 

@@ -9,6 +9,9 @@ import {
   activeDesks,
   emptyAvailabilityRepository,
   inactiveDeskRow,
+  MY_BOOKINGS_AT_FLOOR_ROW,
+  MY_BOOKINGS_BEFORE_FLOOR_ROW,
+  MY_BOOKINGS_FUTURE_CANCELLED_ROW,
   partiallyTakenDeskIds,
   RETIRED_DESK_NUMBER,
 } from './bookings.fixtures.js';
@@ -112,6 +115,11 @@ const createBooking = (app: ReturnType<typeof buildApp>, body: Record<string, un
 const cancelBooking = (app: ReturnType<typeof buildApp>, id: string, token = EMPLOYEE_TOKEN) =>
   request(app)
     .post(`/api/bookings/${id}/cancel`)
+    .set('Authorization', `Bearer ${token}`);
+
+const myBookings = (app: ReturnType<typeof buildApp>, query = '', token = EMPLOYEE_TOKEN) =>
+  request(app)
+    .get(`/api/bookings${query}`)
     .set('Authorization', `Bearer ${token}`);
 
 describe('GET /api/bookings/availability — US-006/AC-03 (taken desks shown, not hidden)', () => {
@@ -485,6 +493,189 @@ describe('POST /api/bookings/:id/cancel — US-007/AC-07, FR-06 (D-03: one undis
   it('401s with no bearer token', async () => {
     const app = appWith({});
     const response = await request(app).post('/api/bookings/11111111-1111-4111-8111-111111111111/cancel');
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('no_session');
+  });
+});
+
+describe('GET /api/bookings — the default page (US-010/AC-01, AC-03)', () => {
+  it('returns items booking_date DESC, and the wire invariant holds: no confirmed item has a date before today (design note §1.4)', async () => {
+    const rows = [
+      { id: 'upcoming', booking_date: '2026-09-20', status: 'confirmed' as const, desk_number: 'B-02' },
+      { id: 'today', booking_date: TODAY, status: 'confirmed' as const, desk_number: 'A-01' },
+      { id: 'past', booking_date: '2026-09-10', status: 'confirmed' as const, desk_number: 'A-01' },
+    ];
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async listMyBookingsInWindow() {
+          return rows;
+        },
+      },
+    });
+
+    const response = await myBookings(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((i: { id: string }) => i.id)).toEqual(['upcoming', 'today', 'past']);
+    for (const item of response.body.items) {
+      if (item.status === 'confirmed') expect(item.date >= response.body.today).toBe(true);
+    }
+    // The past row's status was derived to 'completed', server-side, over the fixed clock.
+    expect(response.body.items.find((i: { id: string }) => i.id === 'past').status).toBe('completed');
+  });
+
+  it("includes a booking dated exactly today − 30 and excludes one dated today − 31, with nextBefore non-null because of it (US-010/AC-03)", async () => {
+    // Emulates the real repository's `.gte('booking_date', from)` over a fixed row set — this is
+    // what actually proves the SERVICE passed the right `from`, not merely that the fixture says so.
+    const allRows = [MY_BOOKINGS_AT_FLOOR_ROW, MY_BOOKINGS_BEFORE_FLOOR_ROW];
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async listMyBookingsInWindow(_userId, from) {
+          return allRows.filter((row) => row.booking_date >= from);
+        },
+        async findMyNewestBookingBefore() {
+          return { booking_date: MY_BOOKINGS_BEFORE_FLOOR_ROW.booking_date };
+        },
+      },
+    });
+
+    const response = await myBookings(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((i: { id: string }) => i.id)).toEqual([MY_BOOKINGS_AT_FLOOR_ROW.id]);
+    expect(response.body.items.map((i: { id: string }) => i.id)).not.toContain(MY_BOOKINGS_BEFORE_FLOOR_ROW.id);
+    expect(response.body.nextBefore).not.toBeNull();
+  });
+
+  it('a Cancelled booking dated in the future stays Cancelled, never promoted to Completed or Confirmed (design note §4.1, §7.1)', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async listMyBookingsInWindow() {
+          return [MY_BOOKINGS_FUTURE_CANCELLED_ROW];
+        },
+      },
+    });
+
+    const response = await myBookings(app);
+
+    expect(response.body.items).toEqual([
+      {
+        id: MY_BOOKINGS_FUTURE_CANCELLED_ROW.id,
+        deskNumber: MY_BOOKINGS_FUTURE_CANCELLED_ROW.desk_number,
+        date: MY_BOOKINGS_FUTURE_CANCELLED_ROW.booking_date,
+        status: 'cancelled',
+      },
+    ]);
+  });
+
+  it('returns nextBefore: null and items: [] for a caller who has never booked (US-010/AC-06)', async () => {
+    const app = appWith({});
+
+    const response = await myBookings(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ items: [], nextBefore: null });
+  });
+
+  it('sets Cache-Control: private, no-store (the whole body is one caller\'s)', async () => {
+    const app = appWith({});
+
+    const response = await myBookings(app);
+
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('does not swallow a repository failure into an empty page — it 500s, distinguishable from a genuine "never booked" (design note §1.5)', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async listMyBookingsInWindow() {
+          throw new Error('database unreachable');
+        },
+      },
+    });
+
+    const response = await myBookings(app);
+
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe('internal_error');
+  });
+});
+
+describe('GET /api/bookings?before= — an older page (US-010/AC-03)', () => {
+  it('anchors on the caller\'s newest booking strictly before the cursor and returns that window', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async findMyNewestBookingBefore(_userId, before) {
+          if (before === '2026-08-19') return { booking_date: '2026-08-10' };
+          return undefined;
+        },
+        async listMyBookingsInWindow() {
+          return [{ id: 'older', booking_date: '2026-08-10', status: 'cancelled' as const, desk_number: 'A-09' }];
+        },
+      },
+    });
+
+    const response = await myBookings(app, '?before=2026-08-19');
+
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((i: { id: string }) => i.id)).toEqual(['older']);
+  });
+
+  it('returns nextBefore: null when the page reaches the caller\'s first booking (the story\'s own edge case)', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async findMyNewestBookingBefore(_userId, before) {
+          if (before === '2026-08-19') return { booking_date: '2026-08-10' };
+          return undefined; // nothing older than the floor of that window
+        },
+      },
+    });
+
+    const response = await myBookings(app, '?before=2026-08-19');
+
+    expect(response.body.nextBefore).toBeNull();
+  });
+
+  it('returns an empty page with nextBefore null, not an error, when the caller has nothing before the cursor', async () => {
+    const app = appWith({
+      availability: {
+        ...emptyAvailabilityRepository,
+        async findMyNewestBookingBefore() {
+          return undefined;
+        },
+      },
+    });
+
+    const response = await myBookings(app, '?before=2026-08-19');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ items: [], nextBefore: null });
+  });
+});
+
+describe('GET /api/bookings — request validation (defence, not a story AC)', () => {
+  it('400s a malformed before date', async () => {
+    const app = appWith({});
+    const response = await myBookings(app, '?before=not-a-date');
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('400s an unknown query field', async () => {
+    const app = appWith({});
+    const response = await myBookings(app, '?before=2026-08-19&limit=10');
+    expect(response.status).toBe(400);
+  });
+
+  it('401s with no bearer token', async () => {
+    const app = appWith({});
+    const response = await request(app).get('/api/bookings');
     expect(response.status).toBe(401);
     expect(response.body.code).toBe('no_session');
   });

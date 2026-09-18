@@ -595,3 +595,122 @@ describe('bookings.service.cancelBooking (US-007/AC-07, FR-06)', () => {
     expect(outcome).toEqual({ kind: 'not_found' });
   });
 });
+
+describe('bookings.service.listMyBookings — the default page (US-010/AC-01, AC-03)', () => {
+  it('reads from historyFloor(today), unbounded above, and echoes today on the response', async () => {
+    let capturedFrom: string | undefined;
+    let capturedTo: string | undefined;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listMyBookingsInWindow(_userId, from, to) {
+        capturedFrom = from;
+        capturedTo = to;
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const result = await service.listMyBookings(CALLER_ID, undefined);
+
+    expect(capturedFrom).toBe('2026-08-17'); // TODAY (2026-09-16) minus 30 days
+    expect(capturedTo).toBeUndefined(); // unbounded above — design note §1.2
+    expect(result.today).toBe(TODAY);
+  });
+
+  it('sets nextBefore to the FLOOR (not the last item date) when something older exists', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listMyBookingsInWindow() {
+        return [{ id: 'b1', booking_date: '2026-09-01', status: 'confirmed', desk_number: 'A-02' }];
+      },
+      async findMyNewestBookingBefore() {
+        return { booking_date: '2026-07-10' }; // older than the floor
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const result = await service.listMyBookings(CALLER_ID, undefined);
+
+    expect(result.nextBefore).toBe('2026-08-17'); // the floor, per design note §5 — NOT '2026-07-10'
+  });
+
+  it('sets nextBefore to null when the caller has nothing older than the floor', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async findMyNewestBookingBefore() {
+        return undefined;
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const result = await service.listMyBookings(CALLER_ID, undefined);
+
+    expect(result.nextBefore).toBeNull();
+  });
+
+  it('maps every row through bookingDisplayStatus, over a fixed clock (US-010/AC-04)', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listMyBookingsInWindow() {
+        return [
+          { id: 'past-confirmed', booking_date: '2026-09-01', status: 'confirmed', desk_number: 'A-01' },
+          { id: 'future-confirmed', booking_date: '2026-09-20', status: 'confirmed', desk_number: 'A-02' },
+          { id: 'future-cancelled', booking_date: '2026-09-25', status: 'cancelled', desk_number: 'A-03' },
+        ];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const result = await service.listMyBookings(CALLER_ID, undefined);
+
+    expect(result.items).toEqual([
+      { id: 'past-confirmed', deskNumber: 'A-01', date: '2026-09-01', status: 'completed' },
+      { id: 'future-confirmed', deskNumber: 'A-02', date: '2026-09-20', status: 'confirmed' },
+      // A future Cancelled row stays Cancelled — never promoted to Completed (design note §4.1).
+      { id: 'future-cancelled', deskNumber: 'A-03', date: '2026-09-25', status: 'cancelled' },
+    ]);
+  });
+});
+
+describe('bookings.service.listMyBookings — an older page via `before` (US-010/AC-03)', () => {
+  it('anchors on the newest booking strictly before `before`, then reads the 30-day window ending there', async () => {
+    let capturedFrom: string | undefined;
+    let capturedTo: string | undefined;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async findMyNewestBookingBefore(_userId, before) {
+        // First call anchors on `before`; second call probes for anything older than the floor.
+        if (before === '2026-08-19') return { booking_date: '2026-08-10' };
+        return undefined;
+      },
+      async listMyBookingsInWindow(_userId, from, to) {
+        capturedFrom = from;
+        capturedTo = to;
+        return [];
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    await service.listMyBookings(CALLER_ID, '2026-08-19');
+
+    expect(capturedTo).toBe('2026-08-10'); // the anchor
+    expect(capturedFrom).toBe('2026-07-11'); // historyFloor(anchor)
+  });
+
+  it('returns an empty page with nextBefore null when the caller has nothing before the cursor — the control should not have been there (design note §1.3)', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async findMyNewestBookingBefore() {
+        return undefined;
+      },
+      async listMyBookingsInWindow() {
+        throw new Error('must not be called — there is nothing to anchor on');
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const result = await service.listMyBookings(CALLER_ID, '2026-08-19');
+
+    expect(result).toEqual({ today: TODAY, items: [], nextBefore: null });
+  });
+});

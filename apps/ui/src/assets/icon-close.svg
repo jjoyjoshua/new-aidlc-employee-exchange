@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="presentation" aria-hidden="true">
+  <!--
+    Icon / close — Figma node 11:50 (file xjFVgBbMrJUl7Ys3EX3Cbn). "Dismiss a dialog" per its own
+    documentation; reused here for the Cancelled booking-status chip (US-010/AC-05, design note
+    §4.4) — the same icon, a different context.
+
+    Geometry ONLY, same convention as icon-clock.svg: stroke is `currentColor`, so the caller sets
+    it from a text token (`--c-state-cancelled-ink`) and both themes work without a second file.
+    The source export's #4A4239 fill was the Figma artboard background, not part of the icon.
+  -->
+  <path d="M6.2 6.2L17.8 17.8M17.8 6.2L6.2 17.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
