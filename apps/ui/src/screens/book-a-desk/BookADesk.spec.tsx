@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { BookADesk } from './BookADesk.js';
 import { NO_DESKS_EXIST } from './copy.js';
+import { formatOfficeDateLong } from '../../lib/format-office-date.js';
 import type { AvailabilityFetcher } from './use-availability.js';
 import { AuthProvider, useAuth, type AuthContextValue } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
@@ -29,7 +30,7 @@ const desk = (deskNumber: string, status: 'available' | 'taken' = 'available'): 
  *  is used only by the tests below that render <BookADesk /> with no `fetchAvailability` override. */
 function SignedIn({
   office,
-  availability = { date: '', desks: [], myBooking: null, usualDeskId: null },
+  availability = { date: '', desks: [], myBooking: null, usualDeskId: null, nextFreeDays: [] },
   children,
 }: {
   office: Office;
@@ -150,7 +151,7 @@ describe('BookADesk (US-005/AC-01, AC-07, AC-08)', () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
       .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
-      .mockImplementationOnce(ok({ date: '2026-09-21', desks: [], myBooking: null, usualDeskId: null }));
+      .mockImplementationOnce(ok({ date: '2026-09-21', desks: [], myBooking: null, usualDeskId: null, nextFreeDays: [] }));
 
     render(
       <SignedIn office={OFFICE}>
@@ -171,7 +172,7 @@ describe('BookADesk (US-005/AC-01, AC-07, AC-08)', () => {
     expect(await screen.findByRole('radio', { name: /Mon 21/, checked: true })).toBeInTheDocument();
 
     // The first request (for Friday) resolves last — its payload must never surface as current.
-    resolveFirst({ kind: 'ok', data: { date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null } });
+    resolveFirst({ kind: 'ok', data: { date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null, nextFreeDays: [] } });
     await new Promise((r) => setTimeout(r, 0));
 
     expect(screen.getByRole('radio', { name: /Mon 21/, checked: true })).toBeInTheDocument();
@@ -181,7 +182,7 @@ describe('BookADesk (US-005/AC-01, AC-07, AC-08)', () => {
 describe('BookADesk — the availability list (US-006/AC-01, AC-05, AC-07)', () => {
   it('renders the count line before the first zone heading, in DOM order (US-006/AC-01)', async () => {
     const desks = [desk('A-01'), desk('A-02', 'taken')];
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
 
     render(
       <SignedIn office={OFFICE}>
@@ -198,7 +199,7 @@ describe('BookADesk — the availability list (US-006/AC-01, AC-05, AC-07)', () 
 
   it('groups desks by zone (US-006/AC-05)', async () => {
     const desks = [desk('B-01'), desk('A-01'), desk('A-02')];
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
 
     render(
       <SignedIn office={OFFICE}>
@@ -230,7 +231,7 @@ describe('BookADesk — a failed load (US-006/AC-08)', () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
       .mockResolvedValueOnce({ kind: 'failed' })
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null, usualDeskId: null } });
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null, usualDeskId: null, nextFreeDays: [] } });
 
     render(
       <SignedIn office={OFFICE}>
@@ -254,7 +255,7 @@ describe('BookADesk — a failed load (US-006/AC-08)', () => {
 
 describe('BookADesk — no active desks at all (US-006/AC-09)', () => {
   it('renders the NO_DESKS_EXIST empty state, with no alternative dates and no admin link', async () => {
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null, nextFreeDays: [] });
 
     render(
       <SignedIn office={OFFICE}>
@@ -275,6 +276,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
       desks: [desk('A-01'), desk('A-02')],
       myBooking: null,
       usualDeskId: null,
+      nextFreeDays: [],
     });
 
     render(
@@ -294,6 +296,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
       desks: [desk('A-01'), desk('A-02')],
       myBooking: null,
       usualDeskId: null,
+      nextFreeDays: [],
     });
 
     render(
@@ -313,7 +316,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
   it('changing the date clears the desk selection and disables the confirm action (edge case)', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValue({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null, usualDeskId: null } });
+      .mockResolvedValue({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null, usualDeskId: null, nextFreeDays: [] } });
 
     render(
       <SignedIn office={OFFICE}>
@@ -332,7 +335,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
 
 describe('BookADesk — confirming creates a booking and lands on My bookings (US-007/AC-03, AC-04)', () => {
   it("navigates to /bookings with the desk, the date and the confirmation email verbatim from the response", async () => {
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null, nextFreeDays: [] });
     const createBooking = vi.fn().mockResolvedValue({
       kind: 'ok',
       booking: {
@@ -362,13 +365,13 @@ describe('BookADesk — confirming creates a booking and lands on My bookings (U
 });
 
 describe('BookADesk — a desk taken while looking refreshes rather than retries (US-007/AC-08)', () => {
-  it('shows an alert, refreshes availability, clears the selection, disables confirm, moves focus to the alert, and creates no booking', async () => {
+  it('shows an alert, refreshes availability, clears the selection, disables confirm, moves focus to the alert, and creates no booking (also pins US-009/D-07: the refetch here leaves the office fully booked, and the alert must still win over the new ST-04 branch)', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } })
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null, nextFreeDays: [] } })
       .mockResolvedValueOnce({
         kind: 'ok',
-        data: { date: '2026-09-18', desks: [desk('A-02', 'taken')], myBooking: null, usualDeskId: null },
+        data: { date: '2026-09-18', desks: [desk('A-02', 'taken')], myBooking: null, usualDeskId: null, nextFreeDays: [] },
       });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'desk_conflict' });
 
@@ -396,7 +399,7 @@ describe('BookADesk — a second booking on the same date, discovered only on co
   it('refetches availability for the same date, then replaces the desk list with the existing-booking state, moving focus there once the refetch resolves', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } })
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null, nextFreeDays: [] } })
       .mockResolvedValueOnce({
         kind: 'ok',
         data: {
@@ -404,6 +407,7 @@ describe('BookADesk — a second booking on the same date, discovered only on co
           desks: [desk('A-02', 'taken')],
           myBooking: { id: 'existing-1', deskId: 'A-01', deskNumber: 'A-01' },
           usualDeskId: null,
+          nextFreeDays: [],
         },
       });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'user_conflict' });
@@ -428,8 +432,8 @@ describe('BookADesk — a second booking on the same date, discovered only on co
   it('falls back to the ordinary desk list if the refetch comes back with myBooking: null (the conflicting booking was itself cancelled meanwhile)', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } })
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } });
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null, nextFreeDays: [] } })
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null, nextFreeDays: [] } });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'user_conflict' });
 
     render(
@@ -454,6 +458,7 @@ describe('BookADesk — the usual-desk label (US-008/AC-01, AC-02)', () => {
       desks: [desk('A-01'), desk('A-02')],
       myBooking: null,
       usualDeskId: 'A-02',
+      nextFreeDays: [],
     });
 
     render(
@@ -472,6 +477,7 @@ describe('BookADesk — the usual-desk label (US-008/AC-01, AC-02)', () => {
       desks: [desk('A-01'), desk('A-02')],
       myBooking: null,
       usualDeskId: 'A-02',
+      nextFreeDays: [],
     });
 
     render(
@@ -488,9 +494,142 @@ describe('BookADesk — the usual-desk label (US-008/AC-01, AC-02)', () => {
   });
 });
 
+describe('BookADesk — fully booked, offered the next free days (US-009)', () => {
+  it('shows the count line and the fully-booked title, with no zone list (US-009/AC-01)', async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [desk('A-01', 'taken'), desk('A-02', 'taken')],
+      myBooking: null,
+      usualDeskId: null,
+      nextFreeDays: ['2026-09-21', '2026-09-22'],
+    });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    expect(await screen.findByText('0 of 2 desks free · Fri 18 Sep')).toBeInTheDocument();
+    expect(screen.getByText('Every desk is taken on Fri 18 Sep.')).toBeInTheDocument();
+    expect(screen.queryByText('Zone A')).not.toBeInTheDocument();
+  });
+
+  it('choosing a suggested day loads that date directly, with no calendar step (US-009/AC-03)', async () => {
+    const fetchAvailability = vi
+      .fn<AvailabilityFetcher>()
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        data: {
+          date: '2026-09-18',
+          desks: [desk('A-01', 'taken')],
+          myBooking: null,
+          usualDeskId: null,
+          nextFreeDays: ['2026-09-21', '2026-09-22'],
+        },
+      })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        data: { date: '2026-09-21', desks: [desk('A-01')], myBooking: null, usualDeskId: null, nextFreeDays: [] },
+      });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: `Book a desk on ${formatOfficeDateLong('2026-09-21')}` }),
+    );
+
+    expect(await screen.findByRole('radio', { name: /A-01/ })).toBeInTheDocument();
+    expect(fetchAvailability).toHaveBeenLastCalledWith('2026-09-21', expect.any(AbortSignal));
+    expect(screen.queryByText('September 2026')).not.toBeInTheDocument(); // the calendar never opened
+  });
+
+  it('renders no confirm action at all — absent, not disabled (US-009/AC-04)', async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [desk('A-01', 'taken')],
+      myBooking: null,
+      usualDeskId: null,
+      nextFreeDays: ['2026-09-21'],
+    });
+
+    const { container } = render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    await screen.findByText('Every desk is taken on Fri 18 Sep.');
+    expect(container.querySelector('.confirm-booking-bar')).not.toBeInTheDocument();
+  });
+
+  it('degrades cleanly with no free days: no lead line, no suggestion button, but still offers Pick another date (US-009/AC-05)', async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [desk('A-01', 'taken')],
+      myBooking: null,
+      usualDeskId: null,
+      nextFreeDays: [],
+    });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    const emptyState = (await screen.findByText('Every desk is taken on Fri 18 Sep.')).closest('.empty-state');
+    expect(emptyState).not.toBeNull();
+    expect(within(emptyState as HTMLElement).queryByText(/working day/i)).not.toBeInTheDocument();
+    expect(within(emptyState as HTMLElement).getByRole('button', { name: 'Pick another date' })).toBeInTheDocument();
+  });
+
+  it('drops the count word when exactly one day qualifies (US-009/AC-05)', async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [desk('A-01', 'taken')],
+      myBooking: null,
+      usualDeskId: null,
+      nextFreeDays: ['2026-09-21'],
+    });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    expect(await screen.findByText('The next working day with a desk free:')).toBeInTheDocument();
+  });
+
+  it("desks: [] still renders the no-desks state, never the fully-booked one, even with nextFreeDays populated (US-009/AC-07)", async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [],
+      myBooking: null,
+      usualDeskId: null,
+      nextFreeDays: ['2026-09-21', '2026-09-22'],
+    });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    expect(await screen.findByText(NO_DESKS_EXIST.title)).toBeInTheDocument();
+    expect(screen.queryByText(/Every desk is taken/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: `Book a desk on ${formatOfficeDateLong('2026-09-21')}` })).not.toBeInTheDocument();
+  });
+});
+
 describe('BookADesk — an ambiguous failure sends the employee to check, not to retry (US-007/AC-10)', () => {
   it('shows the uncertainty, offers Check my bookings and Try again, and retains the desk selection', async () => {
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null, nextFreeDays: [] });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'failed' });
 
     render(

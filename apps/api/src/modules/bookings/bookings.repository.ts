@@ -67,6 +67,17 @@ export interface AvailabilityRepository {
    *  no read-then-write window (design note §3.2). `undefined` covers "no such booking", "not
    *  the caller's" and "not currently confirmed" alike, deliberately undiscriminated (D-03). */
   cancelOwnedBooking(userId: string, bookingId: string, cancelledAt: Date): Promise<{ id: string } | undefined>;
+  /** US-009/AC-02, AC-06. Confirmed bookings across a date RANGE, for the free-day scan. The
+   *  select list is `booking_date, desk_id` — no `user_id`, exactly as `listConfirmedDeskIds`
+   *  (US-006/AC-06). Reads `bookings`, the table this module owns; `desks` is not re-read (the
+   *  service already has the active desk list from the same availability call). */
+  listConfirmedDeskIdsInRange(
+    from: OfficeDate,
+    to: OfficeDate,
+  ): Promise<Array<{ booking_date: OfficeDate; desk_id: string }>>;
+  /** US-009/AC-06, BR-001.1. The caller's OWN confirmed dates in the range — `booking_date` only,
+   *  filtered to `user_id`, the shape `findMyConfirmedBooking` established (US-007). */
+  listMyConfirmedDatesInRange(userId: string, from: OfficeDate, to: OfficeDate): Promise<OfficeDate[]>;
   /** US-008/AC-03. The caller's most recently booked desk id across ALL dates and ALL statuses —
    *  derived from history, never a stored preference (there is no favourite-desk column and this
    *  story adds none). `desk_id` ONLY: no `user_id`, no dates, no status.
@@ -207,6 +218,40 @@ export const availabilityRepository: AvailabilityRepository = {
 
     if (error) throw new Error(`booking cancel failed: ${error.message}`);
     return (data as { id: string } | null) ?? undefined;
+  },
+
+  /**
+   * US-009/AC-02, AC-06. The select list is `booking_date, desk_id` — no `user_id` — over an
+   * inclusive `[from, to]` range, confirmed only. Served by `bookings_booking_date_status_idx`
+   * (`0003_bookings.sql`), the same index `listConfirmedDeskIds` uses for a single date.
+   */
+  async listConfirmedDeskIdsInRange(from, to) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('booking_date, desk_id')
+      .gte('booking_date', from)
+      .lte('booking_date', to)
+      .eq('status', 'confirmed');
+
+    if (error) throw new Error(`bookings range lookup failed: ${error.message}`);
+    return (data ?? []) as Array<{ booking_date: OfficeDate; desk_id: string }>;
+  },
+
+  /**
+   * US-009/AC-06, BR-001.1. Filtered to `user_id`, over the same inclusive range, confirmed only —
+   * served by `bookings_user_id_booking_date_idx`.
+   */
+  async listMyConfirmedDatesInRange(userId, from, to) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('booking_date')
+      .eq('user_id', userId)
+      .gte('booking_date', from)
+      .lte('booking_date', to)
+      .eq('status', 'confirmed');
+
+    if (error) throw new Error(`bookings range lookup failed: ${error.message}`);
+    return ((data ?? []) as Array<{ booking_date: OfficeDate }>).map((row) => row.booking_date);
   },
 
   async findMyLastBookedDeskId(userId) {

@@ -18,3 +18,20 @@ describe('EmptyState (US-006/AC-09)', () => {
     expect(container.querySelector('a')).not.toBeInTheDocument();
   });
 });
+
+describe('EmptyState — body and actions are optional (US-009/FR-08)', () => {
+  it('renders with no body paragraph at all when body is omitted', () => {
+    const { container } = render(<EmptyState title="Every desk is taken on Wed 9 Sep." />);
+
+    expect(screen.getByText('Every desk is taken on Wed 9 Sep.')).toBeInTheDocument();
+    expect(container.querySelector('.empty-state__body')).not.toBeInTheDocument();
+  });
+
+  it('renders actions after the body when provided', () => {
+    render(
+      <EmptyState title="Every desk is taken on Wed 9 Sep." body="The next two working days with desks free:" actions={<button type="button">Thu 10 Sep</button>} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Thu 10 Sep' })).toBeInTheDocument();
+  });
+});

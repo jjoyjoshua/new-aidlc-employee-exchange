@@ -8,6 +8,8 @@
  * US-007 either (spec.md's Technical constraints) — the same reuse rule.
  */
 import {
+  addDays,
+  lastBookableDate,
   refusalFor,
   type AvailabilityResponse,
   type DateRefusal,
@@ -16,6 +18,7 @@ import {
   type OfficeDate,
 } from '@desk-booking/contracts';
 import { officeToday } from '../../domain/booking-window.js';
+import { pickNextFreeDays } from '../../domain/next-free-days.js';
 import type { AvailabilityRepository } from './bookings.repository.js';
 
 export interface BookingsServiceDeps {
@@ -101,7 +104,42 @@ export function createBookingsService({ availability, nowMs, officeTimezone }: B
       const usualDeskId =
         lastDeskId && projected.some((d) => d.id === lastDeskId && d.status === 'available') ? lastDeskId : null;
 
-      return { kind: 'ok', data: { date, desks: projected, myBooking, usualDeskId } };
+      // US-009/AC-01, AC-02, AC-05, AC-06. Only paid in the one state with nothing else to
+      // render — ST-10 (myBooking set) outranks ST-04 in the render, so suggestions there would
+      // be computed and discarded (design note §2.4). `desks` is reused from the read above; the
+      // range reads are never issued outside this branch.
+      const fullyBooked = projected.length > 0 && !projected.some((d) => d.status === 'available');
+      let nextFreeDays: OfficeDate[] = [];
+      if (fullyBooked && !myBooking) {
+        const from = addDays(date, 1);
+        const to = lastBookableDate(today);
+        // The selected date can legitimately BE the window's last bookable day; without this
+        // guard the range query asks for an inverted range and gets an empty answer for the
+        // wrong reason (design note §2.4).
+        if (from <= to) {
+          const [rangeRows, myDates] = await Promise.all([
+            availability.listConfirmedDeskIdsInRange(from, to),
+            availability.listMyConfirmedDatesInRange(userId, from, to),
+          ]);
+          const takenByDate = new Map<OfficeDate, Set<string>>();
+          for (const row of rangeRows) {
+            const set = takenByDate.get(row.booking_date) ?? new Set<string>();
+            set.add(row.desk_id);
+            takenByDate.set(row.booking_date, set);
+          }
+          const mine = new Set(myDates);
+
+          nextFreeDays = pickNextFreeDays({
+            after: date,
+            today,
+            limit: 2,
+            hasFreeDesk: (candidate) => desks.some((desk) => !takenByDate.get(candidate)?.has(desk.id)),
+            alreadyBooked: (candidate) => mine.has(candidate),
+          });
+        }
+      }
+
+      return { kind: 'ok', data: { date, desks: projected, myBooking, usualDeskId, nextFreeDays } };
     },
 
     /**

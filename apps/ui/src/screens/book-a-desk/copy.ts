@@ -39,4 +39,22 @@ export const BOOKING_UNCERTAIN =
  *  against the actual design 2026-09-18 after the wireframe and the frame were found to disagree. */
 export const YOUR_USUAL_DESK = 'your usual';
 
-// US-009 adds FULLY_BOOKED here, beside NO_DESKS_EXIST, and a test asserting the two differ.
+/** SCR-003 ST-04 — US-009/AC-01. Names the date, unlike NO_DESKS_EXIST, because this date is the
+ *  problem and another date is the fix. Verbatim per the approved Figma frame (node `39:1245`),
+ *  found by opening the real hi-fi frames rather than trusting the written spec alone. */
+export const FULLY_BOOKED = (label: string): string => `Every desk is taken on ${label}.`;
+
+/**
+ * SCR-003 ST-04's lead-in line above the suggested days (Figma node `39:1245`'s `body`:
+ * "The next two working days with desks free:"). The frame names "two" explicitly, but AC-05
+ * requires the message to still read correctly when only one or zero days qualify — so the
+ * count word is dropped at one, and the whole line is dropped at zero (`decisions.md` D-03).
+ *
+ * Returns `undefined` for 0 rather than an empty string, so the caller renders no lead line at
+ * all — never a lead-in above an empty slot.
+ */
+export function FULLY_BOOKED_LEAD(suggestionCount: number): string | undefined {
+  if (suggestionCount >= 2) return 'The next two working days with desks free:';
+  if (suggestionCount === 1) return 'The next working day with a desk free:';
+  return undefined;
+}

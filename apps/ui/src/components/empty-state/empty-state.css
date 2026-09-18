@@ -48,3 +48,15 @@
   font-weight: var(--fw-regular);
   color: var(--c-text-secondary);
 }
+
+/* US-009 — Figma `Empty state` node 32:187, "Actions" (32:130): a wrapping, centred row of
+   suggestion buttons plus the "Pick another date" link, one extra --s-8 gap above the body. */
+.empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-8);
+  padding-top: var(--s-8);
+  width: 100%;
+}

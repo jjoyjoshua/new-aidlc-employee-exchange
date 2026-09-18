@@ -86,5 +86,21 @@ export const availabilityResponseSchema = z.object({
    * question always answers it, and an old fixture with no key at all still parses.
    */
   usualDeskId: z.string().uuid().nullable().default(null),
+  /**
+   * US-009/REQ-035, AC-02. The next working days with at least one free desk, ascending, at most
+   * two — dates only, which is all AC-03 needs to jump straight to one. No free-desk count travels
+   * with them (design note §2.3): a count can go stale between being suggested and being clicked,
+   * the same staleness the date itself already accepts (story Edge cases).
+   *
+   * Populated only when the browser would render ST-04: `desks` is non-empty, none of it is
+   * `available`, AND `myBooking` is `null` (ST-10 outranks ST-04 in the render, so suggestions
+   * there would be computed and discarded). `[]` in every other case, including "fully booked and
+   * nothing free in the rest of the window" (US-009/AC-05) — that reads as no suggestions, not a
+   * placeholder.
+   *
+   * `.default([])` for the same reason `myBooking`/`usualDeskId` carry a default: an old fixture
+   * with no key still parses, and a present-but-empty array is the honest encoding of "none".
+   */
+  nextFreeDays: z.array(officeDateSchema).max(2).default([]),
 });
 export type AvailabilityResponse = z.infer<typeof availabilityResponseSchema>;
