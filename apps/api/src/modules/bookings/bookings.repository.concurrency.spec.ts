@@ -40,10 +40,10 @@ import { supabase } from '../../infra/supabase/index.js';
 import { availabilityRepository } from './bookings.repository.js';
 
 // `no-restricted-properties` normally forbids `process.env` in `apps/api/src/**` outside
-// `config/`, because application configuration is read and validated exactly once there
-// (US-034/AC-04). This is not application configuration — it decides whether a TEST runs, not
-// whether the server boots — so it does not belong in that schema, and the exception is scoped
-// to this one line rather than widening the rule.
+// `config/`, because application configuration is read and validated exactly once there (see
+// that module's own docblock). This is not application configuration — it decides whether a
+// TEST runs, not whether the server boots — so it does not belong in that schema, and the
+// exception is scoped to this one line rather than widening the rule.
 // eslint-disable-next-line no-restricted-properties -- test-only run gate, not app config; see docblock above
 const RUN = process.env.RUN_BOOKINGS_CONCURRENCY_TEST === '1';
 
