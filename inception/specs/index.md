@@ -7,6 +7,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-001 | Sign in with email and password | Complex | planned | [`US-001-sign-in/`](US-001-sign-in/) |
 | US-002 | Sign out | Complex | planned | [`US-002-sign-out/`](US-002-sign-out/) |
 | US-003 | Stay signed in for 30 days | Complex | planned | [`US-003-thirty-day-session/`](US-003-thirty-day-session/) |
+| US-004 | Replace an administrator-set password at first sign-in | Complex | planned | [`US-004-replace-administrator-set-password/`](US-004-replace-administrator-set-password/) |
 
 ## How to update
 

@@ -18,19 +18,27 @@ export interface TextFieldProps
   label: string;
   /** The error message. Its presence is what puts the field in its invalid state. */
   error?: string | undefined;
+  /**
+   * Invalid styling with no message of its own (US-004/AC-04, SCR-010 ST-02) — for a field
+   * whose explanation lives beside it in another element (the policy checklist), where a
+   * second sentence here would either duplicate it or invent a rule nobody wrote. `error` still
+   * takes precedence when both a message and this are relevant to a caller.
+   */
+  invalid?: boolean;
   /** Rendered inside the control, after the input — SCR-001's show/hide toggle. */
   trailing?: ReactNode;
   /** Supplied by a parent that needs to move focus here (US-001/AC-05, AC-04). */
   inputRef?: React.Ref<HTMLInputElement>;
 }
 
-export function TextField({ label, error, trailing, inputRef, readOnly, ...rest }: TextFieldProps) {
+export function TextField({ label, error, invalid, trailing, inputRef, readOnly, ...rest }: TextFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
+  const isInvalid = Boolean(error) || Boolean(invalid);
 
   const classes = [
     'field',
-    error ? 'field--invalid' : undefined,
+    isInvalid ? 'field--invalid' : undefined,
     readOnly ? 'field--readonly' : undefined,
   ]
     .filter(Boolean)
@@ -50,7 +58,7 @@ export function TextField({ label, error, trailing, inputRef, readOnly, ...rest 
           readOnly={readOnly}
           // Both are what a screen reader needs to announce the field as invalid and to read
           // the reason. `aria-invalid` alone announces "invalid" with no explanation.
-          aria-invalid={error ? true : undefined}
+          aria-invalid={isInvalid ? true : undefined}
           aria-describedby={error ? messageId : undefined}
           {...rest}
         />

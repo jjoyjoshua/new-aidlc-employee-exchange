@@ -7,8 +7,16 @@
  * job is to not undo it by shaping three responses from one outcome.
  */
 import { Router, type RequestHandler } from 'express';
-import { signInRequestSchema } from '@desk-booking/contracts';
-import { ERROR_CODES, badRequest, HttpError, unauthorized, serviceUnavailable } from '../../http/errors.js';
+import { signInRequestSchema, setPasswordRequestSchema } from '@desk-booking/contracts';
+import {
+  ERROR_CODES,
+  badRequest,
+  forbidden,
+  HttpError,
+  unauthorized,
+  unprocessable,
+  serviceUnavailable,
+} from '../../http/errors.js';
 import { sleep } from '../../infra/clock/index.js';
 import { SIGN_IN_MIN_FAILURE_MS } from '../../domain/sign-in-failure-delay.js';
 import { logger } from '../../infra/logger/index.js';
@@ -114,6 +122,60 @@ export function createAuthRouter({ service, nowMs, requireSession }: AuthRouterD
   });
 
   /**
+   * `POST /set-password` (US-004). Runs `requireSession` with the gate `'exempt'` — the caller
+   * still needs a valid session (steps 1-4), it is just not refused for the one condition this
+   * route exists to clear (design note §2.1, §4.2). `GET /session` below shares this same
+   * dependency for the same reason (design note §4.3).
+   *
+   * The confirm field never crosses the wire (design note §2.2); V-12 is enforced by
+   * `setPasswordRequestSchema` before anything else runs. No password appears in any log line
+   * on any path through this handler (`decisions.md` D-06).
+   */
+  router.post('/set-password', requireSession, async (req, res, next) => {
+    try {
+      const parsed = setPasswordRequestSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        // Generic, same reasoning as `/sign-in`: no issue list, no echo of the submitted value.
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const user = req.user;
+      if (!user) {
+        // Unreachable in practice — `requireSession` step 6 always attaches a user before this
+        // handler runs. Kept as a typed guard rather than a non-null assertion.
+        throw new HttpError(401, ERROR_CODES.no_session, 'Sign in to continue.');
+      }
+
+      const outcome = await service.setPassword(user.id, parsed.data.newPassword);
+
+      if (outcome.kind === 'not-required') {
+        // AC-03's server half. The mirror of `password_change_required` — one character apart
+        // in a switch, which is why both are named constants rather than string literals.
+        throw forbidden(ERROR_CODES.password_change_not_required, 'Your password does not need to be changed.');
+      }
+
+      if (outcome.kind === 'same-as-current') {
+        // V-15 (AC-05) — the one refusal on SCR-010 the browser cannot reach on its own.
+        throw unprocessable(
+          ERROR_CODES.password_same_as_current,
+          "That's the password your admin gave you. Choose a different one — the point is that only you know it.",
+        );
+      }
+
+      if (outcome.kind === 'unavailable') {
+        throw serviceUnavailable("We couldn't save that just now. The password you signed in with still works.");
+      }
+
+      // design note §6.4 — `session` travels only when the server's re-sign-in succeeded; the
+      // browser hands it to the same place a sign-in response's session goes.
+      res.json({ user: outcome.user, ...(outcome.session ? { session: outcome.session } : {}) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * `GET /session` — required by US-001, not optional.
    *
    * AC-03 is a **direct address** request: the user types `/admin/bookings`, the app boots cold
@@ -121,8 +183,11 @@ export function createAuthRouter({ service, nowMs, requireSession }: AuthRouterD
    * which is client-controlled, and it must not decide from a JWT claim — REQ-022 changes roles
    * under live sessions and a claim goes stale at that moment (`app-architecture.md` §5.1).
    *
-   * Mounted behind `requireSession`, so reaching this handler means the session is already
-   * verified and the profile already loaded.
+   * Mounted behind `requireSession` with the gate `'exempt'` (US-004 design note §4.3): a user
+   * whose mark is set must still be able to learn that fact on a cold boot, or the browser's
+   * own error handling for a `403` here would sign them out instead of returning them to
+   * SCR-010 (US-004/AC-08). Reaching this handler otherwise means the session is already
+   * verified and the profile already loaded, exactly as before.
    */
   router.get('/session', requireSession, (req, res, next) => {
     const user = req.user;

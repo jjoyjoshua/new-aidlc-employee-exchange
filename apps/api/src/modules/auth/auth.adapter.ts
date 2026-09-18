@@ -106,4 +106,32 @@ export const supabaseAuthAdapter: AuthAdapter = {
       logger.error('failed to revoke session for a refused sign-in', { message: error.message });
     }
   },
+
+  /**
+   * US-004. `auth.admin.updateUserById` needs the **service-role** client — there is no
+   * password-write call on the anon key, by design (ADR-001).
+   *
+   * A failure or a throw both become `unavailable`, never a rejected promise: this is the same
+   * "erring towards unavailable" judgement `signInWithPassword` already makes for a downstream
+   * that fails, and it is load-bearing here specifically — a thrown error the caller does not
+   * catch would leave `auth.service.ts`'s write-then-clear ordering (design note §6) in an
+   * ambiguous state instead of the safe, recoverable one it is written to guarantee. No
+   * password appears in the log line — see `§0`'s constraints in `decisions.md` D-06.
+   */
+  async setPassword(userId, newPassword) {
+    try {
+      const { error } = await supabase().auth.admin.updateUserById(userId, { password: newPassword });
+      if (error) {
+        logger.error('failed to write a new password', { userId, message: error.message });
+        return { kind: 'unavailable' };
+      }
+      return { kind: 'ok' };
+    } catch (thrown) {
+      logger.error('supabase auth threw while writing a new password', {
+        userId,
+        message: thrown instanceof Error ? thrown.message : String(thrown),
+      });
+      return { kind: 'unavailable' };
+    }
+  },
 };

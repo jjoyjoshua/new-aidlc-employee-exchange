@@ -13,9 +13,11 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { SignIn } from './screens/sign-in/SignIn.js';
 import { MyBookings } from './screens/my-bookings/MyBookings.js';
 import { AllBookings } from './screens/all-bookings/AllBookings.js';
+import { SetPassword } from './screens/set-password/SetPassword.js';
 import { AppShell } from './components/app-shell/AppShell.js';
 import { RequireRole } from './lib/auth/require-role.js';
 import { RequireSession } from './lib/auth/require-session.js';
+import { RequirePasswordChange } from './lib/auth/require-password-change.js';
 
 export function AppRoutes() {
   return (
@@ -23,6 +25,18 @@ export function AppRoutes() {
       {/* SCR-001 is the root an unauthenticated user lands on, and where every expired
           session returns. */}
       <Route path="/sign-in" element={<SignIn />} />
+
+      {/* US-004 — reserved by US-001's design note §9.1. No app-shell here: the navigation
+          appears only once the account's password is the holder's own, so this sits outside
+          the shell's route element rather than inside it (design note §7.2). */}
+      <Route
+        path="/set-password"
+        element={
+          <RequirePasswordChange>
+            <SetPassword />
+          </RequirePasswordChange>
+        }
+      />
 
       {/* US-002/AC-03 — every screen the shell contains inherits the session guard before it
           is written; a per-route guard is the one that gets forgotten. */}

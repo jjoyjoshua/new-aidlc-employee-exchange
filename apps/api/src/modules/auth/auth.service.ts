@@ -39,12 +39,43 @@ export interface AuthAdapter {
    * caller — a default would let the more destructive `'global'` be picked by omission.
    */
   revokeSession(accessToken: string, scope: RevokeScope): Promise<void>;
+  /**
+   * US-004. Writes a new credential for the account, via the service-role admin API — the only
+   * write Supabase Auth offers that does not require the account's own current session.
+   *
+   * Never throws and never reports the failure's detail upward: a failure here is the same
+   * "unavailable" outcome as any other unreachable downstream (US-001/AC-07's convention),
+   * because REQ-029's guarantee (the old password stays valid until a new one is confirmed)
+   * depends on this call being the one thing that changes the credential — a failure here must
+   * leave the account exactly as it was.
+   */
+  setPassword(userId: string, newPassword: string): Promise<{ kind: 'ok' } | { kind: 'unavailable' }>;
 }
 
 export type SignInOutcome =
   | { kind: 'ok'; session: Session; user: AuthenticatedUser }
   /** `deadlineMs` is the absolute instant the response may be sent — not a duration. */
   | { kind: 'rejected'; deadlineMs: number }
+  | { kind: 'unavailable' };
+
+/**
+ * US-004. `not-required` is AC-03's server half — there is no voluntary password change in
+ * this release, so an account whose mark is already clear is refused rather than served.
+ * `same-as-current` is V-15 (AC-05); `unavailable` covers both a probe and a write that cannot
+ * reach Supabase (design note §5.2, §6.1).
+ */
+export type SetPasswordOutcome =
+  /**
+   * `session` is present when the server's own re-sign-in with the new password succeeded
+   * (design note §6.4) — confirmed 2026-09-18 against the real Supabase project that
+   * `auth.admin.updateUserById` revokes the caller's prior access token, so a replacement is
+   * required for AC-07 to hold. Absent on the rare case that re-sign-in itself could not
+   * complete; the browser's next request then simply `401`s and the guard returns the user to
+   * sign-in, where the new password already works (AC-06) — degraded, never a lockout.
+   */
+  | { kind: 'ok'; user: AuthenticatedUser; session?: Session }
+  | { kind: 'not-required' }
+  | { kind: 'same-as-current' }
   | { kind: 'unavailable' };
 
 export interface AuthServiceDeps {
@@ -167,6 +198,78 @@ export function createAuthService({ auth, profiles, nowMs, floorMs }: AuthServic
         return;
       }
       await auth.revokeSession(accessToken, 'local').catch(() => undefined);
+    },
+
+    /**
+     * `POST /api/auth/set-password` (US-004). Re-reads the profile itself rather than trusting
+     * a caller-supplied one (design note §5.3) — the rule's precondition is read where the rule
+     * lives, and this stays testable as `(userId, password) -> outcome` with no Express request
+     * involved.
+     *
+     * The order below is the one place in this story where a wrong choice is silent rather than
+     * loud (design note §6.1-§6.2): the credential is written before the mark is cleared, never
+     * the reverse, so every way this can stop halfway leaves the account recoverable by simply
+     * trying again — never released into the product with the administrator-set password still
+     * live and the mark permanently cleared.
+     */
+    async setPassword(userId: string, newPassword: string): Promise<SetPasswordOutcome> {
+      const profile = await profiles.findById(userId);
+      // Defensive only: requireSession's own chain has already refused a missing or inactive
+      // profile before this ever runs. Treated the same as an unreachable downstream rather
+      // than given its own UI state, because it is not a state this story's ACs describe.
+      if (!profile || !profile.is_active) return { kind: 'unavailable' };
+
+      // AC-03's server half. There is no voluntary password change in this release (BRD-001
+      // §10) — an account that is not marked is refused, not served.
+      if (!profile.must_change_password) return { kind: 'not-required' };
+
+      // V-15. Supabase exposes no password-comparison API, so the check is a probe: attempt a
+      // sign-in with the candidate password. Success means it equals the stored one.
+      const probe = await auth.signInWithPassword(profile.email, newPassword);
+
+      if (probe.kind === 'unavailable') {
+        // Fails closed (design note §5.2): V-15 cannot be proven, so nothing is written. The
+        // administrator-set password and the mark are both untouched — RISK-009 holds.
+        return { kind: 'unavailable' };
+      }
+
+      if (probe.kind === 'ok') {
+        // The probe minted a REAL session. `'local'`, never `'global'` — this session belongs
+        // to the probe alone; `'global'` would also end the user's live session on SCR-010,
+        // signing them out as a side effect of a refused submission (design note §5.1).
+        await auth.revokeSession(probe.session.access_token, 'local').catch(() => undefined);
+        return { kind: 'same-as-current' };
+      }
+
+      // probe.kind === 'rejected' — the candidate is not the current password. Proceed.
+      const write = await auth.setPassword(userId, newPassword);
+      if (write.kind === 'unavailable') {
+        // Nothing has changed: the administrator-set password and the mark are both untouched
+        // (AC-08 holds structurally, the same property steps 1-3 above already have).
+        return { kind: 'unavailable' };
+      }
+
+      // The credential is real now — everything from here on is recoverable regardless of
+      // outcome (design note §6.2).
+
+      // design note §6.4. The write above revokes the caller's own access token (confirmed
+      // 2026-09-18 against the real project), so AC-07's "continues straight into the product"
+      // needs a fresh one. Best-effort: a failure here degrades to a session-less success
+      // rather than a failed change — see `SetPasswordOutcome`'s docblock.
+      const resign = await auth.signInWithPassword(profile.email, newPassword).catch(
+        (): AuthAttempt => ({ kind: 'unavailable' }),
+      );
+      const session = resign.kind === 'ok' ? toSession(resign.session) : undefined;
+
+      // A failure clearing the mark must not be reported as a failed change — that would send
+      // the user into V-15's confusing double-failure path on their very next attempt (design
+      // note §6.2). The server-side gate remains authoritative regardless: the worst case is a
+      // 403 on the next request, not a stranded account.
+      await profiles.clearMustChangePassword(userId).catch((error: unknown) => {
+        logger.error('must_change_password clear failed after a successful password write', { userId, error });
+      });
+
+      return { kind: 'ok', user: toUser({ ...profile, must_change_password: false }), ...(session ? { session } : {}) };
     },
   };
 }

@@ -101,6 +101,61 @@ describe('a downstream that throws rather than returns (US-001/AC-07)', () => {
  * deactivated-account refusal) and `'local'` (US-002's sign-out) are both real, deliberate
  * choices and hiding either behind a default is how the wrong one gets picked by omission.
  */
+describe('setPassword — writes the credential via the admin client (US-004)', () => {
+  it('resolves ok on a successful admin write', async () => {
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById(userId: string, attrs: { password?: string }) {
+            expect(userId).toBe('a-user-id');
+            expect(attrs.password).toBe('Correct1!');
+            return { data: {}, error: null };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await supabaseAuthAdapter.setPassword('a-user-id', 'Correct1!');
+
+    expect(outcome).toEqual({ kind: 'ok' });
+    setSupabaseForTesting(undefined);
+  });
+
+  it('resolves unavailable, never throws, when the admin call errors (US-004 edge case — a save failure that is not AC-05)', async () => {
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            return { data: null, error: { message: 'network error' } };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await supabaseAuthAdapter.setPassword('a-user-id', 'Correct1!');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    setSupabaseForTesting(undefined);
+  });
+
+  it('resolves unavailable when the admin call throws outright (US-004 edge case)', async () => {
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            throw new Error('boom');
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await supabaseAuthAdapter.setPassword('a-user-id', 'Correct1!');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    setSupabaseForTesting(undefined);
+  });
+});
+
 describe('revokeSession — scope is passed through, not assumed (US-002/D-03)', () => {
   it('passes the caller-supplied scope to the Supabase admin call, not a hardcoded one', async () => {
     const calls: Array<[string, string]> = [];

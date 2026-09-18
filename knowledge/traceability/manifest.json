@@ -462,7 +462,8 @@
         "apps/ui/src/lib/auth/auth-context.spec.tsx",
         "apps/ui/src/lib/auth/require-session.spec.tsx",
         "apps/ui/src/components/app-shell/AccountMenu.spec.tsx",
-        "apps/ui/src/components/app-shell/AppShell.spec.tsx"
+        "apps/ui/src/components/app-shell/AppShell.spec.tsx",
+        "apps/ui/src/screens/set-password/SetPassword.spec.tsx"
       ],
       "screens": [
         "SCR-002",
@@ -510,9 +511,30 @@
         "AC-07",
         "AC-08"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/auth/auth.routes.spec.ts",
+        "apps/api/src/modules/auth/auth.service.spec.ts",
+        "apps/api/src/modules/auth/auth.adapter.spec.ts",
+        "libs/contracts/src/password.spec.ts",
+        "libs/contracts/src/auth.spec.ts",
+        "libs/contracts/src/error.spec.ts",
+        "apps/ui/src/lib/auth/landing.spec.ts",
+        "apps/ui/src/lib/auth/require-session.spec.tsx",
+        "apps/ui/src/lib/auth/require-password-change.spec.tsx",
+        "apps/ui/src/lib/auth/auth-context.spec.tsx",
+        "apps/ui/src/components/policy-checklist/PolicyChecklist.spec.tsx",
+        "apps/ui/src/components/toast/Toast.spec.tsx",
+        "apps/ui/src/components/text-field/TextField.spec.tsx",
+        "apps/ui/src/screens/sign-in/SignIn.spec.tsx",
+        "apps/ui/src/screens/set-password/SetPassword.spec.tsx",
+        "apps/ui/src/screens/my-bookings/MyBookings.spec.tsx",
+        "apps/ui/src/screens/all-bookings/AllBookings.spec.tsx"
+      ],
       "screens": [
-        "SCR-010"
+        "SCR-010",
+        "SCR-001",
+        "SCR-002",
+        "SCR-005"
       ]
     },
     "US-005": {
@@ -1167,7 +1189,8 @@
       "stories": [
         "US-001",
         "US-003",
-        "US-033"
+        "US-033",
+        "US-004"
       ],
       "requirements": [
         "REQ-001",
@@ -1199,7 +1222,8 @@
         "US-010",
         "US-011",
         "US-012",
-        "US-033"
+        "US-033",
+        "US-004"
       ],
       "requirements": [
         "REQ-003",
@@ -1307,7 +1331,8 @@
         "US-013",
         "US-014",
         "US-015",
-        "US-033"
+        "US-033",
+        "US-004"
       ],
       "requirements": [
         "REQ-003",

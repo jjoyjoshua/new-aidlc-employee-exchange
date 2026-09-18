@@ -45,6 +45,7 @@ function renderSignIn(request: ApiClient['request']) {
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/bookings" element={<h1>My bookings</h1>} />
           <Route path="/admin/bookings" element={<h1>All bookings</h1>} />
+          <Route path="/set-password" element={<h1>Set your password</h1>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -299,6 +300,17 @@ describe('Landing (US-001/AC-01, US-001/AC-02)', () => {
     await submit();
 
     expect(await screen.findByRole('heading', { name: 'All bookings' })).toBeInTheDocument();
+  });
+
+  it('lands a user whose password is administrator-set on Set your password, not their usual destination (US-004/AC-01)', async () => {
+    renderSignIn(
+      vi.fn().mockResolvedValue(okFor({ ...EMPLOYEE, mustChangePassword: true })) as unknown as ApiClient['request'],
+    );
+    await fill('priya@company.com', 'the-temporary-one');
+
+    await submit();
+
+    expect(await screen.findByRole('heading', { name: 'Set your password' })).toBeInTheDocument();
   });
 
   it('submits on Enter from either field (US-001/AC-05)', async () => {

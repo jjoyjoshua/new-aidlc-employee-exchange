@@ -18,6 +18,7 @@ import { LoginBackdrop } from '../../components/login-backdrop/LoginBackdrop.js'
 import { PasswordField } from '../../components/password-field/PasswordField.js';
 import { TextField } from '../../components/text-field/TextField.js';
 import { useAuth } from '../../lib/auth/auth-context.js';
+import { landingPathFor } from '../../lib/auth/landing.js';
 import './sign-in.css';
 
 /** ST-04's copy. One sentence for all three causes — the screen never learns which it was. */
@@ -80,8 +81,10 @@ export function SignIn() {
 
     if (result.kind === 'ok') {
       // The role decides the landing screen, silently — REQ-004 gives each user exactly one
-      // role, so a picker would offer a choice nobody has.
-      navigate(result.user.role === 'admin' ? '/admin/bookings' : '/bookings', { replace: true });
+      // role, so a picker would offer a choice nobody has. An administrator-set password
+      // outranks the role (US-004/AC-01): landingPathFor sends that case to /set-password
+      // instead of either home.
+      navigate(landingPathFor(result.user), { replace: true });
       return;
     }
 

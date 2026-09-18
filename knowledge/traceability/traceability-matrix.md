@@ -32,7 +32,7 @@
 | REQ-026 | US-031 | 0/11 | planned |
 | REQ-027 | US-032 | 0/10 | planned |
 | REQ-028 | US-010, US-013 | 0/21 | planned |
-| REQ-029 | US-004 | 0/8 | planned |
+| REQ-029 | US-004 | 8/8 | delivered |
 | REQ-030 | US-025 | 0/14 | planned |
 | REQ-031 | US-014 | 0/10 | planned |
 | REQ-032 | US-020 | 0/13 | planned |

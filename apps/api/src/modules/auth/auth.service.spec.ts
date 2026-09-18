@@ -41,11 +41,13 @@ function build(overrides: {
     revokeSession: vi.fn(async (token: string, scope: string) => {
       revoked.push({ token, scope });
     }),
+    setPassword: vi.fn(async () => ({ kind: 'ok' as const })),
     ...overrides.auth,
   };
   const profiles: ProfileRepository = {
     findById: vi.fn(async () => PROFILE),
     stampLastSeen: vi.fn(async () => undefined),
+    clearMustChangePassword: vi.fn(async () => undefined),
     ...overrides.profiles,
   };
   const service = createAuthService({
@@ -282,6 +284,156 @@ describe('markSeen (US-003)', () => {
     });
 
     await expect(service.markSeen(PROFILE.id, new Date(0))).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * US-004 — the forced password change. `setPassword` re-reads the profile itself (design note
+ * §5.3) rather than trusting a caller-supplied one, so every assertion here is against the
+ * outcome the service computes from a fresh `findById`, never against a value handed in.
+ */
+describe('setPassword (US-004)', () => {
+  it('returns not-required when the mark is already clear (US-004/AC-03)', async () => {
+    const { service, auth } = build({});
+
+    const outcome = await service.setPassword(PROFILE.id, 'Correct1!');
+
+    expect(outcome).toEqual({ kind: 'not-required' });
+    expect(auth.setPassword).not.toHaveBeenCalled();
+  });
+
+  it('refuses and revokes the probe session locally when the candidate equals the current password (US-004/AC-05)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const probeSession = { access_token: 'probe-token', refresh_token: 'probe-refresh', expires_at: 1_789_200_000 };
+    const { service, auth, revoked } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: {
+        signInWithPassword: vi.fn(async () => ({ kind: 'ok' as const, session: probeSession, userId: mustChange.id })),
+      },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'the-admin-set-password');
+
+    expect(outcome).toEqual({ kind: 'same-as-current' });
+    expect(auth.setPassword).not.toHaveBeenCalled();
+    expect(revoked).toEqual([{ token: 'probe-token', scope: 'local' }]);
+  });
+
+  it('never revokes with global scope for the probe — that would end the caller\'s own session too (US-004/AC-05)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const probeSession = { access_token: 'probe-token', refresh_token: 'probe-refresh', expires_at: 1_789_200_000 };
+    const { service, revoked } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: {
+        signInWithPassword: vi.fn(async () => ({ kind: 'ok' as const, session: probeSession, userId: mustChange.id })),
+      },
+    });
+
+    await service.setPassword(mustChange.id, 'the-admin-set-password');
+
+    expect(revoked.every((r) => r.scope === 'local')).toBe(true);
+  });
+
+  it('fails closed when the probe cannot reach the service — V-15 cannot be proven, so nothing is written (US-004 edge case)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const { service, auth, profiles } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: { signInWithPassword: vi.fn(async () => ({ kind: 'unavailable' as const })) },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'Correct1!');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    expect(auth.setPassword).not.toHaveBeenCalled();
+    expect(profiles.clearMustChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('writes the credential and clears the mark on success (US-004/AC-06, US-004/AC-07)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const { service, auth, profiles } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: { signInWithPassword: vi.fn(async () => ({ kind: 'rejected' as const })) },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'Correct1!');
+
+    expect(auth.setPassword).toHaveBeenCalledWith(mustChange.id, 'Correct1!');
+    expect(profiles.clearMustChangePassword).toHaveBeenCalledWith(mustChange.id);
+    expect(outcome.kind).toBe('ok');
+    expect(outcome.kind === 'ok' && outcome.user.mustChangePassword).toBe(false);
+  });
+
+  it('never clears the mark when the credential write fails — the old password must keep working (US-004/AC-08)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const { service, profiles } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: {
+        signInWithPassword: vi.fn(async () => ({ kind: 'rejected' as const })),
+        setPassword: vi.fn(async () => ({ kind: 'unavailable' as const })),
+      },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'Correct1!');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    expect(profiles.clearMustChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('signs in again with the new password to replace the caller\'s revoked access token (design note §6.4)', async () => {
+    // Confirmed 2026-09-18 against the real Supabase project: auth.admin.updateUserById revokes
+    // the caller's existing access token. The probe call (old password still current) is
+    // rejected; the SAME call repeated after the write succeeds, because the stored password has
+    // changed by then.
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const freshSession = { access_token: 'fresh-token', refresh_token: 'fresh-refresh', expires_at: 1_789_200_000 };
+    const signInWithPassword = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'rejected' as const }) // the V-15 probe
+      .mockResolvedValueOnce({ kind: 'ok' as const, session: freshSession, userId: mustChange.id }); // the re-sign-in
+    const { service } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: { signInWithPassword },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'Correct1!');
+
+    expect(outcome.kind).toBe('ok');
+    expect(outcome.kind === 'ok' && outcome.session?.accessToken).toBe('fresh-token');
+    expect(signInWithPassword).toHaveBeenCalledTimes(2);
+    expect(signInWithPassword).toHaveBeenNthCalledWith(2, mustChange.email, 'Correct1!');
+  });
+
+  it('still answers ok, with no session, when the re-sign-in cannot complete — a 401 next time is safe, not a lockout (design note §6.4)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const signInWithPassword = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'rejected' as const }) // the V-15 probe
+      .mockResolvedValueOnce({ kind: 'unavailable' as const }); // the re-sign-in fails
+    const { service } = build({
+      profiles: { findById: vi.fn(async () => mustChange) },
+      auth: { signInWithPassword },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'Correct1!');
+
+    expect(outcome.kind).toBe('ok');
+    expect(outcome.kind === 'ok' && outcome.session).toBeUndefined();
+  });
+
+  it('still answers ok when clearing the mark fails after a successful write — the credential change is real (US-004 design note §6.2)', async () => {
+    const mustChange = { ...PROFILE, must_change_password: true };
+    const { service, auth } = build({
+      profiles: {
+        findById: vi.fn(async () => mustChange),
+        clearMustChangePassword: vi.fn(async () => { throw new Error('db is down'); }),
+      },
+      auth: { signInWithPassword: vi.fn(async () => ({ kind: 'rejected' as const })) },
+    });
+
+    const outcome = await service.setPassword(mustChange.id, 'Correct1!');
+
+    expect(auth.setPassword).toHaveBeenCalledWith(mustChange.id, 'Correct1!');
+    expect(outcome.kind).toBe('ok');
   });
 });
 

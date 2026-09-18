@@ -29,6 +29,11 @@ export function RequireSession({ children }: RequireSessionProps) {
 
   if (status === 'booting') return null;
   if (!user) return <Navigate to="/sign-in" replace />;
+  // US-004/AC-02 — every screen inside the shell inherits this, because the guard is on the
+  // shell's route element rather than per route (same reasoning as above). This is convenience,
+  // not the guarantee: the guarantee is `requireSession` step 5 refusing every guarded server
+  // route with 403 regardless of what the browser does (`auth.routes.spec.ts`).
+  if (user.mustChangePassword) return <Navigate to="/set-password" replace />;
 
   return <>{children}</>;
 }

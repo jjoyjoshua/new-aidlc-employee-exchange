@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './auth-context.js';
 
@@ -39,12 +40,18 @@ afterEach(() => {
 });
 
 function Harness() {
-  const { user, signIn, signOut } = useAuth();
+  const { user, signIn, signOut, setPassword } = useAuth();
+  const [setPasswordResult, setSetPasswordResult] = useState('idle');
   return (
     <div>
       <div data-testid="user">{user ? user.email : 'none'}</div>
+      <div data-testid="mustChangePassword">{user ? String(user.mustChangePassword) : 'n/a'}</div>
+      <div data-testid="setPasswordResult">{setPasswordResult}</div>
       <button onClick={() => void signIn('priya@company.com', 'correct')}>sign in</button>
       <button onClick={() => void signOut()}>sign out</button>
+      <button onClick={() => void setPassword('NewPassword1!').then((r) => setSetPasswordResult(r.kind))}>
+        set password
+      </button>
     </div>
   );
 }
@@ -206,5 +213,123 @@ describe('signOut — the request carries the token this tab actually holds (US-
     await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
 
     expect(await screen.findByText('none')).toBeInTheDocument();
+  });
+});
+
+const MUST_CHANGE_USER = { ...USER, mustChangePassword: true };
+
+describe('setPassword (US-004)', () => {
+  it('sets the returned user, with the mark cleared, before resolving (US-004/AC-06, US-004/AC-07)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { user: { ...MUST_CHANGE_USER, mustChangePassword: false } }));
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('true'); // mustChangePassword testid, right after sign-in
+
+    await userEvent.click(screen.getByRole('button', { name: 'set password' }));
+
+    expect(await screen.findByText('ok')).toBeInTheDocument();
+    expect(screen.getByTestId('mustChangePassword')).toHaveTextContent('false');
+  });
+
+  it('sends only newPassword in the body — no confirm field crosses the wire (design note §2.2)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(jsonResponse(200, { user: { ...MUST_CHANGE_USER, mustChangePassword: false } }));
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('true');
+    await userEvent.click(screen.getByRole('button', { name: 'set password' }));
+    await screen.findByText('ok');
+
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/auth/set-password'));
+    expect(call).toBeDefined();
+    const body = JSON.parse((call?.[1] as RequestInit).body as string);
+    expect(body).toEqual({ newPassword: 'NewPassword1!' });
+  });
+
+  it('maps password_same_as_current to same-as-current, leaving the mark untouched (US-004/AC-05)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(
+        jsonResponse(422, {
+          statusCode: 422,
+          code: 'password_same_as_current',
+          message: "That's the password your admin gave you.",
+        }),
+      );
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'set password' }));
+
+    expect(await screen.findByText('same-as-current')).toBeInTheDocument();
+    expect(screen.getByTestId('mustChangePassword')).toHaveTextContent('true');
+  });
+
+  it('maps every other server refusal to failed — ST-06 is one state for all of them (US-004)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(
+        jsonResponse(503, { statusCode: 503, code: 'service_unavailable', message: 'unavailable' }),
+      );
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'set password' }));
+
+    expect(await screen.findByText('failed')).toBeInTheDocument();
+  });
+
+  it('stores a fresh session when one travels in the response, and uses it on the next request (design note §6.4)', async () => {
+    // Confirmed 2026-09-18 against the real Supabase project: the password write revokes the
+    // token the request itself was authorised with. Proven here the same way US-002 proved
+    // signOut's token handling — by asserting what actually crosses the wire next.
+    const freshSession = { accessToken: 'fresh-token', refreshToken: 'fresh-refresh', expiresAt: 1_789_200_000 };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { user: { ...MUST_CHANGE_USER, mustChangePassword: false }, session: freshSession }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('true');
+    await userEvent.click(screen.getByRole('button', { name: 'set password' }));
+    await screen.findByText('ok');
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
+
+    const signOutCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/auth/sign-out'));
+    const init = signOutCall?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe(`Bearer ${freshSession.accessToken}`);
+  });
+
+  it('maps a transport failure to failed as well (US-004 edge case — a save failure that is not AC-05)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: MUST_CHANGE_USER }))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'set password' }));
+
+    expect(await screen.findByText('failed')).toBeInTheDocument();
   });
 });
