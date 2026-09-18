@@ -35,6 +35,21 @@ export const deskAvailabilitySchema = z.object({
 });
 export type DeskAvailability = z.infer<typeof deskAvailabilitySchema>;
 
+/**
+ * US-007/FR-05, AC-06. The caller's OWN Confirmed booking for the requested date, or `null`.
+ * Deliberately no `userId` — it is always the caller's, and carrying one would be an invitation
+ * to generalise this into "whose booking" later (design note §2.1). Filtered server-side on
+ * `req.user.id`, never a query param — `availabilityQuerySchema` stays `.strict()` with no
+ * `userId` field, so a client-supplied one is a `400` at the route edge, before it could reach
+ * the service (design note §2.2).
+ */
+export const myBookingSchema = z.object({
+  id: z.string().uuid(),
+  deskId: z.string().uuid(),
+  deskNumber: z.string().min(1),
+});
+export type MyBooking = z.infer<typeof myBookingSchema>;
+
 /** Responses are **not** `.strict()`, per `auth.ts`'s stated rule for every endpoint in this
  *  package — an additive field must not break a tab loaded before the deploy. */
 export const availabilityResponseSchema = z.object({
@@ -49,5 +64,13 @@ export const availabilityResponseSchema = z.object({
    * fully-booked branch, never the reverse.
    */
   desks: z.array(deskAvailabilitySchema),
+  /**
+   * US-007/FR-05. `.nullable()`, not `.optional()`: a server that has evaluated the question
+   * always answers it, so a response missing the key entirely is a bug rather than "no
+   * booking" — an `undefined` here would be indistinguishable from an old server that predates
+   * this field, which `.optional()` would quietly permit (US-007/AC-06). Defaulted to `null` so
+   * an old fixture with no `myBooking` key at all still parses (additive, ADR-002's asymmetry).
+   */
+  myBooking: myBookingSchema.nullable().default(null),
 });
 export type AvailabilityResponse = z.infer<typeof availabilityResponseSchema>;

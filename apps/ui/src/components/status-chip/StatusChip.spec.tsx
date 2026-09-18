@@ -22,4 +22,11 @@ describe('StatusChip (US-006/AC-02 — icon and word, never colour alone, NFR-00
 
     expect(container.textContent?.replace(/\s+/g, '')).toBe('Taken');
   });
+
+  it('renders the text "Selected" plus an icon element (US-007/AC-01, NFR-01)', () => {
+    const { container } = render(<StatusChip status="selected" />);
+
+    expect(screen.getByText('Selected')).toBeInTheDocument();
+    expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
+  });
 });

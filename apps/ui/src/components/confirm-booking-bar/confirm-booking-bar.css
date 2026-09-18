@@ -1,0 +1,21 @@
+/*
+ * ConfirmBookingBar — bottom-anchored above the bottom bar below 768px (the story's own UI
+ * commitment: "never a floating button covering the last row"). At and above 768px it sits
+ * in the normal flow, directly under the desk list, matching SCR-003's desktop layout.
+ */
+
+.confirm-booking-bar {
+  display: flex;
+  padding-top: var(--s-8);
+}
+
+@media (max-width: 767px) {
+  .confirm-booking-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--c-surface);
+    padding: var(--s-16);
+    margin: 0 calc(var(--s-16) * -1) calc(var(--s-16) * -1);
+    border-top: var(--bw-1) solid var(--c-border);
+  }
+}

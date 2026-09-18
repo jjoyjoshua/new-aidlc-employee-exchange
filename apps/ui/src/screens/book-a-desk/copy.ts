@@ -21,4 +21,15 @@ export const NO_DESKS_EXIST = {
 export const AVAILABILITY_LOAD_FAILED = (label: string): string =>
   `We couldn't load desk availability for ${label}.`;
 
+/** SCR-003 ST-09 — US-007/AC-08. The desk-per-day index fired: someone else's confirm won the
+ *  race. Names what happened, not what to do — the refresh and the cleared selection already
+ *  do the "what to do" part. */
+export const DESK_JUST_TAKEN = 'Someone just booked that desk. The list has been refreshed.';
+
+/** SCR-003 ST-12 — US-007/AC-10. Deliberately does not say "try again" as the only option —
+ *  a blind retry can double-book (refused confusingly by BR-001.1) or succeed, and the
+ *  interface genuinely cannot tell which happened. */
+export const BOOKING_UNCERTAIN =
+  "We couldn't confirm whether that booking went through. Check My bookings before trying again.";
+
 // US-009 adds FULLY_BOOKED here, beside NO_DESKS_EXIST, and a test asserting the two differ.

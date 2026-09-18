@@ -627,7 +627,29 @@
         "AC-11",
         "AC-12"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/bookings.spec.ts",
+        "libs/contracts/src/availability.spec.ts",
+        "libs/contracts/src/error.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.concurrency.spec.ts",
+        "apps/api/src/modules/bookings/bookings.service.spec.ts",
+        "apps/api/src/modules/bookings/bookings.routes.spec.ts",
+        "apps/ui/src/components/desk-row/DeskRow.spec.tsx",
+        "apps/ui/src/components/zone-group/ZoneGroup.spec.tsx",
+        "apps/ui/src/components/status-chip/StatusChip.spec.tsx",
+        "apps/ui/src/components/button/Button.spec.tsx",
+        "apps/ui/src/components/confirm-booking-bar/ConfirmBookingBar.spec.tsx",
+        "apps/ui/src/components/confirm-dialog/ConfirmDialog.spec.tsx",
+        "apps/ui/src/components/existing-booking-state/ExistingBookingState.spec.tsx",
+        "apps/ui/src/components/existing-booking-state/cancel-booking.spec.ts",
+        "apps/ui/src/screens/book-a-desk/BookADesk.spec.tsx",
+        "apps/ui/src/screens/book-a-desk/use-book-desk.spec.ts",
+        "apps/ui/src/screens/book-a-desk/create-booking.spec.ts",
+        "apps/ui/src/screens/book-a-desk/fetch-availability.spec.ts",
+        "apps/ui/src/screens/book-a-desk/use-availability.spec.ts",
+        "apps/ui/src/screens/my-bookings/MyBookings.spec.tsx"
+      ],
       "screens": [
         "SCR-003"
       ]

@@ -58,6 +58,23 @@ describe('ERROR_CODES', () => {
     expect(errorCodeSchema.parse('date_not_bookable')).toBe('date_not_bookable');
   });
 
+  it('carries the five codes US-007 adds for booking creation and cancellation (US-007/AC-05, AC-08, AC-11, AC-12)', () => {
+    expect(ERROR_CODES.desk_already_booked).toBe('desk_already_booked');
+    expect(ERROR_CODES.already_booked_that_date).toBe('already_booked_that_date');
+    expect(ERROR_CODES.desk_not_found).toBe('desk_not_found');
+    expect(ERROR_CODES.desk_inactive).toBe('desk_inactive');
+    expect(ERROR_CODES.booking_not_found).toBe('booking_not_found');
+    for (const code of [
+      'desk_already_booked',
+      'already_booked_that_date',
+      'desk_not_found',
+      'desk_inactive',
+      'booking_not_found',
+    ]) {
+      expect(errorCodeSchema.parse(code)).toBe(code);
+    }
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

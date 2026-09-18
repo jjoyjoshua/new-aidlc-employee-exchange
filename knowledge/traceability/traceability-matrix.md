@@ -11,7 +11,7 @@
 | REQ-005 | US-001, US-025, US-026 | 8/30 | in progress |
 | REQ-006 | US-005 | 8/8 | delivered |
 | REQ-007 | US-006 | 10/10 | delivered |
-| REQ-008 | US-007 | 0/12 | planned |
+| REQ-008 | US-007 | 12/12 | delivered |
 | REQ-009 | US-010 | 0/10 | planned |
 | REQ-010 | US-011 | 0/10 | planned |
 | REQ-011 | US-013 | 0/11 | planned |

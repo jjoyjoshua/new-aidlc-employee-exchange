@@ -64,3 +64,13 @@ describe('Button busy state (US-001/AC-06)', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).not.toHaveAttribute('aria-busy');
   });
 });
+
+describe('Button danger variant — the solid destructive fill added 2026-09-08 (US-007/AC-07)', () => {
+  it('takes the danger modifier, the solid fill SCR-002 ST-07 and SCR-003 ST-10\'s cancel dialog need', () => {
+    // `danger` was outlined-only until this story (Button.tsx's own note: "When a screen needs
+    // the solid destructive button, it gets a variant then") — this is that screen.
+    render(<Button variant="danger">Cancel booking</Button>);
+
+    expect(screen.getByRole('button', { name: 'Cancel booking' })).toHaveClass('button--danger');
+  });
+});

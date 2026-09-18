@@ -33,3 +33,44 @@ describe('MyBookings — the password-saved toast (US-004/AC-07)', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
+
+describe('MyBookings — the booking confirmation toast (US-007/AC-03, AC-04)', () => {
+  it('names the desk and the date (US-007/AC-03) and the confirmation email verbatim (US-007/AC-04)', () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/bookings',
+            state: {
+              bookingConfirmation: {
+                deskNumber: 'A-02',
+                dateLabel: 'Wed 9 Sep',
+                confirmationEmail: 'priya@company.com',
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/bookings" element={<MyBookings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText('A-02 booked for Wed 9 Sep. Confirmation emailed to priya@company.com.'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders no booking-confirmation toast on an ordinary visit', () => {
+    render(
+      <MemoryRouter initialEntries={['/bookings']}>
+        <Routes>
+          <Route path="/bookings" element={<MyBookings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});

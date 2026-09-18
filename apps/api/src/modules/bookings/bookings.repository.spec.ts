@@ -15,15 +15,29 @@ import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { setSupabaseForTesting } from '../../infra/supabase/index.js';
 import { availabilityRepository } from './bookings.repository.js';
+import {
+  DESK_CONFLICT_ERROR,
+  USER_CONFLICT_ERROR,
+  UNRECOGNISED_UNIQUE_VIOLATION_ERROR,
+  NON_UNIQUE_VIOLATION_ERROR,
+  activeDeskRow,
+  inactiveDeskRow,
+} from './bookings.fixtures.js';
 
 interface RecordedCall {
   table: string;
   select?: string;
   eq: Array<[string, unknown]>;
   order?: string;
+  insert?: unknown;
+  update?: unknown;
+  single?: boolean;
+  maybeSingle?: boolean;
 }
 
-function fakeSupabase(responses: Record<string, { data: unknown; error: null }>) {
+type FakeResponse = { data: unknown; error: { code: string; message: string } | null };
+
+function fakeSupabase(responses: Record<string, FakeResponse | ((call: RecordedCall) => FakeResponse)>) {
   const calls: RecordedCall[] = [];
 
   function from(table: string) {
@@ -41,11 +55,29 @@ function fakeSupabase(responses: Record<string, { data: unknown; error: null }>)
         call.order = column;
         return builder;
       },
+      insert(row: unknown) {
+        call.insert = row;
+        return builder;
+      },
+      update(patch: unknown) {
+        call.update = patch;
+        return builder;
+      },
+      single() {
+        call.single = true;
+        return builder;
+      },
+      maybeSingle() {
+        call.maybeSingle = true;
+        return builder;
+      },
       // Supabase's query builder is itself a thenable — awaiting it is what triggers the
       // "request". Recording happens here, at the point the chain is actually consumed.
-      then(onFulfilled: (value: { data: unknown; error: null }) => unknown, onRejected?: (reason: unknown) => unknown) {
+      then(onFulfilled: (value: FakeResponse) => unknown, onRejected?: (reason: unknown) => unknown) {
         calls.push(call);
-        return Promise.resolve(responses[table] ?? { data: [], error: null }).then(onFulfilled, onRejected);
+        const responder = responses[table] ?? { data: [], error: null };
+        const response = typeof responder === 'function' ? responder(call) : responder;
+        return Promise.resolve(response).then(onFulfilled, onRejected);
       },
     };
     return builder;
@@ -96,6 +128,223 @@ describe('availabilityRepository.listConfirmedDeskIds — the whole of US-006/AC
         },
       ]);
       expect(result).toEqual(['d1', 'd2']);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.getDeskById — US-007/FR-04', () => {
+  it('returns the row, including is_active, for a real desk id', async () => {
+    const { calls, client } = fakeSupabase({
+      desks: { data: activeDeskRow('11111111-1111-4111-8111-111111111111'), error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.getDeskById('11111111-1111-4111-8111-111111111111');
+
+      expect(calls).toEqual([
+        {
+          table: 'desks',
+          select: 'id, desk_number, is_active',
+          eq: [['id', '11111111-1111-4111-8111-111111111111']],
+          order: undefined,
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ id: '11111111-1111-4111-8111-111111111111', desk_number: 'A-01', is_active: true });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined for a missing id (US-007/AC-12)', async () => {
+    const { client } = fakeSupabase({ desks: { data: null, error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.getDeskById('does-not-exist');
+      expect(result).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('reports an inactive desk as is_active: false, not as missing (US-007/AC-12)', async () => {
+    const { client } = fakeSupabase({ desks: { data: inactiveDeskRow(), error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.getDeskById('irrelevant');
+      expect(result).toEqual(inactiveDeskRow());
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.findMyConfirmedBooking — US-007/FR-05, AC-06', () => {
+  it('selects id, desk_id and the joined desk_number, filtered to the caller and status confirmed', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: {
+        data: { id: 'b1', desk_id: 'd1', desks: { desk_number: 'A-02' } },
+        error: null,
+      },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.findMyConfirmedBooking('user-1', '2026-09-16');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'id, desk_id, desks(desk_number)',
+          eq: [
+            ['user_id', 'user-1'],
+            ['booking_date', '2026-09-16'],
+            ['status', 'confirmed'],
+          ],
+          order: undefined,
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ id: 'b1', desk_id: 'd1', desk_number: 'A-02' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined when the caller holds no confirmed booking that date (US-007/AC-06)', async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.findMyConfirmedBooking('user-1', '2026-09-16');
+      expect(result).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.insertConfirmedBooking — US-007/FR-02, D-01 (design note §1.2)', () => {
+  it("returns { kind: 'ok' } with the new row's id when the insert succeeds", async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: { id: 'new-booking-id' }, error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.insertConfirmedBooking('user-1', 'desk-1', '2026-09-16');
+
+      expect(result).toEqual({ kind: 'ok', id: 'new-booking-id' });
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          insert: { user_id: 'user-1', desk_id: 'desk-1', booking_date: '2026-09-16' },
+          select: 'id',
+          eq: [],
+          order: undefined,
+          single: true,
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it("maps the desk-per-day index violation to { kind: 'desk_conflict' } (US-007/AC-08)", async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: DESK_CONFLICT_ERROR } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.insertConfirmedBooking('user-1', 'desk-1', '2026-09-16');
+      expect(result).toEqual({ kind: 'desk_conflict' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it("maps the user-per-day index violation to { kind: 'user_conflict' } (US-007/AC-05)", async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: USER_CONFLICT_ERROR } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.insertConfirmedBooking('user-1', 'desk-1', '2026-09-16');
+      expect(result).toEqual({ kind: 'user_conflict' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a non-23505 error rather than treating it as a conflict outcome (design note §1.2, F-1)', async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: NON_UNIQUE_VIOLATION_ERROR } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(availabilityRepository.insertConfirmedBooking('user-1', 'desk-1', '2026-09-16')).rejects.toThrow();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a 23505 that names neither known index, rather than guessing (design note §1.2, F-1)', async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: UNRECOGNISED_UNIQUE_VIOLATION_ERROR } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(availabilityRepository.insertConfirmedBooking('user-1', 'desk-1', '2026-09-16')).rejects.toThrow();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07', () => {
+  it('updates status, cancelled_at, cancelled_by and cancellation_source in one statement, scoped to id/user/confirmed', async () => {
+    const cancelledAt = new Date('2026-09-16T10:00:00.000Z');
+    const { calls, client } = fakeSupabase({
+      bookings: { data: { id: 'b1' }, error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.cancelOwnedBooking('user-1', 'b1', cancelledAt);
+
+      expect(result).toEqual({ id: 'b1' });
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          update: {
+            status: 'cancelled',
+            cancelled_at: cancelledAt.toISOString(),
+            cancelled_by: 'user-1',
+            cancellation_source: 'owner',
+          },
+          select: 'id',
+          eq: [
+            ['id', 'b1'],
+            ['user_id', 'user-1'],
+            ['status', 'confirmed'],
+          ],
+          order: undefined,
+          maybeSingle: true,
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined (no row) when the id/user/status predicate matches nothing (US-007/AC-07)', async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.cancelOwnedBooking('user-1', 'not-mine-or-gone', new Date());
+      expect(result).toBeUndefined();
     } finally {
       setSupabaseForTesting(undefined);
     }

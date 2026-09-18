@@ -33,6 +33,21 @@ export const errorCodeSchema = z.enum([
   // beyond the 30-day window, or a weekend (V-02, V-03). 422, not 400: the request parsed fine,
   // the rule said no (US-006 design note §2.7). Also US-007's, for the same two rules on a POST.
   'date_not_bookable',
+  // US-007/FR-02 — the `bookings_one_confirmed_per_desk_per_day` partial unique index fired:
+  // another employee's booking beat this one to the same desk/date (V-04, AC-08).
+  'desk_already_booked',
+  // US-007/FR-02 — the `bookings_one_confirmed_per_user_per_day` partial unique index fired:
+  // the caller already holds a Confirmed booking for that date, made elsewhere between page
+  // load and confirm (BR-001.1, V-05, AC-05).
+  'already_booked_that_date',
+  // US-007/FR-04 — the posted deskId does not exist.
+  'desk_not_found',
+  // US-007/FR-04 — the posted deskId names a desk with is_active = false (BR-001.7, AC-12).
+  'desk_inactive',
+  // US-007/FR-06 — one code for "no such booking", "not the caller's" and "not currently
+  // confirmed" alike (D-03, design note §3.3): distinguishing them would turn the endpoint into
+  // an existence oracle over booking ids, the same enumeration weakness US-001/AC-04 rejects.
+  'booking_not_found',
   'route_not_found',
   'service_unavailable',
   'internal_error',
