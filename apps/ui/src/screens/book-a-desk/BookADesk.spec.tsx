@@ -29,7 +29,7 @@ const desk = (deskNumber: string, status: 'available' | 'taken' = 'available'): 
  *  is used only by the tests below that render <BookADesk /> with no `fetchAvailability` override. */
 function SignedIn({
   office,
-  availability = { date: '', desks: [], myBooking: null },
+  availability = { date: '', desks: [], myBooking: null, usualDeskId: null },
   children,
 }: {
   office: Office;
@@ -150,7 +150,7 @@ describe('BookADesk (US-005/AC-01, AC-07, AC-08)', () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
       .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
-      .mockImplementationOnce(ok({ date: '2026-09-21', desks: [], myBooking: null }));
+      .mockImplementationOnce(ok({ date: '2026-09-21', desks: [], myBooking: null, usualDeskId: null }));
 
     render(
       <SignedIn office={OFFICE}>
@@ -171,7 +171,7 @@ describe('BookADesk (US-005/AC-01, AC-07, AC-08)', () => {
     expect(await screen.findByRole('radio', { name: /Mon 21/, checked: true })).toBeInTheDocument();
 
     // The first request (for Friday) resolves last — its payload must never surface as current.
-    resolveFirst({ kind: 'ok', data: { date: '2026-09-18', desks: [], myBooking: null } });
+    resolveFirst({ kind: 'ok', data: { date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null } });
     await new Promise((r) => setTimeout(r, 0));
 
     expect(screen.getByRole('radio', { name: /Mon 21/, checked: true })).toBeInTheDocument();
@@ -181,7 +181,7 @@ describe('BookADesk (US-005/AC-01, AC-07, AC-08)', () => {
 describe('BookADesk — the availability list (US-006/AC-01, AC-05, AC-07)', () => {
   it('renders the count line before the first zone heading, in DOM order (US-006/AC-01)', async () => {
     const desks = [desk('A-01'), desk('A-02', 'taken')];
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null });
 
     render(
       <SignedIn office={OFFICE}>
@@ -198,7 +198,7 @@ describe('BookADesk — the availability list (US-006/AC-01, AC-05, AC-07)', () 
 
   it('groups desks by zone (US-006/AC-05)', async () => {
     const desks = [desk('B-01'), desk('A-01'), desk('A-02')];
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null });
 
     render(
       <SignedIn office={OFFICE}>
@@ -230,7 +230,7 @@ describe('BookADesk — a failed load (US-006/AC-08)', () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
       .mockResolvedValueOnce({ kind: 'failed' })
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null } });
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null, usualDeskId: null } });
 
     render(
       <SignedIn office={OFFICE}>
@@ -254,7 +254,7 @@ describe('BookADesk — a failed load (US-006/AC-08)', () => {
 
 describe('BookADesk — no active desks at all (US-006/AC-09)', () => {
   it('renders the NO_DESKS_EXIST empty state, with no alternative dates and no admin link', async () => {
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [], myBooking: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null });
 
     render(
       <SignedIn office={OFFICE}>
@@ -274,6 +274,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
       date: '2026-09-18',
       desks: [desk('A-01'), desk('A-02')],
       myBooking: null,
+      usualDeskId: null,
     });
 
     render(
@@ -292,6 +293,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
       date: '2026-09-18',
       desks: [desk('A-01'), desk('A-02')],
       myBooking: null,
+      usualDeskId: null,
     });
 
     render(
@@ -311,7 +313,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
   it('changing the date clears the desk selection and disables the confirm action (edge case)', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValue({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null } });
+      .mockResolvedValue({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-01')], myBooking: null, usualDeskId: null } });
 
     render(
       <SignedIn office={OFFICE}>
@@ -330,7 +332,7 @@ describe('BookADesk — selecting a desk arms the confirm action (US-007/AC-01, 
 
 describe('BookADesk — confirming creates a booking and lands on My bookings (US-007/AC-03, AC-04)', () => {
   it("navigates to /bookings with the desk, the date and the confirmation email verbatim from the response", async () => {
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null });
     const createBooking = vi.fn().mockResolvedValue({
       kind: 'ok',
       booking: {
@@ -363,10 +365,10 @@ describe('BookADesk — a desk taken while looking refreshes rather than retries
   it('shows an alert, refreshes availability, clears the selection, disables confirm, moves focus to the alert, and creates no booking', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null } })
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } })
       .mockResolvedValueOnce({
         kind: 'ok',
-        data: { date: '2026-09-18', desks: [desk('A-02', 'taken')], myBooking: null },
+        data: { date: '2026-09-18', desks: [desk('A-02', 'taken')], myBooking: null, usualDeskId: null },
       });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'desk_conflict' });
 
@@ -394,13 +396,14 @@ describe('BookADesk — a second booking on the same date, discovered only on co
   it('refetches availability for the same date, then replaces the desk list with the existing-booking state, moving focus there once the refetch resolves', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null } })
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } })
       .mockResolvedValueOnce({
         kind: 'ok',
         data: {
           date: '2026-09-18',
           desks: [desk('A-02', 'taken')],
           myBooking: { id: 'existing-1', deskId: 'A-01', deskNumber: 'A-01' },
+          usualDeskId: null,
         },
       });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'user_conflict' });
@@ -425,8 +428,8 @@ describe('BookADesk — a second booking on the same date, discovered only on co
   it('falls back to the ordinary desk list if the refetch comes back with myBooking: null (the conflicting booking was itself cancelled meanwhile)', async () => {
     const fetchAvailability = vi
       .fn<AvailabilityFetcher>()
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null } })
-      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null } });
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } })
+      .mockResolvedValueOnce({ kind: 'ok', data: { date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null } });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'user_conflict' });
 
     render(
@@ -444,9 +447,50 @@ describe('BookADesk — a second booking on the same date, discovered only on co
   });
 });
 
+describe('BookADesk — the usual-desk label (US-008/AC-01, AC-02)', () => {
+  it("labels the row matching usualDeskId and no other, with myBooking seeded null (design note §2 — a non-null myBooking hides the desk list entirely)", async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [desk('A-01'), desk('A-02')],
+      myBooking: null,
+      usualDeskId: 'A-02',
+    });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'A-02, Available, your usual' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'A-01, Available' })).toBeInTheDocument();
+  });
+
+  it('does not preselect the usual desk on load — no row checked, confirm disabled reading Select a desk to book (US-008/AC-02)', async () => {
+    const fetchAvailability: AvailabilityFetcher = ok({
+      date: '2026-09-18',
+      desks: [desk('A-01'), desk('A-02')],
+      myBooking: null,
+      usualDeskId: 'A-02',
+    });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    await screen.findByRole('radio', { name: 'A-02, Available, your usual' });
+
+    const deskGroup = screen.getByRole('radiogroup', { name: 'Choose a desk' });
+    expect(within(deskGroup).queryByRole('radio', { checked: true })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select a desk to book' })).toBeDisabled();
+  });
+});
+
 describe('BookADesk — an ambiguous failure sends the employee to check, not to retry (US-007/AC-10)', () => {
   it('shows the uncertainty, offers Check my bookings and Try again, and retains the desk selection', async () => {
-    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null });
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks: [desk('A-02')], myBooking: null, usualDeskId: null });
     const createBooking = vi.fn().mockResolvedValue({ kind: 'failed' });
 
     render(

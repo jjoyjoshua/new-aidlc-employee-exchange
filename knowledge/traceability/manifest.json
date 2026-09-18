@@ -666,7 +666,14 @@
         "AC-05",
         "AC-06"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/availability.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/bookings.service.spec.ts",
+        "apps/ui/src/components/desk-row/DeskRow.spec.tsx",
+        "apps/ui/src/components/zone-group/ZoneGroup.spec.tsx",
+        "apps/ui/src/screens/book-a-desk/BookADesk.spec.tsx"
+      ],
       "screens": [
         "SCR-003"
       ]

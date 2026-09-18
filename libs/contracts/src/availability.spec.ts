@@ -90,4 +90,32 @@ describe('availabilityResponseSchema', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('parses usualDeskId: null (US-008/AC-04 — the caller has never booked)', () => {
+    const result = availabilityResponseSchema.safeParse({
+      date: '2026-09-16',
+      desks: [DESK],
+      myBooking: null,
+      usualDeskId: null,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.usualDeskId).toBeNull();
+  });
+
+  it('parses a populated usualDeskId (US-008/AC-01 — the caller\'s last-booked desk is available today)', () => {
+    const result = availabilityResponseSchema.safeParse({
+      date: '2026-09-16',
+      desks: [DESK],
+      myBooking: null,
+      usualDeskId: DESK.id,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.usualDeskId).toBe(DESK.id);
+  });
+
+  it('an OLD fixture with no usualDeskId key at all still parses, defaulting to null (additive field, ADR-002)', () => {
+    const result = availabilityResponseSchema.safeParse({ date: '2026-09-16', desks: [DESK], myBooking: null });
+    expect(result.success).toBe(true);
+    expect(result.data?.usualDeskId).toBeNull();
+  });
 });

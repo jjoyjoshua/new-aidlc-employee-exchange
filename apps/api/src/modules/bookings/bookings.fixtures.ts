@@ -97,6 +97,22 @@ export const NON_UNIQUE_VIOLATION_ERROR = {
 };
 
 /**
+ * US-008/AC-03, D-03. Two bookings, same user, same `booking_date` — the cancel-then-rebook shape
+ * design note §5 pins as the reason `created_at desc` is a load-bearing second sort key, not
+ * defensive. The rejected (cancelled) row is created first and listed first here; a query that
+ * sorts on `booking_date` alone (a stable sort over this array) would return it, since nothing
+ * breaks the tie. Only `created_at desc` as the second key picks the confirmed row, which was
+ * created later because it replaced the first.
+ */
+export const REJECTED_DESK_ID = '00000000-0000-4000-8000-aaaaaaaaaaaa';
+export const REBOOKED_DESK_ID = '00000000-0000-4000-8000-bbbbbbbbbbbb';
+
+export const CANCEL_THEN_REBOOK_SAME_DATE_ROWS = [
+  { desk_id: REJECTED_DESK_ID, booking_date: '2026-09-16', created_at: '2026-09-15T09:00:00.000Z' },
+  { desk_id: REBOOKED_DESK_ID, booking_date: '2026-09-16', created_at: '2026-09-15T10:00:00.000Z' },
+];
+
+/**
  * US-007. `AvailabilityRepository` gained four write/read methods this story; every test stub
  * written against it before US-007 (and most written for it) only cares about one or two. These
  * two base fixtures exist so a test spreads in the one override it needs rather than retyping
@@ -124,6 +140,9 @@ export const throwingAvailabilityRepository: AvailabilityRepository = {
   async cancelOwnedBooking() {
     throw new Error('must not be called for a refused date');
   },
+  async findMyLastBookedDeskId() {
+    throw new Error('must not be called for a refused date');
+  },
 };
 
 /** Empty/undefined answers everywhere — no active desks, no bookings, no matching desk. For
@@ -147,5 +166,8 @@ export const emptyAvailabilityRepository: AvailabilityRepository = {
   },
   async cancelOwnedBooking() {
     throw new Error('cancelOwnedBooking is not stubbed for this test');
+  },
+  async findMyLastBookedDeskId() {
+    return undefined;
   },
 };

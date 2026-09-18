@@ -6,8 +6,8 @@ import type { AvailabilityResponse } from '@desk-booking/contracts';
 const ok = (data: AvailabilityResponse): AvailabilityOutcome => ({ kind: 'ok', data });
 const failed: AvailabilityOutcome = { kind: 'failed' };
 
-const RESPONSE_A: AvailabilityResponse = { date: '2026-09-18', desks: [], myBooking: null };
-const RESPONSE_B: AvailabilityResponse = { date: '2026-09-21', desks: [], myBooking: null };
+const RESPONSE_A: AvailabilityResponse = { date: '2026-09-18', desks: [], myBooking: null, usualDeskId: null };
+const RESPONSE_B: AvailabilityResponse = { date: '2026-09-21', desks: [], myBooking: null, usualDeskId: null };
 
 describe('useAvailability (US-005/AC-01, AC-08; US-006/AC-08)', () => {
   it('issues exactly one request for the date it is given (US-005/AC-01)', async () => {

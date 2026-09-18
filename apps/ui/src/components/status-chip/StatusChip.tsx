@@ -21,7 +21,9 @@ export interface StatusChipProps {
   status: DeskStatus;
 }
 
-const LABEL: Record<DeskStatus, string> = { available: 'Available', taken: 'Taken', selected: 'Selected' };
+/** Exported for `DeskRow` (US-008/FR-06): the composed `aria-label` needs the same word this chip
+ *  renders, so the accessible name and the visible chip never say different things. */
+export const LABEL: Record<DeskStatus, string> = { available: 'Available', taken: 'Taken', selected: 'Selected' };
 
 function CheckCircleIcon() {
   // Figma `Icon / check-circle` (node 11:5) — "the desk is free for the selected date". Same

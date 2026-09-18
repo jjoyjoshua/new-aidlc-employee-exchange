@@ -19,12 +19,15 @@ export interface ZoneGroupProps {
   /** The one desk (by id) currently `Selected`, or none. `| undefined` because `BookADesk`
    *  assigns this conditionally (`exactOptionalPropertyTypes`). */
   selectedDeskId?: string | undefined;
+  /** US-008/FR-07. The caller's usual desk (by id), already filtered to eligibility server-side
+   *  — mirrors `selectedDeskId` exactly, including the `| undefined` (`exactOptionalPropertyTypes`). */
+  usualDeskId?: string | undefined;
   /** Fires only for an `available` row — `DeskRow` itself already refuses to wire this for a
    *  `taken` one (US-007/AC-02). */
   onSelectDesk?: (deskId: string) => void;
 }
 
-export function ZoneGroup({ letter, desks, selectedDeskId, onSelectDesk }: ZoneGroupProps) {
+export function ZoneGroup({ letter, desks, selectedDeskId, usualDeskId, onSelectDesk }: ZoneGroupProps) {
   return (
     <div className="zone-group">
       <h2 className="zone-group__heading">Zone {letter}</h2>
@@ -36,6 +39,7 @@ export function ZoneGroup({ letter, desks, selectedDeskId, onSelectDesk }: ZoneG
               deskNumber={desk.deskNumber}
               status={desk.status}
               selected={desk.id === selectedDeskId}
+              usual={desk.id === usualDeskId}
               onSelect={onSelectDesk ? () => onSelectDesk(desk.id) : undefined}
             />
           </div>

@@ -42,4 +42,9 @@ to reuse it rather than build a second one.
 booking for the date, or `null`) and a `Cache-Control: private, no-store` header, because the
 response is no longer identical for every caller (design note §2.3).
 
+**US-008** adds `usualDeskId` to the same `getAvailability` response: the caller's most recently
+booked desk id (across all dates and statuses, via the new `findMyLastBookedDeskId` read),
+already filtered server-side to eligibility — present only when that desk is also `available` in
+`desks[]` for the requested date. The browser does one `===`, never re-derives the rule.
+
 See `../README.md` for what this module owns and the boundary it must respect.

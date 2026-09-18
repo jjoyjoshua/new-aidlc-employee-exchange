@@ -32,4 +32,11 @@ export const DESK_JUST_TAKEN = 'Someone just booked that desk. The list has been
 export const BOOKING_UNCERTAIN =
   "We couldn't confirm whether that booking went through. Check My bookings before trying again.";
 
+/** SCR-003 hi-fi frame (Figma node 38:173, "Your usual") — US-008/FR-05, FR-06. Rendered as
+ *  visible text, right-aligned on the caller's usual desk's row beside the clock hint icon, and
+ *  folded into its composed `aria-label` (DeskRow.tsx) so a screen reader announces it too.
+ *  Verbatim "your usual" per the hi-fi frame, not the ASCII wireframe's paraphrase — confirmed
+ *  against the actual design 2026-09-18 after the wireframe and the frame were found to disagree. */
+export const YOUR_USUAL_DESK = 'your usual';
+
 // US-009 adds FULLY_BOOKED here, beside NO_DESKS_EXIST, and a test asserting the two differ.
