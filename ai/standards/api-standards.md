@@ -42,7 +42,7 @@ no constraint names.
 | `403`  | Signed in but not permitted — wrong role (V-07), or password change pending   |
 | `404`  | No such desk, booking or account                                              |
 | `409`  | Something else got there first, or the value is taken: V-04, V-05, V-08, V-10 |
-| `422`  | The request is well-formed but the rule refuses it: V-06, V-09, V-11          |
+| `422`  | The request is well-formed but the rule refuses it: V-06, V-09, V-11, V-15    |
 | `500`  | Never intentional                                                             |
 | `503`  | A named downstream is unreachable — timed out, refused, or answered 5xx        |
 
@@ -62,10 +62,17 @@ A-01 is `409`; SCR-006's "this desk has 3 upcoming bookings, so it can't be reti
 
 ### One `403` carries extra weight
 
-When `must_change_password` is set, every route except the password-change route and sign-out
-returns `403` with a **distinguishable `code`**, so the React app can route to SCR-010 rather
-than render an error (REQ-029, BR-001.17). That code is part of the contract; changing it
-breaks the forced-password-change flow.
+When `must_change_password` is set, every route except the password-change route, `GET
+/api/auth/session`, and sign-out returns `403` with a **distinguishable `code`**, so the React
+app can route to SCR-010 rather than render an error (REQ-029, BR-001.17). `GET /session` is
+exempt too (US-004 design note §4.3) — it is how the browser learns the mark is set on a cold
+boot, and gating it would make that fact unreachable. That code is part of the contract;
+changing it breaks the forced-password-change flow.
+
+**Its mirror carries the opposite condition.** `POST /api/auth/set-password` on an account whose
+mark is already clear answers `403 password_change_not_required` — there is no voluntary
+password change in this release (BRD-001 §10). One character from `password_change_required` in
+a switch statement, which is why both are named constants rather than string literals.
 
 ## Concurrency
 

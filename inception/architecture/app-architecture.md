@@ -243,9 +243,13 @@ deactivated account's live token must still be revocable, which step 2 would pre
    REQ-005 bite immediately rather than at token expiry — see db-design open question 3.
 3. `last_seen_at` older than 30 days → `401` (NFR-009, US-003/AC-03). Otherwise refresh it,
    throttled to once an hour.
-4. `must_change_password = true` → every route except the password-change one and sign-out
-   returns `403` with a distinguishable code, so the React app can route to SCR-010 rather
-   than showing an error (REQ-029, BR-001.17).
+4. `must_change_password = true` → every route except the password-change one, `GET
+   /api/auth/session`, and sign-out returns `403` with a distinguishable code, so the React app
+   can route to SCR-010 rather than showing an error (REQ-029, BR-001.17). `GET /session` is
+   exempt too (US-004 design note §4.3): it is the mechanism by which the browser learns the
+   mark is set on a cold boot, and gating the announcement of a gate is a loop — without this
+   third exemption, a user who abandons the flow and returns is signed out instead of being
+   returned to SCR-010.
 
 Authorization is a second, explicit middleware: `requireAdmin` on every `/api/admin/*` route
 (V-07). Roles come from `user_profiles.role`, which the server has already loaded — not from

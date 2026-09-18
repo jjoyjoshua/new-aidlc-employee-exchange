@@ -20,7 +20,9 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  ERROR_CODES,
   sessionResponseSchema,
+  setPasswordResponseSchema,
   signInResponseSchema,
   type AuthenticatedUser,
   type Session,
@@ -39,6 +41,17 @@ export type SignInResult =
   | { kind: 'rejected' }
   | { kind: 'unavailable' };
 
+/**
+ * US-004. `same-as-current` is the one refusal SCR-010 renders as its own state (ST-03);
+ * everything else collapses to `failed` — ST-06's copy is true for a 400, a 403, a 503 and a
+ * transport failure alike, and inventing a state for a `400` AC-04 already makes unreachable
+ * would be copy for a situation no user can act on differently (design note §7.3).
+ */
+export type SetPasswordResult =
+  | { kind: 'ok'; user: AuthenticatedUser }
+  | { kind: 'same-as-current' }
+  | { kind: 'failed' };
+
 export interface AuthContextValue {
   user: AuthenticatedUser | undefined;
   /**
@@ -55,6 +68,12 @@ export interface AuthContextValue {
    * someone on a signed-in screen (US-002/D-04); there is no UI state for a failed sign-out.
    */
   signOut(): Promise<void>;
+  /**
+   * `POST /api/auth/set-password` (US-004). On `ok`, sets `user` from the response — with the
+   * mark cleared — **before** resolving, so `RequireSession`/`RequirePasswordChange` see the
+   * change on the very next render. Does not navigate; the screen does (design note §7.3).
+   */
+  setPassword(newPassword: string): Promise<SetPasswordResult>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -210,9 +229,40 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
     setStatus('signedOut');
   }, [api, onSignOut]);
 
+  const setPassword = useCallback<AuthContextValue['setPassword']>(
+    async (newPassword) => {
+      const result = await api.request('/api/auth/set-password', setPasswordResponseSchema, {
+        method: 'POST',
+        body: { newPassword },
+      });
+
+      if (result.kind === 'ok') {
+        // design note §6.4, confirmed against the real Supabase project: the password write
+        // revokes the token this very request was authorised with. A fresh one travels in the
+        // response exactly when the server's own re-sign-in succeeded; handed to `onSession` and
+        // stored the same way `signIn` does, or the very next request 401s.
+        if (result.data.session) {
+          await onSession?.(result.data.session);
+          accessTokenRef.current = result.data.session.accessToken;
+        }
+        setUser(result.data.user);
+        return { kind: 'ok', user: result.data.user };
+      }
+
+      if (result.kind === 'error' && result.code === ERROR_CODES.password_same_as_current) {
+        return { kind: 'same-as-current' };
+      }
+
+      // Every other outcome — 400, 403, 503, a transport failure, an unparseable response —
+      // is ST-06's one failure state (design note §7.3).
+      return { kind: 'failed' };
+    },
+    [api, onSession],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, signIn, signOut }),
-    [user, status, signIn, signOut],
+    () => ({ user, status, signIn, signOut, setPassword }),
+    [user, status, signIn, signOut, setPassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

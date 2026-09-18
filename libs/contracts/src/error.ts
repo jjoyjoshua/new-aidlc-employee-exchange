@@ -21,6 +21,14 @@ export const errorCodeSchema = z.enum([
   // US-004's, exported now: it is a contract between a middleware and SCR-010, which is
   // exactly the kind of agreement that belongs in one place rather than two typed strings.
   'password_change_required',
+  // US-004/AC-05 — V-15. The new password is the administrator-set one. SCR-010 ST-03 is the
+  // only state this code produces, and it is the only refusal on that screen the browser
+  // cannot reach on its own.
+  'password_same_as_current',
+  // US-004/AC-03 — the mirror of `password_change_required`. There is no voluntary password
+  // change in this release (BRD-001 §10), so the endpoint refuses an account that is not
+  // marked. One character from its opposite in a switch, which is why both are constants.
+  'password_change_not_required',
   'route_not_found',
   'service_unavailable',
   'internal_error',

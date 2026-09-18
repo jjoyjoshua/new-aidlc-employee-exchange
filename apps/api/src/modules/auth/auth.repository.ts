@@ -33,6 +33,14 @@ export interface ProfileRepository {
    * to itself.
    */
   stampLastSeen(id: string, at: Date): Promise<void>;
+  /**
+   * US-004/AC-06. Called only after the credential write itself has succeeded (design note
+   * §6.1-§6.2) — never before, and never as part of the same call. A failure here is logged and
+   * swallowed by the caller, not retried here: the credential change is already real, and the
+   * server-side gate (`require-session.ts` step 5) remains authoritative on the next request
+   * either way.
+   */
+  clearMustChangePassword(id: string): Promise<void>;
 }
 
 export const profileRepository: ProfileRepository = {
@@ -59,5 +67,14 @@ export const profileRepository: ProfileRepository = {
       .eq('id', id);
 
     if (error) throw new Error(`last_seen_at stamp failed: ${error.message}`);
+  },
+
+  async clearMustChangePassword(id) {
+    const { error } = await supabase()
+      .from('user_profiles')
+      .update({ must_change_password: false })
+      .eq('id', id);
+
+    if (error) throw new Error(`must_change_password clear failed: ${error.message}`);
   },
 };

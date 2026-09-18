@@ -60,16 +60,24 @@ export function buildApp(options: BuildAppOptions = {}): Express {
     floorMs: options.floorMs ?? SIGN_IN_MIN_FAILURE_MS,
   });
 
-  const session = requireSession({
+  const sharedDeps = {
     verifier: options.verifier ?? supabaseSessionVerifier,
     service,
     nowMs,
     sessionLifetimeMs: options.sessionLifetimeMs ?? config().SESSION_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
     lastSeenThrottleMs: options.lastSeenThrottleMs ?? config().SESSION_LAST_SEEN_THROTTLE_MINUTES * 60 * 1000,
-  });
+  };
+
+  // US-004 design note §4.2. Two instances of the same chain, differing only in the one step
+  // that must not apply to two routes: the password-change route itself and `GET /session`.
+  // Every module mount takes `session`; `sessionForPasswordChange` is named, unattractive, and
+  // has exactly the two call sites below — visible in one file rather than a path allowlist
+  // buried in the middleware.
+  const session = requireSession({ ...sharedDeps, passwordChangeGate: 'enforced' });
+  const sessionForPasswordChange = requireSession({ ...sharedDeps, passwordChangeGate: 'exempt' });
 
   return createApp({
-    authRouter: createAuthRouter({ service, nowMs, requireSession: session }),
+    authRouter: createAuthRouter({ service, nowMs, requireSession: sessionForPasswordChange }),
     adminRouter,
     requireSession: session,
   });

@@ -48,6 +48,14 @@ function ScreenThatMounts({ onMount }: { onMount: () => void }) {
   return <h1>My bookings</h1>;
 }
 
+const MUST_CHANGE_USER = {
+  id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+  email: 'priya@company.com',
+  fullName: 'Priya Sharma',
+  role: 'employee' as const,
+  mustChangePassword: true,
+};
+
 describe('RequireSession (US-002/AC-03)', () => {
   it('redirects to sign-in when no user is signed in, and never mounts the screen (US-002/AC-03)', async () => {
     const { screenMounted } = renderAt('/bookings');
@@ -89,5 +97,39 @@ describe('RequireSession (US-002/AC-03)', () => {
 
     expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'My bookings' })).not.toBeInTheDocument();
+  });
+
+  it('redirects to /set-password when the signed-in user\'s password is administrator-set, and never mounts the screen (US-004/AC-02)', async () => {
+    const client = {
+      request: async () => ({ kind: 'ok' as const, data: { user: MUST_CHANGE_USER } }),
+      requestNoContent: async () => ({ kind: 'unavailable' as const }),
+    };
+    const screenMounted = vi.fn();
+
+    render(
+      <MemoryRouter initialEntries={['/bookings']}>
+        <AuthProvider
+          client={client as never}
+          onSession={() => undefined}
+          getStoredSession={async () => ({ accessToken: 'a-token' })}
+        >
+          <Routes>
+            <Route path="/set-password" element={<h1>Set your password</h1>} />
+            <Route
+              path="/bookings"
+              element={
+                <RequireSession>
+                  <ScreenThatMounts onMount={screenMounted} />
+                </RequireSession>
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Set your password' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'My bookings' })).not.toBeInTheDocument();
+    expect(screenMounted).not.toHaveBeenCalled();
   });
 });

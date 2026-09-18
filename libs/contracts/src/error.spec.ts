@@ -43,6 +43,16 @@ describe('ERROR_CODES', () => {
     expect(errorCodeSchema.parse('session_expired')).toBe('session_expired');
   });
 
+  it('carries password_same_as_current, distinct from password_change_required (US-004/AC-05)', () => {
+    expect(ERROR_CODES.password_same_as_current).toBe('password_same_as_current');
+    expect(errorCodeSchema.parse('password_same_as_current')).toBe('password_same_as_current');
+  });
+
+  it('carries password_change_not_required, the mirror of password_change_required (US-004/AC-03)', () => {
+    expect(ERROR_CODES.password_change_not_required).toBe('password_change_not_required');
+    expect(ERROR_CODES.password_change_not_required).not.toBe(ERROR_CODES.password_change_required);
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

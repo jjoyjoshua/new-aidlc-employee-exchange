@@ -5,6 +5,7 @@
  * the module's response builder (`app-architecture.md`, ADR-002).
  */
 import { z } from 'zod';
+import { newPasswordSchema } from './password.js';
 
 /** `db-design.md` §1.1 — the `user_role` enum. */
 export const userRoleSchema = z.enum(['employee', 'admin']);
@@ -75,3 +76,28 @@ export type SignInResponse = z.infer<typeof signInResponseSchema>;
 
 export const sessionResponseSchema = z.object({ user: authenticatedUserSchema });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
+
+/**
+ * `POST /api/auth/set-password` (US-004). One field: the confirm field never leaves the
+ * browser (design note §2.2 — the server cannot make that guarantee any better than the
+ * browser can, and sending it would double the plaintext copies of the credential in the
+ * request). The account is the bearer token's; there is no identifier in the body.
+ */
+export const setPasswordRequestSchema = z.object({ newPassword: newPasswordSchema }).strict();
+export type SetPasswordRequest = z.infer<typeof setPasswordRequestSchema>;
+
+/**
+ * `{ user }`, plus an **optional** fresh `session` (design note §6.4).
+ *
+ * Confirmed 2026-09-18 against the real Supabase project: `auth.admin.updateUserById` revokes
+ * the caller's existing access token. Without a replacement, AC-07's "continues straight into
+ * the product" would fail on the very next request. `session` is present when the server's own
+ * re-sign-in with the new password succeeded; if it could not for any reason, the browser's next
+ * request simply `401`s and the session guard returns the user to sign-in, where the new
+ * password already works (AC-06) — degraded, never a lockout.
+ */
+export const setPasswordResponseSchema = z.object({
+  user: authenticatedUserSchema,
+  session: sessionSchema.optional(),
+});
+export type SetPasswordResponse = z.infer<typeof setPasswordResponseSchema>;

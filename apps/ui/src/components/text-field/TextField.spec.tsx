@@ -56,4 +56,16 @@ describe('TextField (US-001/AC-05)', () => {
 
     expect(container.querySelector('.field')).toHaveClass('field--readonly');
   });
+
+  it('takes the invalid modifier with no message when a caller carries its own explanation elsewhere (US-004/AC-04)', () => {
+    // SCR-010 ST-02: the new-password field's edge and ring take the error colour, but the
+    // policy checklist beside it is the field's message — a second sentence here would either
+    // duplicate the checklist or invent a rule nobody wrote.
+    const { container } = render(<TextField label="New password" invalid />);
+
+    const field = container.querySelector('.field');
+    expect(field).toHaveClass('field--invalid');
+    expect(container.querySelector('.field__message')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('New password')).toHaveAttribute('aria-invalid', 'true');
+  });
 });

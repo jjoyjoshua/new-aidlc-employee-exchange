@@ -57,6 +57,14 @@ function appWith(options: {
   byEmail?: Record<string, AuthAttempt>;
   rows?: UserProfileRow[];
   tokens?: Record<string, string>;
+  /**
+   * userId -> current password. Populated by tests that need `signInWithPassword` to behave
+   * like a real credential check (US-004's V-15 probe and the AC-06 old/new sequence) rather
+   * than a canned `byEmail` outcome. `setPassword` overwrites this map, the way US-002 made
+   * `revokeSession` delete from `tokens` — behaviour a test can observe, not a call to assert
+   * against (`ai/standards/testing-standards.md` bans asserting the mock).
+   */
+  passwords?: Record<string, string>;
   nowMs?: () => number;
   sessionLifetimeMs?: number;
   lastSeenThrottleMs?: number;
@@ -68,14 +76,38 @@ function appWith(options: {
   // asserting the mock).
   const tokens: Record<string, string> = { ...options.tokens };
   const revoked: Array<{ token: string; scope: string }> = [];
+  const passwords: Record<string, string> = { ...options.passwords };
+  let probeTokenSeq = 0;
 
   const auth: AuthAdapter = {
-    async signInWithPassword(email) {
-      return options.byEmail?.[email] ?? { kind: 'rejected' };
+    async signInWithPassword(email, password) {
+      if (options.byEmail && email in options.byEmail) return options.byEmail[email] as AuthAttempt;
+
+      // No canned outcome for this email — fall back to a real credential comparison against
+      // `passwords`, so a test can sign in with whatever password `setPassword` most recently
+      // wrote (US-004/AC-06), and so the V-15 probe's own `signInWithPassword` call can succeed
+      // or fail depending on what is actually stored.
+      const row = rows.find((r) => r.email.toLowerCase() === email);
+      if (!row || passwords[row.id] !== password) return { kind: 'rejected' };
+
+      const token = `probe-token-${row.id}-${probeTokenSeq++}`;
+      tokens[token] = row.id;
+      return { kind: 'ok', session: { ...SESSION, access_token: token }, userId: row.id };
     },
     async revokeSession(token, scope) {
       revoked.push({ token, scope });
       delete tokens[token];
+    },
+    async setPassword(userId, newPassword) {
+      passwords[userId] = newPassword;
+      // Confirmed 2026-09-18 against the real Supabase project (design note §6.4):
+      // auth.admin.updateUserById revokes every access token the account is currently holding,
+      // including the one that authorised this very request. Modelled here so the test suite
+      // reflects that reality rather than a more convenient fiction.
+      for (const t of Object.keys(tokens)) {
+        if (tokens[t] === userId) delete tokens[t];
+      }
+      return { kind: 'ok' };
     },
   };
 
@@ -89,6 +121,10 @@ function appWith(options: {
       // bans asserting the mock).
       const row = rows.find((r) => r.id === id);
       if (row) row.last_seen_at = at.toISOString();
+    },
+    async clearMustChangePassword(id) {
+      const row = rows.find((r) => r.id === id);
+      if (row) row.must_change_password = false;
     },
   };
 
@@ -476,6 +512,192 @@ describe('GET /api/auth/session (US-001/AC-02)', () => {
     const response = await request(app).get('/api/auth/session');
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe('the forced password-change gate (US-004/AC-02)', () => {
+  const mustChangeEmployee: UserProfileRow = { ...EMPLOYEE, must_change_password: true };
+  const mustChangeAdmin: UserProfileRow = { ...ADMIN, must_change_password: true };
+  const tokens = { 'employee-token': mustChangeEmployee.id, 'admin-token': mustChangeAdmin.id };
+
+  it('refuses an employee with the mark set, before any other function is reachable (US-004/AC-02)', async () => {
+    const { app } = appWith({ rows: [mustChangeEmployee, mustChangeAdmin], tokens });
+
+    const response = await request(app)
+      .get('/api/admin/anything')
+      .set('Authorization', 'Bearer employee-token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('password_change_required');
+    expect(response.body).not.toHaveProperty('data');
+  });
+
+  it('refuses an admin with the mark set — password_change_required, not admin_only (US-004/AC-02)', async () => {
+    // The gate precedes requireAdmin: REQ-029 is "before any other application function is
+    // reachable", and an admin's role check must not run first (design note §4.5).
+    const { app } = appWith({ rows: [mustChangeEmployee, mustChangeAdmin], tokens });
+
+    const response = await request(app)
+      .get('/api/admin/anything')
+      .set('Authorization', 'Bearer admin-token');
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('password_change_required');
+  });
+
+  it('lets an admin with the mark clear reach the empty router — 404 means the gate passed (US-004/AC-02)', async () => {
+    // ADMIN (mark clear by default) already proves this via the US-001 suite; restated here so
+    // this describe block is a complete before/after pair for the gate itself.
+    const { app } = appWith({ tokens: { 'admin-token': ADMIN.id } });
+
+    const response = await request(app)
+      .get('/api/admin/anything')
+      .set('Authorization', 'Bearer admin-token');
+
+    expect(response.status).toBe(404);
+  });
+
+  it('still refuses steps 1-4 first — an invalid token is session_invalid, not password_change_required (US-004/AC-02)', async () => {
+    const { app } = appWith({ rows: [mustChangeEmployee], tokens });
+
+    const response = await request(app)
+      .get('/api/admin/anything')
+      .set('Authorization', 'Bearer forged-token');
+
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('session_invalid');
+  });
+
+  it('exempts GET /api/auth/session from the gate — the browser must be able to learn the mark is set (US-004/AC-08)', async () => {
+    // design note §4.3: without this exemption, a user who abandons the flow and returns is
+    // signed out instead of being sent back to SCR-010, because the browser's cold-boot check
+    // IS this endpoint.
+    const { app } = appWith({ rows: [mustChangeEmployee], tokens });
+
+    const response = await request(app)
+      .get('/api/auth/session')
+      .set('Authorization', 'Bearer employee-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.mustChangePassword).toBe(true);
+  });
+});
+
+describe('POST /api/auth/set-password (US-004)', () => {
+  const CURRENT_PASSWORD = 'AdminSet1!';
+  const mustChangeEmployee: UserProfileRow = { ...EMPLOYEE, must_change_password: true };
+
+  it('requires a session (US-004/AC-02)', async () => {
+    const { app } = appWith({ rows: [mustChangeEmployee], passwords: { [mustChangeEmployee.id]: CURRENT_PASSWORD } });
+
+    const response = await request(app).post('/api/auth/set-password').send({ newPassword: 'Correct1!' });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('rejects a password that fails V-12 without echoing it (US-004/AC-04)', async () => {
+    const { app } = appWith({
+      rows: [mustChangeEmployee],
+      tokens: { 'employee-token': mustChangeEmployee.id },
+      passwords: { [mustChangeEmployee.id]: CURRENT_PASSWORD },
+    });
+
+    const response = await request(app)
+      .post('/api/auth/set-password')
+      .set('Authorization', 'Bearer employee-token')
+      .send({ newPassword: 'lowercase-only-1' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+    expect(JSON.stringify(response.body)).not.toContain('lowercase-only-1');
+  });
+
+  it('refuses with 403 password_change_not_required when the mark is already clear, and writes nothing (US-004/AC-03)', async () => {
+    const { app, rows } = appWith({
+      tokens: { 'employee-token': EMPLOYEE.id },
+      passwords: { [EMPLOYEE.id]: CURRENT_PASSWORD },
+    });
+
+    const response = await request(app)
+      .post('/api/auth/set-password')
+      .set('Authorization', 'Bearer employee-token')
+      .send({ newPassword: 'BrandNew1!' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('password_change_not_required');
+    expect(rows.find((r) => r.id === EMPLOYEE.id)?.must_change_password).toBe(false);
+  });
+
+  it('refuses with 422 when the candidate equals the administrator-set password (US-004/AC-05)', async () => {
+    const { app } = appWith({
+      rows: [mustChangeEmployee],
+      tokens: { 'employee-token': mustChangeEmployee.id },
+      passwords: { [mustChangeEmployee.id]: CURRENT_PASSWORD },
+    });
+
+    const response = await request(app)
+      .post('/api/auth/set-password')
+      .set('Authorization', 'Bearer employee-token')
+      .send({ newPassword: CURRENT_PASSWORD });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('password_same_as_current');
+  });
+
+  it('the AC-06 sequence: sign in with the old password, set a new one, old rejected, new accepted (US-004/AC-06)', async () => {
+    const newbie: UserProfileRow = { ...EMPLOYEE, id: 'e9b7b9a0-1c1f-4b0a-9a0a-0b0c0d0e0f10', email: 'newbie@company.com', must_change_password: true };
+    const { app } = appWith({ rows: [newbie], passwords: { [newbie.id]: CURRENT_PASSWORD } });
+
+    const first = await request(app).post('/api/auth/sign-in').send({ email: newbie.email, password: CURRENT_PASSWORD });
+    expect(first.status).toBe(200);
+    expect(first.body.user.mustChangePassword).toBe(true);
+    const token = first.body.session.accessToken as string;
+
+    const changed = await request(app)
+      .post('/api/auth/set-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ newPassword: 'BrandNew1!' });
+    expect(changed.status).toBe(200);
+    expect(changed.body.user.mustChangePassword).toBe(false);
+
+    // design note §6.4, confirmed against the real project: the password write revokes the
+    // token that authorised this very request. A fresh one travels in the response so AC-07's
+    // "continues straight into the product" holds on the very next request.
+    expect(changed.body.session).toBeDefined();
+    expect(changed.body.session.accessToken).not.toBe(token);
+
+    const withOldToken = await request(app).get('/api/auth/session').set('Authorization', `Bearer ${token}`);
+    expect(withOldToken.status).toBe(401);
+
+    const withFreshToken = await request(app)
+      .get('/api/auth/session')
+      .set('Authorization', `Bearer ${changed.body.session.accessToken}`);
+    expect(withFreshToken.status).toBe(200);
+    expect(withFreshToken.body.user.mustChangePassword).toBe(false);
+
+    const oldAttempt = await request(app).post('/api/auth/sign-in').send({ email: newbie.email, password: CURRENT_PASSWORD });
+    expect(oldAttempt.status).toBe(401);
+    expect(oldAttempt.body.code).toBe('invalid_credentials');
+
+    const newAttempt = await request(app).post('/api/auth/sign-in').send({ email: newbie.email, password: 'BrandNew1!' });
+    expect(newAttempt.status).toBe(200);
+    expect(newAttempt.body.user.mustChangePassword).toBe(false);
+  });
+
+  it('signing out mid-flow leaves the administrator-set password valid and the mark still set (US-004/AC-08)', async () => {
+    const midFlow: UserProfileRow = { ...EMPLOYEE, id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', email: 'midflow@company.com', must_change_password: true };
+    const { app } = appWith({ rows: [midFlow], passwords: { [midFlow.id]: CURRENT_PASSWORD } });
+
+    const signIn = await request(app).post('/api/auth/sign-in').send({ email: midFlow.email, password: CURRENT_PASSWORD });
+    expect(signIn.status).toBe(200);
+    const token = signIn.body.session.accessToken as string;
+
+    const signOut = await request(app).post('/api/auth/sign-out').set('Authorization', `Bearer ${token}`);
+    expect(signOut.status).toBe(204);
+
+    const again = await request(app).post('/api/auth/sign-in').send({ email: midFlow.email, password: CURRENT_PASSWORD });
+    expect(again.status).toBe(200);
+    expect(again.body.user.mustChangePassword).toBe(true);
   });
 });
 

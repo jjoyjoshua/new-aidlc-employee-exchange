@@ -1,0 +1,13 @@
+# US-004 — change log
+
+> The curated history of this spec: what changed and why, in the words of whoever changed it. Git holds every edit; this holds the ones that mattered. A Medium-tier change to an existing package appends a row here.
+
+| Date       | Change                                                                                         | Why                                                                                          | Requirements affected |
+| ---------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------- |
+| 2026-09-18 | Package created: `spec.md`, `design-note.md`, `impact-analysis.md`, `decisions.md`, `traceability.md`, `implementation-plan.md` | Gate D1 for US-004 — the forced password change at first sign-in                                | FR-01–FR-28, NFR-01–NFR-02 |
+| 2026-09-18 | Design note §6.4's open question resolved by a live check against the real Supabase project: the caller's access token does **not** survive `auth.admin.updateUserById`. Implemented the specified fallback (implementation-plan.md step 18, decisions.md D-12): `setPasswordResponseSchema` gains an optional `session`, the service re-signs in after a successful write, the browser stores the returned session exactly as `signIn` does | The design note flagged this as an empirical unknown that could silently break AC-07 despite green tests; now confirmed and fixed rather than left as a shipped risk | FR-15 reworded |
+| 2026-09-18 | Compared the built screen against the actual Figma hi-fi frames (not done before this point — decisions.md D-13) and fixed four defects: `Toast` rebuilt to match the design system's own component (removed an invented dismiss control, added the check icon), and three spacing corrections (`set-password__column` 24px→32px; heading/intro and new-password-field/checklist grouped at 8px instead of inheriting the card's 24px; `PolicyChecklist` row gap 8px→4px and icon 16px→20px) | The human asked directly whether Figma had been followed; it had not been opened. A structured comparison against the 18 hi-fi frames found real, fixable defects, most notably a UI affordance (`Toast`'s dismiss button) that contradicted the design system's own documented intent | FR-25, FR-26, FR-28 — implementation only, no wording change |
+
+A plan edited after its Gate D1 approval **must** have a row here **dated on or after the
+approval date**. Check 16 compares the plan against the approved SHA and fails a silent change;
+an older row does not cover a newer edit.

@@ -1,0 +1,33 @@
+/*
+ * Toast — Figma `Toast` (node 31:11). Measured from `HF / SCR-010 · Set your password /
+ * ST-05 Saved` (node 142:1114): padding s-12/s-16, gap s-12, radius r-md, shadow/2.
+ *
+ * No animation, no fixed positioning here: where it sits on the destination screen is that
+ * screen's layout to decide, not the component's.
+ */
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  padding: var(--s-12) var(--s-16);
+  background: var(--c-success-fill);
+  border: var(--bw-1) solid var(--c-success-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  color: var(--c-success-ink);
+}
+
+.toast__icon {
+  flex: none;
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.toast__message {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+}

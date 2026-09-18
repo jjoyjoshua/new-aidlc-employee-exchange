@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { signInRequestSchema, signInResponseSchema } from './auth.js';
+import {
+  signInRequestSchema,
+  signInResponseSchema,
+  setPasswordRequestSchema,
+  setPasswordResponseSchema,
+} from './auth.js';
 
 describe('signInRequestSchema', () => {
   it('trims the email before validating it (US-001/AC-05)', () => {
@@ -92,5 +97,57 @@ describe('signInResponseSchema', () => {
     const result = signInResponseSchema.safeParse({ ...valid, user: userWithoutRole });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('setPasswordRequestSchema', () => {
+  it('accepts a single newPassword field meeting V-12 (US-004/AC-04)', () => {
+    const result = setPasswordRequestSchema.safeParse({ newPassword: 'Correct1!' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a newPassword that fails V-12 (US-004/AC-04)', () => {
+    const result = setPasswordRequestSchema.safeParse({ newPassword: 'short' });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a confirmPassword field — it never crosses the wire (design note §2.2)', () => {
+    const result = setPasswordRequestSchema.safeParse({
+      newPassword: 'Correct1!',
+      confirmPassword: 'Correct1!',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a missing newPassword', () => {
+    const result = setPasswordRequestSchema.safeParse({});
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('setPasswordResponseSchema', () => {
+  const user = {
+    id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    email: 'priya@company.com',
+    fullName: 'Priya Sharma',
+    role: 'employee',
+    mustChangePassword: false,
+  };
+
+  it('accepts a user with no session — the design note §6.4 degraded path', () => {
+    expect(setPasswordResponseSchema.safeParse({ user }).success).toBe(true);
+  });
+
+  it('accepts a user with a fresh session — the caller\'s prior token is revoked by the write (design note §6.4)', () => {
+    const result = setPasswordResponseSchema.safeParse({
+      user,
+      session: { accessToken: 'a', refreshToken: 'r', expiresAt: 1_789_200_000 },
+    });
+
+    expect(result.success).toBe(true);
   });
 });
