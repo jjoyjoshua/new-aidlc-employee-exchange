@@ -66,7 +66,7 @@ describe('bookings.service.getAvailability — the projection (US-006/AC-02, AC-
   });
 });
 
-describe('bookings.service.getAvailability — reuses US-005\'s date guard (defence, not one of this story\'s ACs)', () => {
+describe('bookings.service.getAvailability — reuses the existing date-window guard (defence, not one of this story\'s ACs)', () => {
   it('refuses a weekend date inside the window without querying either table', async () => {
     const service = createBookingsService({ availability: throwingRepo, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
 

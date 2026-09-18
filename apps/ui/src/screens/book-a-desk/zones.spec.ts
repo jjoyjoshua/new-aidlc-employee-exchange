@@ -11,7 +11,7 @@ const desk = (deskNumber: string, status: 'available' | 'taken' = 'available'): 
 describe('groupByZone (US-006/AC-05)', () => {
   it('groups a shuffled array into zones, in zone-letter order, sorted within each zone', () => {
     // Deliberately shuffled and NOT computed from the function under test — expectations are
-    // written as literals (US-005's own convention for boundary tests).
+    // written as literals, the established convention for boundary tests in this codebase.
     const shuffled = [desk('B-01'), desk('A-10'), desk('C-01'), desk('A-02'), desk('A-01'), desk('B-02')];
 
     const zones = groupByZone(shuffled);
