@@ -108,6 +108,14 @@ export interface AuthProviderProps {
   getStoredSession?: () => Promise<StoredSession | undefined>;
 }
 
+const defaultOnSession = async (session: Session): Promise<void> => {
+  const { supabaseBrowserClient } = await import('../supabase-client.js');
+  await supabaseBrowserClient.auth.setSession({
+    access_token: session.accessToken,
+    refresh_token: session.refreshToken,
+  });
+};
+
 const defaultOnSignOut = async (): Promise<void> => {
   const { supabaseBrowserClient } = await import('../supabase-client.js');
   await supabaseBrowserClient.auth.signOut({ scope: 'local' });
@@ -214,7 +222,7 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
         return { kind: 'rejected' };
       }
 
-      await onSession?.(result.data.session);
+      await (onSession ?? defaultOnSession)(result.data.session);
       accessTokenRef.current = result.data.session.accessToken;
       setUser(result.data.user);
       setOffice(result.data.office);
@@ -253,7 +261,7 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
         // response exactly when the server's own re-sign-in succeeded; handed to `onSession` and
         // stored the same way `signIn` does, or the very next request 401s.
         if (result.data.session) {
-          await onSession?.(result.data.session);
+          await (onSession ?? defaultOnSession)(result.data.session);
           accessTokenRef.current = result.data.session.accessToken;
         }
         setUser(result.data.user);

@@ -280,3 +280,63 @@ without adding an env key.
 | 8 | `ai/quality/review-checklist.md` requires Nx / graph-engine / Angular / NestJS; framework-locked            | upstream CR        | nothing         |
 | 9 | `aidlc-check` check 6 looks for `apps/ui/project.json` and `libs/graph-engine`; warns and skips forever     | upstream CR        | nothing         |
 | 10 | US-001 has no jira key in the manifest — `aidlc-check` warns that a client following the board cannot see this work | Joy Joshua / Manager | nothing |
+
+---
+
+## Addendum — bugfix: session not persisted, so a page refresh signs the user out (2026-09-18)
+
+> Medium tier. Does not reopen the Gate D1 stamp above, which covers the original Complex-tier delivery unchanged. This addendum gets its own approval line, per `change-log.md`'s rule that an edit after approval needs a dated row.
+
+### Addendum approval — Gate D1
+
+| Field                | Value                                    |
+| -------------------- | ----------------------------------------- |
+| Status               | **approved**                             |
+| Approved by          | Joy Joshua <joy_j@trigent.com>            |
+| Approved on          | 2026-09-18                                |
+| Plan commit approved | *uncommitted at approval* — base `e208802` |
+
+Approved in the working tree, before this addendum's first commit — the same pattern the
+original plan above used. Base `e208802` is the HEAD this addendum was read against; the commit
+that introduces this addendum **is** the approved content (`git diff e208802 -- inception/specs/US-001-sign-in/implementation-plan.md`).
+
+### What's broken
+
+`AuthContextValue`'s `onSession` prop (line ~93) documents "Defaults to the browser's Supabase client," but unlike its two siblings — `onSignOut` (`defaultOnSignOut`, line 111) and `getStoredSession` (`defaultGetStoredSession`, line 116) — no `defaultOnSession` exists, and neither call site falls back to one:
+
+- `signIn()` — `await onSession?.(result.data.session);` (line 217)
+- `setPassword()` on a rotated session — `await onSession?.(result.data.session);` (line 256)
+
+`App.tsx` (line 15) mounts `<AuthProvider>` with no props, so in the running app `onSession` is always `undefined` and both calls silently no-op. The access token then lives only in the in-memory `accessTokenRef` — nothing ever reaches `supabaseBrowserClient.auth.setSession(...)`. On refresh, the boot effect's `defaultGetStoredSession` (line 116) finds nothing stored, and `RequireSession` redirects to sign-in.
+
+This is a genuine regression against **US-001/FR-28** (`traceability.md` already marks it `implemented`, which was inaccurate for the persistence half) and it is what silently prevents **US-003/AC-01** ("still signed in" across a reload) from ever holding outside of tests — every existing test supplies its own `onSession`/`getStoredSession` mock, so the real, prop-less default path was never exercised (`App.tsx` has no test coverage of persistence).
+
+### Steps
+
+#### Step 1 — add the missing default and wire both call sites
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-001/FR-28; restores US-003/AC-01 |
+| Files    | `apps/ui/src/lib/auth/auth-context.tsx` (modify) |
+| Approach | Add `defaultOnSession`, mirroring `defaultOnSignOut`'s shape exactly: lazily import `supabase-client.js`, call `supabaseBrowserClient.auth.setSession({ access_token, refresh_token })` with the session's `accessToken`/`refreshToken`. Change both call sites from `onSession?.(...)` to `await (onSession ?? defaultOnSession)(...)`, matching the existing `onSignOut ?? defaultOnSignOut` pattern. |
+| Verify   | `npm run typecheck -w apps/ui` — no new errors |
+
+#### Step 2 — regression test proving the real default path persists the session
+
+| Field    | Value                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Advances | US-001/FR-28; US-003/AC-01 |
+| Files    | `apps/ui/src/lib/auth/auth-context.spec.tsx` (modify) |
+| Approach | `vi.mock('../supabase-client.js', ...)` with a spy `setSession`. Render `AuthProvider` with **no `onSession` prop** (the real default), sign in, and assert `setSession` was called with the sign-in response's tokens. A second test re-mounts a fresh `AuthProvider` (simulating a reload) with `getStoredSession` reading from the same mocked client, and asserts `status` resolves to `signedIn` — proving the write and read sides now actually connect, which is what a refresh needs. Test title cites `(US-001/FR-28, US-003/AC-01)`. |
+| Verify   | `npm test -w apps/ui -- auth-context` — new tests pass; failed first (no default existed) before Step 1 |
+
+### Rollback
+
+Revert the PR. No migration, no stored data, no config — reverting removes exactly the two changed files.
+
+### Open questions
+
+| Question                                         | Owner         | Blocks |
+| ------------------------------------------------ | ------------- | ------ |
+| none — both facts (the missing default, FR-28's inaccurate status) were confirmed by reading the code | — | — |

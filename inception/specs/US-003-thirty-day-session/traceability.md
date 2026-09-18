@@ -58,3 +58,11 @@ US-001's `traceability.md` FR-18 previously read `implemented`, disagreeing with
 `spec.md` (`not started`) — the Architect's design note §1 found `last_seen_at` was in fact never
 re-stamped on the request path, only at sign-in. That row now reads `closed by US-003`, and this
 package is where it closes.
+
+**Second correction (2026-09-18, bugfix):** AC-01 ("still signed in ... are not asked to
+authenticate") never actually held outside of tests. US-001/FR-28 was marked `implemented` but
+`AuthProvider`'s `onSession` had no default, so a real sign-in never persisted anything for the
+boot effect above to read back — every test in `auth-context.spec.tsx` supplied its own
+`onSession`/`getStoredSession` mocks, masking the gap. Fixed in US-001's package
+(`implementation-plan.md` addendum, `change-log.md`); no change needed here — FR-15–FR-22's read
+side was always correct once something is actually stored.
