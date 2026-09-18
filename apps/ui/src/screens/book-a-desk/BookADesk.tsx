@@ -296,6 +296,7 @@ function BookADeskContent({
                   letter={zone.letter}
                   desks={zone.desks}
                   selectedDeskId={selectedDeskId}
+                  usualDeskId={availability.data.usualDeskId ?? undefined}
                   onSelectDesk={selectDesk}
                 />
               ))}

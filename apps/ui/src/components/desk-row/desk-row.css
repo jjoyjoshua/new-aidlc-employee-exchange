@@ -42,3 +42,25 @@
 .desk-row--selected {
   box-shadow: inset 3px 0 0 var(--c-selected);
 }
+
+/* US-008/AC-01. SCR-003 hi-fi frame, node 38:173 — right-aligned, opposite the desk number and
+ * chip, `margin-left: auto` pushing it to the row's far edge inside the existing flex row. */
+.desk-row__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-left: auto;
+  font-family: var(--f-body);
+  font-size: var(--t-label);
+  line-height: var(--lh-label);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+.desk-row__hint-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--c-text-muted);
+}

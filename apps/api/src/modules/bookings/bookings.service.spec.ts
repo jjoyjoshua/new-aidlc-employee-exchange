@@ -61,7 +61,7 @@ describe('bookings.service.getAvailability — the projection (US-006/AC-02, AC-
 
     const outcome = await service.getAvailability(TODAY, CALLER_ID);
 
-    expect(outcome).toEqual({ kind: 'ok', data: { date: TODAY, desks: [], myBooking: null } });
+    expect(outcome).toEqual({ kind: 'ok', data: { date: TODAY, desks: [], myBooking: null, usualDeskId: null } });
   });
 });
 
@@ -160,6 +160,94 @@ describe('bookings.service.getAvailability — myBooking (US-007/AC-06)', () => 
     const raw = JSON.stringify(outcome.data);
     expect(raw).not.toContain(OTHER_USER_ID);
     expect(raw).not.toContain('userId');
+  });
+});
+
+describe('bookings.service.getAvailability — usualDeskId (US-008/FR-04)', () => {
+  it("labels the caller's last-booked desk as usualDeskId when it is available today (US-008/AC-01)", async () => {
+    const desk = activeDeskRow('desk-1', 'A-01');
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return [{ id: desk.id, desk_number: desk.desk_number }];
+      },
+      async findMyLastBookedDeskId() {
+        return desk.id;
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { usualDeskId: desk.id } });
+  });
+
+  it('yields usualDeskId: null when the caller has never booked (US-008/AC-04)', async () => {
+    const service = createBookingsService({
+      availability: emptyAvailabilityRepository,
+      nowMs: nowMsFor(TODAY),
+      officeTimezone: OFFICE_TIMEZONE,
+    });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { usualDeskId: null } });
+  });
+
+  it('yields usualDeskId: null when the last-booked desk is taken today (US-008/AC-05)', async () => {
+    const desk = activeDeskRow('desk-1', 'A-01');
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return [{ id: desk.id, desk_number: desk.desk_number }];
+      },
+      async listConfirmedDeskIds() {
+        return [desk.id]; // taken by someone (possibly the caller themself, on a different date's booking)
+      },
+      async findMyLastBookedDeskId() {
+        return desk.id;
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { usualDeskId: null } });
+  });
+
+  it('yields usualDeskId: null when the last-booked desk is inactive or absent today (US-008/AC-05)', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return []; // the last-booked desk is inactive/retired — absent from the active list entirely
+      },
+      async findMyLastBookedDeskId() {
+        return 'now-inactive-desk-id';
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { usualDeskId: null } });
+  });
+
+  it('still labels the last-booked desk when it is available under a DIFFERENT deskNumber than when booked, the filter matches on id, not name (US-008/AC-05, Edge cases — rename)', async () => {
+    const desk = activeDeskRow('desk-1', 'B-09'); // renamed since the booking was made
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async listActiveDesks() {
+        return [{ id: desk.id, desk_number: desk.desk_number }];
+      },
+      async findMyLastBookedDeskId() {
+        return desk.id;
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.getAvailability(TODAY, CALLER_ID);
+
+    expect(outcome).toMatchObject({ kind: 'ok', data: { usualDeskId: desk.id } });
   });
 });
 

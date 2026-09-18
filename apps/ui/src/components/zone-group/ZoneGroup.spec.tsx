@@ -42,3 +42,18 @@ describe('ZoneGroup — threads selection through to DeskRow (US-007/AC-01, AC-0
     expect(onSelectDesk).toHaveBeenCalledWith('A-01');
   });
 });
+
+describe('ZoneGroup — threads usualDeskId through to DeskRow (US-008/AC-01, FR-07)', () => {
+  it('marks only the desk matching usualDeskId with the usual hint', () => {
+    render(<ZoneGroup letter="A" desks={[desk('A-01'), desk('A-02')]} usualDeskId="A-02" />);
+
+    expect(screen.getByRole('radio', { name: 'A-02, Available, your usual' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'A-01, Available' })).toBeInTheDocument();
+  });
+
+  it('marks no row as usual when usualDeskId is undefined', () => {
+    render(<ZoneGroup letter="A" desks={[desk('A-01')]} />);
+
+    expect(screen.queryByText('your usual')).not.toBeInTheDocument();
+  });
+});

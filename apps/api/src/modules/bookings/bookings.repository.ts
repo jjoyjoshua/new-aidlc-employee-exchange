@@ -67,6 +67,20 @@ export interface AvailabilityRepository {
    *  no read-then-write window (design note §3.2). `undefined` covers "no such booking", "not
    *  the caller's" and "not currently confirmed" alike, deliberately undiscriminated (D-03). */
   cancelOwnedBooking(userId: string, bookingId: string, cancelledAt: Date): Promise<{ id: string } | undefined>;
+  /** US-008/AC-03. The caller's most recently booked desk id across ALL dates and ALL statuses —
+   *  derived from history, never a stored preference (there is no favourite-desk column and this
+   *  story adds none). `desk_id` ONLY: no `user_id`, no dates, no status.
+   *
+   *  NO status filter: a Cancelled booking counts as history (product decision, story §Edge
+   *  cases — it still records where the employee chose to sit).
+   *
+   *  Ordered `booking_date desc, created_at desc` — the second key is load-bearing, not
+   *  belt-and-braces (design note §5): cancel-then-rebook (BR-001.2) can leave two rows sharing
+   *  the same `booking_date` for the same user, and only `created_at desc` picks the row that
+   *  replaced the other, not whichever row Postgres returns first.
+   *
+   *  `undefined` means the caller has never booked (AC-04). */
+  findMyLastBookedDeskId(userId: string): Promise<string | undefined>;
 }
 
 export const availabilityRepository: AvailabilityRepository = {
@@ -193,5 +207,19 @@ export const availabilityRepository: AvailabilityRepository = {
 
     if (error) throw new Error(`booking cancel failed: ${error.message}`);
     return (data as { id: string } | null) ?? undefined;
+  },
+
+  async findMyLastBookedDeskId(userId) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('desk_id')
+      .eq('user_id', userId)
+      .order('booking_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw new Error(`bookings lookup failed: ${error.message}`);
+    return (data as { desk_id: string } | null)?.desk_id ?? undefined;
   },
 };

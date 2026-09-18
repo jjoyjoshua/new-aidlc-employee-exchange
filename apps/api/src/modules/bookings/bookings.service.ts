@@ -68,10 +68,11 @@ export function createBookingsService({ availability, nowMs, officeTimezone }: B
       const reason = refusalFor(date, today);
       if (reason) return { kind: 'refused', reason };
 
-      const [desks, takenIds, myBookingRow] = await Promise.all([
+      const [desks, takenIds, myBookingRow, lastDeskId] = await Promise.all([
         availability.listActiveDesks(),
         availability.listConfirmedDeskIds(date),
         availability.findMyConfirmedBooking(userId, date),
+        availability.findMyLastBookedDeskId(userId),
       ]);
       const taken = new Set(takenIds);
 
@@ -91,7 +92,16 @@ export function createBookingsService({ availability, nowMs, officeTimezone }: B
         ? { id: myBookingRow.id, deskId: myBookingRow.desk_id, deskNumber: myBookingRow.desk_number }
         : null;
 
-      return { kind: 'ok', data: { date, desks: projected, myBooking } };
+      // US-008/AC-01, AC-05. One predicate, three causes:
+      //   - TAKEN        -> the row exists with status 'taken'          -> excluded here
+      //   - INACTIVE     -> listActiveDesks never returned it           -> not in `projected` at all
+      //   - ABSENT       -> same                                        -> not in `projected` at all
+      // The browser is handed an id it can label unconditionally, or null. It never re-checks.
+      // Matches on id, not deskNumber, so the label follows a desk through a rename.
+      const usualDeskId =
+        lastDeskId && projected.some((d) => d.id === lastDeskId && d.status === 'available') ? lastDeskId : null;
+
+      return { kind: 'ok', data: { date, desks: projected, myBooking, usualDeskId } };
     },
 
     /**

@@ -54,6 +54,38 @@ describe('DeskRow — selection (US-007/AC-01)', () => {
   });
 });
 
+describe('DeskRow — usual desk hint (US-008/AC-01, AC-06)', () => {
+  it('renders visible text "your usual" on an available row when usual is true (SCR-003 hi-fi frame, node 38:173)', () => {
+    render(<DeskRow deskNumber="A-01" status="available" usual />);
+
+    expect(screen.getByText('your usual')).toBeInTheDocument();
+  });
+
+  it('composes the accessible name as desk number, availability word, then the usual hint — full match, not substring (US-008/AC-06)', () => {
+    render(<DeskRow deskNumber="A-01" status="available" usual />);
+
+    expect(screen.getByRole('radio', { name: 'A-01, Available, your usual' })).toBeInTheDocument();
+  });
+
+  it('composes the accessible name with Selected once the usual row is selected (US-008/AC-06)', () => {
+    render(<DeskRow deskNumber="A-01" status="available" selected usual />);
+
+    expect(screen.getByRole('radio', { name: 'A-01, Selected, your usual' })).toBeInTheDocument();
+  });
+
+  it('omits the hint from the accessible name when usual is not set, but still names the availability word (US-006 gap fixed as a side effect of composing the name)', () => {
+    render(<DeskRow deskNumber="A-01" status="available" />);
+
+    expect(screen.getByRole('radio', { name: 'A-01, Available' })).toBeInTheDocument();
+  });
+
+  it('never renders the hint on a taken row, even if usual is true', () => {
+    render(<DeskRow deskNumber="A-02" status="taken" usual />);
+
+    expect(screen.queryByText('your usual')).not.toBeInTheDocument();
+  });
+});
+
 describe('DeskRow and SkeletonRow share the same row height (US-006/AC-07)', () => {
   it('both read height from the --desk-row-height custom property, so nothing shifts when data arrives', () => {
     // jsdom does not resolve custom properties from an external stylesheet, so the source is

@@ -72,5 +72,19 @@ export const availabilityResponseSchema = z.object({
    * an old fixture with no `myBooking` key at all still parses (additive, ADR-002's asymmetry).
    */
   myBooking: myBookingSchema.nullable().default(null),
+  /**
+   * US-008/REQ-034. The caller's most recently booked desk, **already filtered to eligibility**:
+   * present only when that desk is in `desks` above AND its `status` is `available` (AC-05's three
+   * causes, one outcome). `null` when the caller has never booked (AC-04), or when the desk is
+   * taken, inactive, or otherwise absent. The browser renders the label on the row whose `id`
+   * matches and does not re-derive eligibility — there is nothing here to re-check.
+   *
+   * Derived from the single most recent booking, not from frequency — "usual" implies a count and
+   * the derivation has none.
+   *
+   * `.nullable().default(null)` for the same reason `myBooking` has it: a server that evaluated the
+   * question always answers it, and an old fixture with no key at all still parses.
+   */
+  usualDeskId: z.string().uuid().nullable().default(null),
 });
 export type AvailabilityResponse = z.infer<typeof availabilityResponseSchema>;
