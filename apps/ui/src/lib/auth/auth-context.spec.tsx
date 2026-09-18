@@ -3,6 +3,30 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './auth-context.js';
+import { supabaseBrowserClient } from '../supabase-client.js';
+
+/**
+ * US-001/FR-28, US-003/AC-01 — the real default wiring below needs a stand-in for the browser's
+ * actual Supabase client (`supabase-client.ts` throws at import time without `VITE_SUPABASE_*`).
+ * `sessionStore` models exactly what `auth.setSession`/`auth.getSession` do for our purposes: a
+ * write the read side can see, so the test proves the write and read sides are actually
+ * connected — not just that each one individually no-ops correctly against a mock.
+ */
+const { sessionStore } = vi.hoisted(() => ({
+  sessionStore: { current: undefined as { access_token: string } | undefined },
+}));
+
+vi.mock('../supabase-client.js', () => ({
+  supabaseBrowserClient: {
+    auth: {
+      setSession: vi.fn(async (session: { access_token: string; refresh_token: string }) => {
+        sessionStore.current = { access_token: session.access_token };
+      }),
+      getSession: vi.fn(async () => ({ data: { session: sessionStore.current ?? null } })),
+      signOut: vi.fn(async () => undefined),
+    },
+  },
+}));
 
 /**
  * US-002 — the mechanism `signOut` builds on: the browser must actually have the token to send
@@ -36,6 +60,9 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
+  sessionStore.current = undefined;
+  vi.mocked(supabaseBrowserClient.auth.setSession).mockClear();
+  vi.mocked(supabaseBrowserClient.auth.getSession).mockClear();
 });
 
 afterEach(() => {
@@ -73,6 +100,70 @@ function renderHarness(onSignOut: () => void = () => undefined) {
     </AuthProvider>,
   );
 }
+
+/**
+ * Bugfix regression (2026-09-18): `App.tsx` mounts `AuthProvider` with no props at all, so these
+ * two tests exercise the REAL defaults (`onSession`/`getStoredSession` both unset) — every test
+ * above and below overrides them, which is exactly how this gap went unnoticed. `onSession?.(...)`
+ * used to silently no-op with no default to fall back to, so a sign-in never reached
+ * `supabaseBrowserClient.auth.setSession`, and a page refresh always found nothing stored.
+ */
+describe('AuthProvider — real default wiring, no onSession/getStoredSession override (US-001/FR-28, US-003/AC-01)', () => {
+  function StatusHarness() {
+    const { user, status, signIn } = useAuth();
+    return (
+      <div>
+        <div data-testid="status">{status}</div>
+        <div data-testid="user">{user ? user.email : 'none'}</div>
+        <button onClick={() => void signIn('priya@company.com', 'correct')}>sign in</button>
+      </div>
+    );
+  }
+
+  it('hands the sign-in session to the browser Supabase client via the default onSession', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }));
+
+    render(
+      <AuthProvider getStoredSession={async () => undefined}>
+        <StatusHarness />
+      </AuthProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('priya@company.com');
+
+    expect(supabaseBrowserClient.auth.setSession).toHaveBeenCalledWith({
+      access_token: SESSION.accessToken,
+      refresh_token: SESSION.refreshToken,
+    });
+  });
+
+  it('stays signed in across a fresh mount — a page refresh — once the default has persisted the session', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }))
+      .mockResolvedValueOnce(jsonResponse(200, { user: USER, office: OFFICE }));
+
+    const { unmount } = render(
+      <AuthProvider>
+        <StatusHarness />
+      </AuthProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('priya@company.com');
+    unmount();
+
+    // A fresh AuthProvider with no props — the same shape App.tsx mounts on a reload.
+    render(
+      <AuthProvider>
+        <StatusHarness />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByText('priya@company.com')).toBeInTheDocument();
+    expect(screen.getByTestId('status')).toHaveTextContent('signedIn');
+  });
+});
 
 /**
  * NFR-009 — a cold boot (a page reload) must not ask for a password again while a session is

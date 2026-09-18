@@ -433,7 +433,8 @@
         "apps/ui/src/components/spinner/Spinner.spec.tsx",
         "apps/ui/src/components/login-backdrop/LoginBackdrop.spec.tsx",
         "apps/ui/src/components/app-shell/AppShell.spec.tsx",
-        "apps/ui/src/screens/sign-in/SignIn.spec.tsx"
+        "apps/ui/src/screens/sign-in/SignIn.spec.tsx",
+        "apps/ui/src/lib/auth/auth-context.spec.tsx"
       ],
       "screens": [
         "SCR-001"
