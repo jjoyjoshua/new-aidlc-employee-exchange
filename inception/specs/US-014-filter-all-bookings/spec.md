@@ -9,7 +9,7 @@
 | **Screen**        | SCR-005 — ST-02, ST-04, ST-06, ST-12. ST-01/ST-03/ST-05 are US-013's and are preserved; ST-07–ST-11 (cancellation) are US-015's and are not touched |
 | **Covering ADRs** | ADR-002, ADR-004, ADR-007 (all applied, none amended). **No new ADR** — three consequential doc edits instead (`design-note.md` §8) |
 | **Tier**          | Complex                                                                             |
-| **Status**        | in progress — code complete, awaiting PR review and merge                          |
+| **Status**        | implemented                                                                         |
 | **Updated**       | 2026-09-19                                                                          |
 
 ## Problem
