@@ -9,7 +9,7 @@
 | **Screen**        | SCR-005 — ST-07, ST-08, ST-09, ST-10, ST-11. ST-01/ST-03/ST-05 are US-013's, ST-02/ST-04/ST-06/ST-12 are US-014's — all preserved, none touched |
 | **Covering ADRs** | ADR-004, ADR-007 (both applied, neither amended). **No new ADR** — `decisions.md` D-03 |
 | **Tier**          | Complex                                                                             |
-| **Status**        | approved (code complete, PR not yet opened — `inception/specs/index.md`'s Status flips to `implemented` on merge) |
+| **Status**        | implemented                                                                         |
 | **Updated**       | 2026-09-19                                                                          |
 
 ## Problem
