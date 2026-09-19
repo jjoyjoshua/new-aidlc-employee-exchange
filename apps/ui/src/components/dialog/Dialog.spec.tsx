@@ -146,8 +146,9 @@ describe('Dialog — the shared shell (US-017 design note §5.2)', () => {
   it('is a mobile-first bottom sheet by default, with the centred 480px card only from 768px up (US-017/AC-09)', () => {
     const css = readFileSync(join(HERE, 'dialog.css'), 'utf8');
     // jsdom performs no layout, so the stylesheet itself is the honest proxy for the breakpoint
-    // (the same device US-016 used for its own two boundaries): the sheet must be the DEFAULT
-    // rule, and the centred card an override inside a min-width query, never the reverse.
+    // (the same device the desk inventory screen used for its own two width boundaries): the
+    // sheet must be the DEFAULT rule, and the centred card an override inside a min-width query,
+    // never the reverse.
     const defaultRules = css.split('@media')[0] ?? '';
     expect(defaultRules).toMatch(/align-items:\s*flex-end/);
     expect(defaultRules).toMatch(/width:\s*100%/);
