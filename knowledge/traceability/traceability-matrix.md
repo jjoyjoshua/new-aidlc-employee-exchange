@@ -20,7 +20,7 @@
 | REQ-014 | US-015 | 10/10 | delivered |
 | REQ-015 | US-017 | 0/9 | planned |
 | REQ-016 | US-018 | 0/9 | planned |
-| REQ-017 | US-006, US-016, US-019 | 10/32 | in progress |
+| REQ-017 | US-006, US-016, US-019 | 20/32 | in progress |
 | REQ-018 | US-021 | 0/12 | planned |
 | REQ-019 | US-023 | 0/9 | planned |
 | REQ-020 | US-025, US-026 | 0/22 | planned |

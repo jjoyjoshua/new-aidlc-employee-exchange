@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="presentation" aria-hidden="true">
+  <!--
+    Icon / block — Figma node 11:43 (file xjFVgBbMrJUl7Ys3EX3Cbn). "A date the rules forbid" per
+    its own documentation; reused here for the Inactive desk-status chip (US-016/AC-02, AC-03,
+    design note §4.3) — the quiet-neutral signal, never the danger family.
+
+    Geometry ONLY, same convention as icon-close.svg: stroke is `currentColor`, so the caller sets
+    it from a text token (`--c-state-inactive-ink`) and both themes work without a second file.
+    The source export's #4A4239 stroke was the Figma artboard's flattened colour, not part of the
+    icon.
+  -->
+  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M5.64 18.36L18.36 5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

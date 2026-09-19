@@ -80,6 +80,9 @@ const noDesks: DesksRepository = {
   async listAllDesks() {
     return [];
   },
+  async listUpcomingConfirmedDeskIds() {
+    return [];
+  },
 };
 
 function bookingRow(overrides: Partial<AdminBookingRow> = {}): AdminBookingRow {
@@ -452,9 +455,11 @@ describe('GET /api/admin/bookings — US-014 filters', () => {
   });
 });
 
-describe('GET /api/admin/desks (US-014/AC-03, edge case)', () => {
-  it('refuses an Employee session with 403', async () => {
-    const app = appWith({ desks: { async listAllDesks() { return [deskRow()]; } } });
+describe('GET /api/admin/desks (US-014/AC-03, edge case; US-016/AC-01, AC-10)', () => {
+  it('refuses an Employee session with 403 (US-014/AC-03, US-016/AC-10)', async () => {
+    const app = appWith({
+      desks: { async listAllDesks() { return [deskRow()]; }, async listUpcomingConfirmedDeskIds() { return []; } },
+    });
     const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
     expect(response.status).toBe(403);
   });
@@ -465,11 +470,14 @@ describe('GET /api/admin/desks (US-014/AC-03, edge case)', () => {
     expect(response.status).toBe(401);
   });
 
-  it('returns an inactive desk alongside active ones — inactive desks stay findable', async () => {
+  it('returns an inactive desk alongside active ones, ordered — inactive desks stay findable (US-014/AC-03, US-016/AC-01)', async () => {
     const app = appWith({
       desks: {
         async listAllDesks() {
           return [deskRow({ id: 'a', desk_number: 'A-01', is_active: true }), deskRow({ id: 'b', desk_number: 'A-02', is_active: false })];
+        },
+        async listUpcomingConfirmedDeskIds() {
+          return [];
         },
       },
     });
@@ -478,13 +486,38 @@ describe('GET /api/admin/desks (US-014/AC-03, edge case)', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.desks).toEqual([
-      { id: 'a', deskNumber: 'A-01', isActive: true },
-      { id: 'b', deskNumber: 'A-02', isActive: false },
+      { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 0 },
+      { id: 'b', deskNumber: 'A-02', isActive: false, bookedAhead: 0 },
+    ]);
+  });
+
+  it('reports bookedAhead per desk, tallied from the confirmed-upcoming reads (US-016/AC-04, AC-05)', async () => {
+    const app = appWith({
+      desks: {
+        async listAllDesks() {
+          return [deskRow({ id: 'a', desk_number: 'A-01', is_active: true }), deskRow({ id: 'b', desk_number: 'A-02', is_active: true })];
+        },
+        async listUpcomingConfirmedDeskIds(status, from) {
+          expect(status).toBe('confirmed');
+          expect(from).toBe(TODAY);
+          return ['a', 'a', 'a'];
+        },
+      },
+    });
+
+    const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.desks).toEqual([
+      { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 3 },
+      { id: 'b', deskNumber: 'A-02', isActive: true, bookedAhead: 0 },
     ]);
   });
 
   it('sets Cache-Control: private, no-store', async () => {
-    const app = appWith({ desks: { async listAllDesks() { return []; } } });
+    const app = appWith({
+      desks: { async listAllDesks() { return []; }, async listUpcomingConfirmedDeskIds() { return []; } },
+    });
     const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
     expect(response.headers['cache-control']).toBe('private, no-store');
   });

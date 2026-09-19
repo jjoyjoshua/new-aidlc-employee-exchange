@@ -5,8 +5,8 @@ import { FilterBar } from './FilterBar.js';
 import { NO_FILTERS } from './filters.js';
 
 const DESKS: AdminDesk[] = [
-  { id: 'a', deskNumber: 'A-01', isActive: true },
-  { id: 'b', deskNumber: 'A-02', isActive: false },
+  { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 0 },
+  { id: 'b', deskNumber: 'A-02', isActive: false, bookedAhead: 0 },
 ];
 
 describe('FilterBar — the four controls (US-014/AC-01, AC-02, AC-03)', () => {

@@ -80,8 +80,14 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
 
   /**
    * US-014/AC-03, edge case. The desk vocabulary for the admin filter — every desk, active and
-   * inactive (design note §3.3). No query parameters: the desk count this release targets (30–100,
-   * BR-001.4) does not need search, and inventing one here would be building US-016 inside US-014.
+   * inactive. US-016/AC-01, AC-04, AC-05 extended this same handler additively with `bookedAhead`
+   * (the service now also tallies each desk's upcoming Confirmed bookings) rather than adding a
+   * second endpoint — no handler change was needed here, the whole of the extension lives in
+   * `DesksService.listAllDesks`.
+   *
+   * Still no query parameters: US-016/AC-09 confirmed the desk count this release targets
+   * (30–100, BR-001.4) does not need search, and this endpoint takes none by requirement now,
+   * not merely by omission.
    */
   router.get('/desks', async (_req, res, next) => {
     try {

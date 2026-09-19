@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { useDesks, type DesksFetcher } from './use-desks.js';
 
-const DESK = { id: 'a', deskNumber: 'A-01', isActive: true };
+const DESK = { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 0 };
 
 describe('useDesks (US-014/AC-03, §7.6)', () => {
   it('starts loading, then ready with the fetched desks', async () => {

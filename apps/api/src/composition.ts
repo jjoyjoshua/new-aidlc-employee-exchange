@@ -105,7 +105,7 @@ export function buildApp(options: BuildAppOptions = {}): Express {
     officeTimezone,
   });
 
-  const desksService = createDesksService({ desks: options.desks ?? desksRepository });
+  const desksService = createDesksService({ desks: options.desks ?? desksRepository, nowMs, officeTimezone });
 
   return createApp({
     authRouter: createAuthRouter({

@@ -19,6 +19,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-013 | See every booking in the office | Complex | implemented | [`US-013-see-every-booking/`](US-013-see-every-booking/) |
 | US-014 | Filter all bookings by date, status and desk | Complex | implemented | [`US-014-filter-all-bookings/`](US-014-filter-all-bookings/) |
 | US-015 | Cancel an employee's booking on their behalf | Complex | implemented | [`US-015-cancel-a-booking-on-behalf/`](US-015-cancel-a-booking-on-behalf/) |
+| US-016 | See the desk inventory and how many people hold each desk | Complex | ready for review (PR not yet opened) | [`US-016-see-the-desk-inventory/`](US-016-see-the-desk-inventory/) |
 
 ## How to update
 

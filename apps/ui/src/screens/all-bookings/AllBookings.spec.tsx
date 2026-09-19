@@ -8,7 +8,7 @@ import { AuthProvider, useAuth, type AuthContextValue } from '../../lib/auth/aut
 import type { ApiClient } from '../../lib/api-client.js';
 import type { AdminDesk, AllBookingsResponse, AuthenticatedUser, Office } from '@desk-booking/contracts';
 import type { AllBookingsFetcher, AllBookingsOutcome } from './use-all-bookings.js';
-import type { DesksFetcher } from './use-desks.js';
+import type { DesksFetcher } from '../../lib/use-desks.js';
 import type { CancelBookingFetcher } from '../../lib/cancel-booking.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -164,7 +164,9 @@ describe('AllBookings — load error (ST-05, US-013/AC-09)', () => {
 });
 
 describe('AllBookings — the filter bar and the count line (US-014/AC-01, AC-02, AC-03, AC-07)', () => {
-  const DESKS: AdminDesk[] = [{ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', deskNumber: 'B-03', isActive: true }];
+  const DESKS: AdminDesk[] = [
+    { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', deskNumber: 'B-03', isActive: true, bookedAhead: 0 },
+  ];
 
   it('restates a desk and a status filter in the count line, matching the real hi-fi frame exactly (US-014/AC-07)', async () => {
     const response: AllBookingsResponse = {

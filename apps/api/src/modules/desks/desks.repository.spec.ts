@@ -13,6 +13,7 @@ interface RecordedCall {
   table: string;
   select?: string;
   eq: Array<[string, unknown]>;
+  gte?: [string, unknown];
   order: Array<{ column: string; ascending: boolean }>;
 }
 
@@ -28,6 +29,10 @@ function fakeSupabase(response: { data: unknown; error: { message: string } | nu
       },
       eq(column: string, value: unknown) {
         call.eq.push([column, value]);
+        return builder;
+      },
+      gte(column: string, value: unknown) {
+        call.gte = [column, value];
         return builder;
       },
       order(column: string, opts?: { ascending?: boolean }) {
@@ -102,6 +107,58 @@ describe('desksRepository.listAllDesks (US-014/AC-03, edge case — inactive des
 
     try {
       await expect(desksRepository.listAllDesks()).rejects.toThrow(/desks lookup failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('desksRepository.listUpcomingConfirmedDeskIds (US-016/AC-04, AC-05 — BR-001.9)', () => {
+  it('selects desk_id ONLY from bookings, filtered to the given status and >= the given date, no order', async () => {
+    const { calls, client } = fakeSupabase({
+      data: [{ desk_id: 'desk-1' }, { desk_id: 'desk-1' }, { desk_id: 'desk-2' }],
+      error: null,
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.listUpcomingConfirmedDeskIds('confirmed', '2026-09-19');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'desk_id',
+          eq: [['status', 'confirmed']],
+          gte: ['booking_date', '2026-09-19'],
+          order: [],
+        },
+      ]);
+      expect(result).toEqual(['desk-1', 'desk-1', 'desk-2']);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns an empty list when nothing matches, rather than throwing', async () => {
+    const { client } = fakeSupabase({ data: [], error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.listUpcomingConfirmedDeskIds('confirmed', '2026-09-19');
+      expect(result).toEqual([]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(desksRepository.listUpcomingConfirmedDeskIds('confirmed', '2026-09-19')).rejects.toThrow(
+        /bookings lookup failed/,
+      );
     } finally {
       setSupabaseForTesting(undefined);
     }

@@ -30,7 +30,7 @@
 | FR-15 | `apps/ui/src/screens/all-bookings/fetch-all-bookings.ts:16` | `createFetchAllBookings` (widened signature) | `apps/ui/src/screens/all-bookings/use-all-bookings.spec.ts` | implemented |
 | FR-16 | `apps/ui/src/screens/all-bookings/FilterBar.tsx:49`, `Select.tsx:34`, `DateField.tsx:28`, `Calendar.tsx:58` | `FilterBar`, `Select`, `DateField`, `Calendar` | `FilterBar.spec.tsx`, `Select.spec.tsx`, `DateField.spec.tsx` | implemented |
 | FR-17 | `apps/ui/src/screens/all-bookings/FilterBar.tsx:49` (toggle + panel), `all-bookings.css` | `FilterBar`'s collapse behaviour | `apps/ui/src/screens/all-bookings/FilterBar.spec.tsx` | implemented |
-| FR-18 | `apps/ui/src/screens/all-bookings/fetch-desks.ts:10`, `use-desks.ts:22` | `createFetchDesks`, `useDesks` | `apps/ui/src/screens/all-bookings/use-desks.spec.ts` | implemented |
+| FR-18 | `apps/ui/src/lib/fetch-desks.ts:10`, `use-desks.ts:22` (moved here by US-016/D-01, now a second consumer) | `createFetchDesks`, `useDesks` | `apps/ui/src/lib/use-desks.spec.ts` | implemented |
 | FR-19 | `apps/ui/src/screens/all-bookings/AllBookings.tsx:91,162,190` | `AllBookingsContent`/`AllBookingsReady` (ST-04/ST-03 branch, count line) | `apps/ui/src/screens/all-bookings/AllBookings.spec.tsx` | implemented |
 | FR-20 | `apps/ui/src/screens/all-bookings/AllBookings.tsx:79` | `AllBookingsContent` (`parseFilters(location.search)` on mount) | `apps/ui/src/screens/all-bookings/AllBookings.spec.tsx` | implemented |
 
