@@ -15,8 +15,8 @@
 | REQ-009 | US-010 | 10/10 | delivered |
 | REQ-010 | US-011 | 10/10 | delivered |
 | REQ-011 | US-013 | 11/11 | delivered |
-| REQ-012 | US-014 | 0/10 | planned |
-| REQ-013 | US-014 | 0/10 | planned |
+| REQ-012 | US-014 | 10/10 | delivered |
+| REQ-013 | US-014 | 10/10 | delivered |
 | REQ-014 | US-015 | 0/10 | planned |
 | REQ-015 | US-017 | 0/9 | planned |
 | REQ-016 | US-018 | 0/9 | planned |
@@ -34,7 +34,7 @@
 | REQ-028 | US-010, US-013 | 21/21 | delivered |
 | REQ-029 | US-004 | 8/8 | delivered |
 | REQ-030 | US-025 | 0/14 | planned |
-| REQ-031 | US-014 | 0/10 | planned |
+| REQ-031 | US-014 | 10/10 | delivered |
 | REQ-032 | US-020 | 0/13 | planned |
 | REQ-033 | US-022 | 0/6 | planned |
 | REQ-034 | US-008 | 6/6 | delivered |

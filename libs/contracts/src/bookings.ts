@@ -61,8 +61,10 @@ export const myBookingsQuerySchema = z.object({ before: officeDateSchema.optiona
 export type MyBookingsQuery = z.infer<typeof myBookingsQuerySchema>;
 
 /**
- * What an employee READS (REQ-028, BR-001.5, US-010/AC-04). Response-only, and never the shape
- * of anything written — `bookingStatusSchema` above is what the database stores and what
+ * What an employee READS (REQ-028, BR-001.5, US-010/AC-04), and — since US-014 — the vocabulary
+ * of the admin status FILTER too (`allBookingsQuerySchema.status` below): you filter on what you
+ * see, so it is the same enum, reused rather than copied (US-014 design-note §4.1, §8). Never the
+ * shape of anything written — `bookingStatusSchema` above is what the database stores and what
  * `POST /api/bookings` returns, and it stays two-valued. `completed` exists on no table and in
  * no enum: it is `confirmed` plus a date that has passed in the office's timezone, derived per
  * request in `apps/api/src/domain/booking-history.ts` (ADR-007). Kept as a SEPARATE schema
@@ -127,12 +129,39 @@ export const MAX_PAGE = 1_000_000;
 /**
  * `GET /api/admin/bookings`. `.strict()`, matching every other request schema in this package.
  * Deliberately no `limit`: the page size is the server's, never a client parameter (design note
- * §2.4) — this is the one route that returns everybody's whereabouts. US-014 adds `from`, `to`,
- * `status` and `deskId` here; this story adds nothing else.
+ * §2.4) — this is the one route that returns everybody's whereabouts.
+ *
+ * The four fields below are US-014's: all OPTIONAL, and their absence is US-013/AC-02's default
+ * view — today onward, all statuses — never "no floor" (US-014 design-note §4.2). `status`
+ * filters the PRESENTED status via `bookingDisplayStatusSchema`, not the stored one — two of its
+ * three values are compound predicates over the two-valued stored enum (ADR-007; US-014
+ * design-note §6), resolved in `apps/api/src/domain/booking-history.ts`'s `displayStatusPredicate`.
  */
 export const allBookingsQuerySchema = z
-  .object({ page: z.coerce.number().int().min(1).max(MAX_PAGE).optional() })
-  .strict();
+  .object({
+    page: z.coerce.number().int().min(1).max(MAX_PAGE).optional(),
+    /** US-014/AC-01, inclusive. Absent = the office's today, resolved server-side. */
+    from: officeDateSchema.optional(),
+    /** US-014/AC-01, inclusive. Absent = no ceiling. */
+    to: officeDateSchema.optional(),
+    /** US-014/AC-02. */
+    status: bookingDisplayStatusSchema.optional(),
+    /** US-014/AC-03. The desk's ID, never its NUMBER — a desk can be renamed (BR-001.19, US-018),
+     *  and a filter keyed on the number would silently change meaning the moment one is. */
+    deskId: z.string().uuid().optional(),
+  })
+  .strict()
+  /**
+   * US-014's edge case refuses an inverted range IN THE CONTROL; this refuses it at the route
+   * edge too, because an inverted range would otherwise return an empty page — indistinguishable
+   * from "nothing matches" (ST-04) on a screen whose whole job is telling those two apart
+   * (design-note §4.1). This makes the export a `ZodEffects`, not a `ZodObject` — nothing
+   * `.extend()`s it, so that is not a concern here.
+   */
+  .refine((q) => q.from === undefined || q.to === undefined || q.from <= q.to, {
+    message: 'The end of the range cannot precede its start.',
+    path: ['to'],
+  });
 export type AllBookingsQuery = z.infer<typeof allBookingsQuerySchema>;
 
 /** One row of `GET /api/admin/bookings`'s `items` (US-013/AC-03, AC-06). Four fields, and the

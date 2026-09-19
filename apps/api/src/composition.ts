@@ -22,6 +22,8 @@ import { createBookingsRouter } from './modules/bookings/bookings.router.js';
 import { createBookingsService } from './modules/bookings/bookings.service.js';
 import { adminBookingsRepository, type AdminBookingsRepository } from './modules/bookings/admin-bookings.repository.js';
 import { createAdminBookingsService } from './modules/bookings/admin-bookings.service.js';
+import { desksRepository, type DesksRepository } from './modules/desks/desks.repository.js';
+import { createDesksService } from './modules/desks/desks.service.js';
 import { SIGN_IN_MIN_FAILURE_MS } from './domain/sign-in-failure-delay.js';
 import { supabase } from './infra/supabase/index.js';
 import { config } from './config/index.js';
@@ -58,6 +60,8 @@ export interface BuildAppOptions {
   availability?: AvailabilityRepository;
   /** US-013 test seam — overrides the real cross-employee `bookings`/`desks`/`user_profiles` read. */
   adminBookings?: AdminBookingsRepository;
+  /** US-014 test seam — overrides the real `desks` inventory read. */
+  desks?: DesksRepository;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -101,6 +105,8 @@ export function buildApp(options: BuildAppOptions = {}): Express {
     officeTimezone,
   });
 
+  const desksService = createDesksService({ desks: options.desks ?? desksRepository });
+
   return createApp({
     authRouter: createAuthRouter({
       service,
@@ -108,7 +114,7 @@ export function buildApp(options: BuildAppOptions = {}): Express {
       requireSession: sessionForPasswordChange,
       officeTimezone,
     }),
-    adminRouter: createAdminRouter({ bookings: adminBookingsService }),
+    adminRouter: createAdminRouter({ bookings: adminBookingsService, desks: desksService }),
     bookingsRouter: createBookingsRouter({ service: bookingsService }),
     requireSession: session,
   });

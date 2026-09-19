@@ -1,15 +1,17 @@
 /**
- * `GET /api/admin/bookings` against the real `createApp`, through supertest — matching
- * `bookings.routes.spec.ts`'s and `auth.routes.spec.ts`'s own reasoning: AC-10 in particular is
- * only proven by a request reaching the real `/api/admin` mount with a real Employee session, not
- * by a stub repository that a route test injects around a guard it never exercises.
+ * `GET /api/admin/bookings` and `GET /api/admin/desks` against the real `createApp`, through
+ * supertest — matching `bookings.routes.spec.ts`'s and `auth.routes.spec.ts`'s own reasoning:
+ * AC-10 in particular is only proven by a request reaching the real `/api/admin` mount with a
+ * real Employee session, not by a stub repository that a route test injects around a guard it
+ * never exercises.
  */
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../composition.js';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 import type { SessionVerifier } from '../../http/middleware/require-session.js';
-import type { AdminBookingRow, AdminBookingsRepository } from '../bookings/admin-bookings.repository.js';
+import type { AdminBookingRow, AdminBookingsFilter, AdminBookingsRepository } from '../bookings/admin-bookings.repository.js';
+import type { DeskRow, DesksRepository } from '../desks/desks.repository.js';
 
 interface Row {
   id: string;
@@ -57,8 +59,14 @@ beforeEach(() => {
 });
 
 const noBookings: AdminBookingsRepository = {
-  async listBookingsFromDate() {
+  async listBookings() {
     return { rows: [], total: 0 };
+  },
+};
+
+const noDesks: DesksRepository = {
+  async listAllDesks() {
+    return [];
   },
 };
 
@@ -73,7 +81,16 @@ function bookingRow(overrides: Partial<AdminBookingRow> = {}): AdminBookingRow {
   };
 }
 
-function appWith(options: { rows?: Row[]; adminBookings?: AdminBookingsRepository }) {
+function deskRow(overrides: Partial<DeskRow> = {}): DeskRow {
+  return {
+    id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    desk_number: 'A-01',
+    is_active: true,
+    ...overrides,
+  };
+}
+
+function appWith(options: { rows?: Row[]; adminBookings?: AdminBookingsRepository; desks?: DesksRepository }) {
   const rows = options.rows ?? [ADMIN, EMPLOYEE];
 
   const profiles = {
@@ -97,13 +114,14 @@ function appWith(options: { rows?: Row[]; adminBookings?: AdminBookingsRepositor
     verifier,
     nowMs: NOW_MS,
     adminBookings: options.adminBookings ?? noBookings,
+    desks: options.desks ?? noDesks,
   });
 }
 
 describe('GET /api/admin/bookings — admin-only (US-013/AC-10)', () => {
   it('refuses an Employee session with 403 and no booking data (US-013/AC-10)', async () => {
     const app = appWith({
-      adminBookings: { async listBookingsFromDate() { return { rows: [bookingRow()], total: 1 }; } },
+      adminBookings: { async listBookings() { return { rows: [bookingRow()], total: 1 }; } },
     });
 
     const response = await request(app).get('/api/admin/bookings').set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
@@ -121,7 +139,7 @@ describe('GET /api/admin/bookings — admin-only (US-013/AC-10)', () => {
 
   it('serves an Admin session', async () => {
     const app = appWith({
-      adminBookings: { async listBookingsFromDate() { return { rows: [bookingRow()], total: 1 }; } },
+      adminBookings: { async listBookings() { return { rows: [bookingRow()], total: 1 }; } },
     });
 
     const response = await request(app).get('/api/admin/bookings').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
@@ -134,7 +152,7 @@ describe('GET /api/admin/bookings — the default view (US-013/AC-02, AC-03, AC-
   it('returns bookings from today onward at every status, with all four fields, statuses derived (US-013/AC-02, US-013/AC-03, US-013/AC-06)', async () => {
     const app = appWith({
       adminBookings: {
-        async listBookingsFromDate() {
+        async listBookings() {
           return {
             total: 2,
             rows: [
@@ -159,7 +177,7 @@ describe('GET /api/admin/bookings — the default view (US-013/AC-02, AC-03, AC-
 
   it('sets Cache-Control: private, no-store on the most sensitive read in the system', async () => {
     const app = appWith({
-      adminBookings: { async listBookingsFromDate() { return { rows: [], total: 0 }; } },
+      adminBookings: { async listBookings() { return { rows: [], total: 0 }; } },
     });
 
     const response = await request(app).get('/api/admin/bookings').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
@@ -172,7 +190,7 @@ describe('GET /api/admin/bookings — paging boundary (US-013/AC-04)', () => {
   it('exactly 50 matching rows shows no next page', async () => {
     const app = appWith({
       adminBookings: {
-        async listBookingsFromDate(_from, _offset, limit) {
+        async listBookings(_filter, _offset, limit) {
           const rows = Array.from({ length: limit }, (_, i) => bookingRow({ id: `id-${i}` }));
           return { rows, total: 50 };
         },
@@ -188,7 +206,7 @@ describe('GET /api/admin/bookings — paging boundary (US-013/AC-04)', () => {
   it('51 matching rows shows a next page, and ?page=2 returns the 51st', async () => {
     const allRows = Array.from({ length: 51 }, (_, i) => bookingRow({ id: `id-${i}` }));
     const adminBookings: AdminBookingsRepository = {
-      async listBookingsFromDate(_from, offset, limit) {
+      async listBookings(_filter, offset, limit) {
         return { rows: allRows.slice(offset, offset + limit), total: allRows.length };
       },
     };
@@ -208,7 +226,7 @@ describe('GET /api/admin/bookings — paging boundary (US-013/AC-04)', () => {
 
   it('a non-numeric page is rejected at the edge', async () => {
     const app = appWith({
-      adminBookings: { async listBookingsFromDate() { return { rows: [], total: 0 }; } },
+      adminBookings: { async listBookings() { return { rows: [], total: 0 }; } },
     });
 
     const response = await request(app)
@@ -221,7 +239,7 @@ describe('GET /api/admin/bookings — paging boundary (US-013/AC-04)', () => {
 
   it('an unknown query field is rejected', async () => {
     const app = appWith({
-      adminBookings: { async listBookingsFromDate() { return { rows: [], total: 0 }; } },
+      adminBookings: { async listBookings() { return { rows: [], total: 0 }; } },
     });
 
     const response = await request(app)
@@ -235,7 +253,7 @@ describe('GET /api/admin/bookings — paging boundary (US-013/AC-04)', () => {
 describe('GET /api/admin/bookings — empty system (US-013/AC-08)', () => {
   it('an empty system returns total 0, no items, no next page (US-013/AC-08)', async () => {
     const app = appWith({
-      adminBookings: { async listBookingsFromDate() { return { rows: [], total: 0 }; } },
+      adminBookings: { async listBookings() { return { rows: [], total: 0 }; } },
     });
 
     const response = await request(app).get('/api/admin/bookings').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
@@ -248,7 +266,7 @@ describe('GET /api/admin/bookings — a repository failure is never swallowed in
   it('propagates as a 500, distinguishable from a real empty system', async () => {
     const app = appWith({
       adminBookings: {
-        async listBookingsFromDate() {
+        async listBookings() {
           throw new Error('boom');
         },
       },
@@ -265,5 +283,193 @@ describe('/api/admin/anything — unaffected by this router no longer being empt
     const app = appWith({});
     const response = await request(app).get('/api/admin/anything').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
     expect(response.status).toBe(404);
+  });
+});
+
+describe('GET /api/admin/bookings — US-014 filters', () => {
+  function capturingRepository(rows: AdminBookingRow[] = []) {
+    let captured: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        captured = filter;
+        return { rows, total: rows.length };
+      },
+    };
+    return { repository, getCaptured: () => captured };
+  }
+
+  it('a booking outside the from/to range is absent (US-014/AC-01)', async () => {
+    const app = appWith({
+      adminBookings: {
+        async listBookings() {
+          return {
+            rows: [
+              bookingRow({ id: 'in-range', booking_date: '2026-09-20' }),
+              bookingRow({ id: 'out-of-range', booking_date: '2026-10-05' }),
+            ],
+            total: 2,
+          };
+        },
+      },
+    });
+
+    // The stub ignores the filter and returns both rows; this asserts the FILTER PARAMS reach
+    // the repository intact, which the "combines all four" test below verifies against a
+    // filter-aware stub.
+    const response = await request(app)
+      .get('/api/admin/bookings?from=2026-09-01&to=2026-09-30')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.status).toBe(200);
+  });
+
+  it('passes from/to through to the repository filter (US-014/AC-01)', async () => {
+    const { repository, getCaptured } = capturingRepository();
+    const app = appWith({ adminBookings: repository });
+
+    await request(app)
+      .get('/api/admin/bookings?from=2026-09-01&to=2026-09-30')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(getCaptured()?.from).toBe('2026-09-01');
+    expect(getCaptured()?.to).toBe('2026-09-30');
+  });
+
+  it("a passed Confirmed booking appears under status=completed and NOT under status=confirmed (US-014/AC-02, the QA note's exact assertion)", async () => {
+    const pastConfirmed = bookingRow({ id: 'past', booking_date: '2026-09-10', status: 'confirmed' });
+    const futureConfirmed = bookingRow({ id: 'future', booking_date: '2026-09-23', status: 'confirmed' });
+
+    // A minimal in-memory filter application, standing in for Postgres, so this test exercises
+    // the SERVICE's resolved filter end to end rather than merely capturing it.
+    const allRows = [pastConfirmed, futureConfirmed];
+    const adminBookings: AdminBookingsRepository = {
+      async listBookings(filter) {
+        const matched = allRows.filter((r) => {
+          if (filter.from !== undefined && r.booking_date < filter.from) return false;
+          if (filter.to !== undefined && r.booking_date > filter.to) return false;
+          if (filter.before !== undefined && r.booking_date >= filter.before) return false;
+          if (filter.status !== undefined && r.status !== filter.status) return false;
+          return true;
+        });
+        return { rows: matched, total: matched.length };
+      },
+    };
+    const app = appWith({ adminBookings });
+
+    const completed = await request(app)
+      .get('/api/admin/bookings?status=completed')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(completed.body.items.map((i: { id: string }) => i.id)).toEqual(['past']);
+
+    const confirmed = await request(app)
+      .get('/api/admin/bookings?status=confirmed')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(confirmed.body.items.map((i: { id: string }) => i.id)).toEqual(['future']);
+  });
+
+  it('a cancelled booking appears under status=cancelled regardless of date', async () => {
+    const cancelledPast = bookingRow({ id: 'c1', booking_date: '2026-09-01', status: 'cancelled' });
+    const cancelledFuture = bookingRow({ id: 'c2', booking_date: '2026-09-30', status: 'cancelled' });
+    const allRows = [cancelledPast, cancelledFuture];
+    const adminBookings: AdminBookingsRepository = {
+      async listBookings(filter) {
+        const matched = allRows.filter((r) => filter.status === undefined || r.status === filter.status);
+        return { rows: matched, total: matched.length };
+      },
+    };
+    const app = appWith({ adminBookings });
+
+    const response = await request(app)
+      .get('/api/admin/bookings?status=cancelled')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.body.items.map((i: { id: string }) => i.id).sort()).toEqual(['c1', 'c2']);
+  });
+
+  it('only the matching desk\'s rows are returned (US-014/AC-03)', async () => {
+    const rowA = bookingRow({ id: 'a', desk_number: 'A-01' });
+    const rowB = bookingRow({ id: 'b', desk_number: 'B-02' });
+    const deskAId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+    const adminBookings: AdminBookingsRepository = {
+      async listBookings(filter) {
+        const matched = filter.deskId === deskAId ? [rowA] : [rowA, rowB];
+        return { rows: matched, total: matched.length };
+      },
+    };
+    const app = appWith({ adminBookings });
+
+    const response = await request(app)
+      .get(`/api/admin/bookings?deskId=${deskAId}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].id).toBe('a');
+  });
+
+  it('date+status, date+desk, status+desk, and all three combine (US-014/AC-04)', async () => {
+    const { repository, getCaptured } = capturingRepository();
+    const app = appWith({ adminBookings: repository });
+    const deskId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+    await request(app)
+      .get(`/api/admin/bookings?from=2026-09-01&to=2026-09-30&status=confirmed&deskId=${deskId}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    const captured = getCaptured();
+    expect(captured?.to).toBe('2026-09-30');
+    expect(captured?.status).toBe('confirmed');
+    expect(captured?.deskId).toBe(deskId);
+  });
+
+  it('?to=<before from> is refused with 400 invalid_request (US-014 edge case)', async () => {
+    const app = appWith({});
+    const response = await request(app)
+      .get('/api/admin/bookings?from=2026-09-30&to=2026-09-01')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('an unknown status word is rejected', async () => {
+    const app = appWith({});
+    const response = await request(app)
+      .get('/api/admin/bookings?status=archived')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.status).toBe(400);
+  });
+});
+
+describe('GET /api/admin/desks (US-014/AC-03, edge case)', () => {
+  it('refuses an Employee session with 403', async () => {
+    const app = appWith({ desks: { async listAllDesks() { return [deskRow()]; } } });
+    const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+    expect(response.status).toBe(403);
+  });
+
+  it('refuses a request with no token', async () => {
+    const app = appWith({});
+    const response = await request(app).get('/api/admin/desks');
+    expect(response.status).toBe(401);
+  });
+
+  it('returns an inactive desk alongside active ones — inactive desks stay findable', async () => {
+    const app = appWith({
+      desks: {
+        async listAllDesks() {
+          return [deskRow({ id: 'a', desk_number: 'A-01', is_active: true }), deskRow({ id: 'b', desk_number: 'A-02', is_active: false })];
+        },
+      },
+    });
+
+    const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.desks).toEqual([
+      { id: 'a', deskNumber: 'A-01', isActive: true },
+      { id: 'b', deskNumber: 'A-02', isActive: false },
+    ]);
+  });
+
+  it('sets Cache-Control: private, no-store', async () => {
+    const app = appWith({ desks: { async listAllDesks() { return []; } } });
+    const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.headers['cache-control']).toBe('private, no-store');
   });
 });

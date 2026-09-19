@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AllBookingsResponse } from '@desk-booking/contracts';
+import { NO_FILTERS, type AllBookingsFilters } from './filters.js';
 import { useAllBookings, type AllBookingsOutcome } from './use-all-bookings.js';
 
 const ok = (data: AllBookingsResponse): AllBookingsOutcome => ({ kind: 'ok', data });
@@ -24,16 +25,16 @@ describe('useAllBookings — the default page (US-013/AC-02, AC-04)', () => {
   it('issues exactly one request, for page 1, on mount', async () => {
     const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
 
-    renderHook(() => useAllBookings(fetchAllBookings));
+    renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
 
     await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(1));
-    expect(fetchAllBookings).toHaveBeenCalledWith(1, expect.any(AbortSignal));
+    expect(fetchAllBookings).toHaveBeenCalledWith(NO_FILTERS, 1, expect.any(AbortSignal));
   });
 
   it("reports loading, then ready with the response's items/today/total/nextPage", async () => {
     const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
 
-    const { result } = renderHook(() => useAllBookings(fetchAllBookings));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
 
     expect(result.current).toMatchObject({ status: 'loading' });
     await waitFor(() =>
@@ -51,17 +52,18 @@ describe('useAllBookings — the default page (US-013/AC-02, AC-04)', () => {
   it('a failed outcome yields status: error (US-013/AC-09)', async () => {
     const fetchAllBookings = vi.fn().mockResolvedValue(failed);
 
-    const { result } = renderHook(() => useAllBookings(fetchAllBookings));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
 
     await waitFor(() => expect(result.current).toMatchObject({ status: 'error' }));
   });
 });
 
 describe('useAllBookings.loadMore — appending a page (US-013/AC-04)', () => {
-  it('requests page + 1 and appends the response to the accumulated list', async () => {
+  it('requests page + 1 with the SAME filters, and appends the response to the accumulated list', async () => {
+    const filters: AllBookingsFilters = { status: 'confirmed' };
     const fetchAllBookings = vi.fn().mockResolvedValueOnce(ok(PAGE_1)).mockResolvedValueOnce(ok(PAGE_2));
 
-    const { result } = renderHook(() => useAllBookings(fetchAllBookings));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, filters));
     await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
 
     await act(async () => {
@@ -69,7 +71,7 @@ describe('useAllBookings.loadMore — appending a page (US-013/AC-04)', () => {
       await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(2));
     });
 
-    expect(fetchAllBookings).toHaveBeenLastCalledWith(2, expect.any(AbortSignal));
+    expect(fetchAllBookings).toHaveBeenLastCalledWith(filters, 2, expect.any(AbortSignal));
     await waitFor(() =>
       expect(result.current).toMatchObject({
         status: 'ready',
@@ -83,7 +85,7 @@ describe('useAllBookings.loadMore — appending a page (US-013/AC-04)', () => {
   it('is a no-op when nextPage is null', async () => {
     const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_2));
 
-    const { result } = renderHook(() => useAllBookings(fetchAllBookings));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
     await waitFor(() => expect(result.current).toMatchObject({ status: 'ready', nextPage: null }));
 
     act(() => result.current.loadMore());
@@ -98,7 +100,7 @@ describe('useAllBookings.loadMore — appending a page (US-013/AC-04)', () => {
       .mockResolvedValueOnce(ok(PAGE_1))
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }));
 
-    const { result } = renderHook(() => useAllBookings(fetchAllBookings));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
     await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
 
     act(() => result.current.loadMore());
@@ -121,7 +123,7 @@ describe('useAllBookings.retry — resets to page 1 (US-013/AC-09)', () => {
       .mockResolvedValueOnce(ok(PAGE_2))
       .mockResolvedValueOnce(ok(PAGE_1));
 
-    const { result } = renderHook(() => useAllBookings(fetchAllBookings));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
     await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
 
     await act(async () => {
@@ -132,7 +134,76 @@ describe('useAllBookings.retry — resets to page 1 (US-013/AC-09)', () => {
     act(() => result.current.retry());
 
     await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(3));
-    expect(fetchAllBookings).toHaveBeenLastCalledWith(1, expect.any(AbortSignal));
+    expect(fetchAllBookings).toHaveBeenLastCalledWith(NO_FILTERS, 1, expect.any(AbortSignal));
     await waitFor(() => expect(result.current).toMatchObject({ status: 'ready', items: PAGE_1.items }));
+  });
+});
+
+describe('useAllBookings — a filter change (US-014/AC-04, AC-09, edge case)', () => {
+  it('a filter change re-fetches page 1 with the new filters', async () => {
+    const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
+
+    const { rerender } = renderHook(({ filters }) => useAllBookings(fetchAllBookings, filters), {
+      initialProps: { filters: NO_FILTERS },
+    });
+    await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(1));
+
+    const nextFilters: AllBookingsFilters = { status: 'confirmed' };
+    rerender({ filters: nextFilters });
+
+    await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(2));
+    expect(fetchAllBookings).toHaveBeenLastCalledWith(nextFilters, 1, expect.any(AbortSignal));
+  });
+
+  it('resets accumulated pages — a filter change after loadMore starts over at page 1', async () => {
+    const fetchAllBookings = vi
+      .fn()
+      .mockResolvedValueOnce(ok(PAGE_1))
+      .mockResolvedValueOnce(ok(PAGE_2))
+      .mockResolvedValueOnce(ok(PAGE_1));
+
+    const { result, rerender } = renderHook(({ filters }) => useAllBookings(fetchAllBookings, filters), {
+      initialProps: { filters: NO_FILTERS },
+    });
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    await act(async () => {
+      result.current.loadMore();
+      await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(2));
+    });
+    await waitFor(() => expect(result.current).toMatchObject({ items: [...PAGE_1.items, ...PAGE_2.items] }));
+
+    rerender({ filters: { status: 'confirmed' } });
+
+    await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready', items: PAGE_1.items }));
+  });
+
+  it('a filter change made mid-loadMore drops the superseded page (edge case)', async () => {
+    let resolveLoadMore: (outcome: AllBookingsOutcome) => void = () => {};
+    const fetchAllBookings = vi
+      .fn()
+      .mockResolvedValueOnce(ok(PAGE_1))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveLoadMore = resolve; }))
+      .mockResolvedValueOnce(ok(PAGE_1));
+
+    const { result, rerender } = renderHook(({ filters }) => useAllBookings(fetchAllBookings, filters), {
+      initialProps: { filters: NO_FILTERS },
+    });
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(2));
+
+    rerender({ filters: { status: 'confirmed' } });
+    await waitFor(() => expect(fetchAllBookings).toHaveBeenCalledTimes(3));
+
+    // The superseded loadMore resolves AFTER the filter change's own fetch has already landed.
+    await act(async () => {
+      resolveLoadMore(ok(PAGE_2));
+    });
+
+    // The stale page-2 items must not have grafted onto the new, filtered page-1 result.
+    expect(result.current).toMatchObject({ status: 'ready', items: PAGE_1.items });
   });
 });

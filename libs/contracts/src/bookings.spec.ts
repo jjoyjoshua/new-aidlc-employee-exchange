@@ -166,6 +166,57 @@ describe('allBookingsQuerySchema (US-013/AC-04)', () => {
   });
 });
 
+describe('allBookingsQuerySchema — US-014 filters (US-014/AC-01, AC-02, AC-03, AC-04)', () => {
+  it('accepts from alone', () => {
+    expect(allBookingsQuerySchema.safeParse({ from: '2026-01-01' }).success).toBe(true);
+  });
+
+  it('accepts to alone', () => {
+    expect(allBookingsQuerySchema.safeParse({ to: '2026-12-31' }).success).toBe(true);
+  });
+
+  it('accepts a well-formed from/to range', () => {
+    const result = allBookingsQuerySchema.safeParse({ from: '2026-09-01', to: '2026-09-30' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects to before from (US-014/AC-01 edge case — an inverted range is refused, not silently empty)', () => {
+    const result = allBookingsQuerySchema.safeParse({ from: '2026-09-30', to: '2026-09-01' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts from equal to to (a single-day range)', () => {
+    expect(allBookingsQuerySchema.safeParse({ from: '2026-09-10', to: '2026-09-10' }).success).toBe(true);
+  });
+
+  it.each(['confirmed', 'completed', 'cancelled'])('accepts status=%s', (status) => {
+    expect(allBookingsQuerySchema.safeParse({ status }).success).toBe(true);
+  });
+
+  it('rejects an unknown status word', () => {
+    expect(allBookingsQuerySchema.safeParse({ status: 'archived' }).success).toBe(false);
+  });
+
+  it('accepts a well-formed deskId', () => {
+    expect(allBookingsQuerySchema.safeParse({ deskId: VALID_DESK_ID }).success).toBe(true);
+  });
+
+  it('rejects a non-uuid deskId', () => {
+    expect(allBookingsQuerySchema.safeParse({ deskId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('accepts all four filters combined with page (US-014/AC-04)', () => {
+    const result = allBookingsQuerySchema.safeParse({
+      page: '2',
+      from: '2026-09-01',
+      to: '2026-09-30',
+      status: 'confirmed',
+      deskId: VALID_DESK_ID,
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('allBookingsListItemSchema (US-013/AC-03, AC-06)', () => {
   const VALID = {
     id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
@@ -214,6 +265,17 @@ describe('allBookingsResponseSchema (US-013/AC-04, AC-07)', () => {
       futureField: 'ignored',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('carries exactly four keys — US-014 adds no envelope field (design-note §5, FR-03)', () => {
+    const result = allBookingsResponseSchema.safeParse({
+      today: '2026-09-16',
+      total: 137,
+      items: [],
+      nextPage: 2,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(Object.keys(result.data).sort()).toEqual(['items', 'nextPage', 'today', 'total']);
   });
 });
 

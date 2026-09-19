@@ -45,3 +45,27 @@ export function bookingDisplayStatus(
   if (stored === 'confirmed' && date < today) return 'completed';
   return stored;
 }
+
+/** The date bounds and stored value a PRESENTED status resolves to — the exact inverse of
+ *  `bookingDisplayStatus` above, and the reason US-014's status filter cannot be an equality
+ *  test: `confirmed` and `completed` are both compound predicates over the two-valued stored
+ *  enum, not a third stored value (ADR-007's "Harder" section, addressed to this story by name;
+ *  US-014 design note §6). Pure: `today` arrives as an argument, never read here. `from` is
+ *  INCLUSIVE, `before` is EXCLUSIVE — the same convention `booking_date < today` already uses
+ *  in `bookingDisplayStatus` itself, so no date arithmetic is needed at either call site. */
+export interface DisplayStatusPredicate {
+  stored: BookingStatus;
+  /** Inclusive lower bound this status contributes, if any. */
+  from?: OfficeDate;
+  /** Exclusive upper bound this status contributes, if any. */
+  before?: OfficeDate;
+}
+
+export function displayStatusPredicate(
+  status: BookingDisplayStatus,
+  today: OfficeDate,
+): DisplayStatusPredicate {
+  if (status === 'completed') return { stored: 'confirmed', before: today };
+  if (status === 'confirmed') return { stored: 'confirmed', from: today };
+  return { stored: 'cancelled' };
+}

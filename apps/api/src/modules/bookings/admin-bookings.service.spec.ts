@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createAdminBookingsService, ADMIN_BOOKINGS_PAGE_SIZE } from './admin-bookings.service.js';
-import type { AdminBookingRow, AdminBookingsRepository } from './admin-bookings.repository.js';
+import type { AdminBookingRow, AdminBookingsFilter, AdminBookingsRepository } from './admin-bookings.repository.js';
 
 const TODAY = '2026-09-16';
 const NOW_MS = Date.parse(`${TODAY}T12:00:00Z`);
@@ -18,7 +18,7 @@ function row(overrides: Partial<AdminBookingRow> = {}): AdminBookingRow {
 
 function stubRepository(page: { rows: AdminBookingRow[]; total: number }): AdminBookingsRepository {
   return {
-    async listBookingsFromDate() {
+    async listBookings() {
       return page;
     },
   };
@@ -88,17 +88,155 @@ describe('createAdminBookingsService.listAllBookings — pagination (US-013/AC-0
 
 describe('createAdminBookingsService.listAllBookings — one clock reading', () => {
   it('passes the derived today as the repository from-date, and echoes it on the response', async () => {
-    let capturedFrom: string | undefined;
+    let capturedFilter: AdminBookingsFilter | undefined;
     const repository: AdminBookingsRepository = {
-      async listBookingsFromDate(from) {
-        capturedFrom = from;
+      async listBookings(filter) {
+        capturedFilter = filter;
         return { rows: [], total: 0 };
       },
     };
 
     const result = await service(repository).listAllBookings(1);
 
-    expect(capturedFrom).toBe(TODAY);
+    expect(capturedFilter?.from).toBe(TODAY);
     expect(result.today).toBe(TODAY);
+  });
+});
+
+describe('createAdminBookingsService.listAllBookings — US-014 filter resolution', () => {
+  it('an absent from resolves to the single today reading, not a second clock call', async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, {});
+    expect(capturedFilter?.from).toBe(TODAY);
+  });
+
+  it('a supplied from is passed through when it is after today', async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, { from: '2026-09-20' });
+    expect(capturedFilter?.from).toBe('2026-09-20');
+  });
+
+  it('to is passed through unchanged', async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, { to: '2026-09-30' });
+    expect(capturedFilter?.to).toBe('2026-09-30');
+  });
+
+  it('deskId is passed through unchanged', async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, { deskId: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' });
+    expect(capturedFilter?.deskId).toBe('3f2504e0-4f89-41d3-9a0c-0305e82c3301');
+  });
+
+  it("status=confirmed resolves to stored status='confirmed' and from raised to today (US-014/AC-02)", async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    // A far-back `from` combined with status=confirmed must still be raised to today — a
+    // Confirmed booking can never be dated in the past (ADR-007).
+    await service(repository).listAllBookings(1, { from: '2025-01-01', status: 'confirmed' });
+    expect(capturedFilter?.status).toBe('confirmed');
+    expect(capturedFilter?.from).toBe(TODAY);
+    expect(capturedFilter?.before).toBeUndefined();
+  });
+
+  it("status=completed resolves to stored status='confirmed' with before=today, no from floor beyond the caller's own (US-014/AC-02)", async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, { from: '2025-01-01', status: 'completed' });
+    expect(capturedFilter?.status).toBe('confirmed');
+    expect(capturedFilter?.before).toBe(TODAY);
+    expect(capturedFilter?.from).toBe('2025-01-01');
+  });
+
+  it("status=completed with NO explicit from injects no default floor — a from=today default would make every Completed query structurally empty (bug caught via TDD, US-014/AC-02)", async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, { status: 'completed' });
+    expect(capturedFilter?.from).toBeUndefined();
+    expect(capturedFilter?.before).toBe(TODAY);
+  });
+
+  it("status=cancelled resolves to stored status='cancelled' with no date bound contributed", async () => {
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+
+    await service(repository).listAllBookings(1, { status: 'cancelled' });
+    expect(capturedFilter?.status).toBe('cancelled');
+    expect(capturedFilter?.before).toBeUndefined();
+  });
+
+  it("a passed confirmed booking appears under status=completed and NOT under status=confirmed — the QA note's exact assertion (US-014/AC-02)", async () => {
+    const pastConfirmed = row({ status: 'confirmed', booking_date: '2026-09-10' });
+
+    const underCompleted = await service(stubRepository({ rows: [pastConfirmed], total: 1 })).listAllBookings(1, {
+      from: '2025-01-01',
+      status: 'completed',
+    });
+    expect(underCompleted.items[0]?.status).toBe('completed');
+
+    // The repository is a stub that always returns the row regardless of the filter it was
+    // given, so this asserts the SERVICE's own resolved filter would have excluded it — the
+    // real exclusion is proven at the route level (admin.routes.spec.ts) against a seed where a
+    // naive equality would incorrectly include it.
+    let capturedFilter: AdminBookingsFilter | undefined;
+    const repository: AdminBookingsRepository = {
+      async listBookings(filter) {
+        capturedFilter = filter;
+        return { rows: [], total: 0 };
+      },
+    };
+    await service(repository).listAllBookings(1, { status: 'confirmed' });
+    expect(capturedFilter?.from).toBe(TODAY); // excludes anything dated before today
   });
 });

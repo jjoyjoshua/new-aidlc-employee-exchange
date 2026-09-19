@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AllBookingsResponse } from '@desk-booking/contracts';
+import type { AllBookingsFilters } from './filters.js';
 
 export type AllBookingsOutcome =
   | { kind: 'ok'; data: AllBookingsResponse }
@@ -13,7 +14,13 @@ export type AllBookingsOutcome =
    *  One outcome, because ST-05 is one state — the same reasoning `MyBookingsOutcome` states. */
   | { kind: 'failed' };
 
-export type AllBookingsFetcher = (page: number, signal: AbortSignal) => Promise<AllBookingsOutcome>;
+/** US-014 widens this from `(page, signal)` — filters travel with every request, including a
+ *  `loadMore()` page, so a filter change and a page number can never disagree (design note §7.2). */
+export type AllBookingsFetcher = (
+  filters: AllBookingsFilters,
+  page: number,
+  signal: AbortSignal,
+) => Promise<AllBookingsOutcome>;
 
 export type AllBookingsState =
   | { status: 'loading' }
@@ -37,11 +44,17 @@ export type UseAllBookingsResult = AllBookingsState & {
   loadMore: () => void;
 };
 
-export function useAllBookings(fetchAllBookings: AllBookingsFetcher): UseAllBookingsResult {
+export function useAllBookings(
+  fetchAllBookings: AllBookingsFetcher,
+  filters: AllBookingsFilters,
+): UseAllBookingsResult {
   const [state, setState] = useState<AllBookingsState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   // Bumped every time page 1 is (re-)fetched — the same "a stale in-flight page must not graft
-  // onto a fresher default fetch" guard `useMyBookings` states for its own `generationRef`.
+  // onto a fresher default fetch" guard `useMyBookings` states for its own `generationRef`. A
+  // FILTER CHANGE bumps it too (via the `filters` dependency below), which is what makes a
+  // filter change reset to page 1 and supersede an in-flight request for the old filters
+  // (US-014/AC-09, edge case).
   const generationRef = useRef(0);
 
   useEffect(() => {
@@ -49,7 +62,7 @@ export function useAllBookings(fetchAllBookings: AllBookingsFetcher): UseAllBook
     const controller = new AbortController();
     setState({ status: 'loading' });
 
-    fetchAllBookings(1, controller.signal).then(
+    fetchAllBookings(filters, 1, controller.signal).then(
       (outcome) => {
         if (controller.signal.aborted) return; // superseded by a retry() or unmount
         setState(
@@ -71,7 +84,7 @@ export function useAllBookings(fetchAllBookings: AllBookingsFetcher): UseAllBook
     );
 
     return () => controller.abort();
-  }, [fetchAllBookings, attempt]);
+  }, [fetchAllBookings, filters, attempt]);
 
   const loadMore = useCallback(() => {
     // Read from THIS callback's own closure, recreated on every render via the `state`
@@ -83,9 +96,9 @@ export function useAllBookings(fetchAllBookings: AllBookingsFetcher): UseAllBook
     setState({ ...state, loadingMore: true });
 
     const controller = new AbortController();
-    void fetchAllBookings(page, controller.signal).then((outcome) => {
+    void fetchAllBookings(filters, page, controller.signal).then((outcome) => {
       setState((current) => {
-        if (generation !== generationRef.current) return current; // a retry() superseded this page
+        if (generation !== generationRef.current) return current; // a retry() or filter change superseded this page
         if (current.status !== 'ready') return current;
         if (outcome.kind !== 'ok') return { ...current, loadingMore: false };
         return {
@@ -97,7 +110,7 @@ export function useAllBookings(fetchAllBookings: AllBookingsFetcher): UseAllBook
         };
       });
     });
-  }, [fetchAllBookings, state]);
+  }, [fetchAllBookings, filters, state]);
 
   return { ...state, retry: () => setAttempt((a) => a + 1), loadMore };
 }
