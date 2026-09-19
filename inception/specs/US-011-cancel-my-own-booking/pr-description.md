@@ -104,3 +104,5 @@ aidlc-check: OK (framework 0.5.0, 518 IDs, 36 warnings — all pre-existing, non
 - [x] No unrelated changes; docs updated where behavior/commands changed (`bookings/README.md`,
       US-007's `traceability.md` corrected for the `cancel-booking.ts` move, four docblocks
       correcting US-007/D-03's now-partially-superseded claim)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
