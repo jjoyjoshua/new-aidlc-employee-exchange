@@ -1,13 +1,14 @@
 /**
  * A recording-fake Supabase client for `AdminBookingsRepository`, extending the pattern
  * `bookings.repository.spec.ts` established with the verbs that repository never needed:
- * `.range()`, `.lte()`, `.lt()`, `.eq()` and the `{ count: 'exact' }` option on `.select()`. What
- * is pinned is visible in the test itself, the same reasoning that file gives for not reaching
- * for a mocking library.
+ * `.range()`, `.lte()`, `.lt()`, `.eq()`, `.update()`, `.maybeSingle()` and the `{ count: 'exact' }`
+ * option on `.select()`. What is pinned is visible in the test itself, the same reasoning that
+ * file gives for not reaching for a mocking library.
  *
  * This proves the QUERY we issue (the predicate, the order, the range, the disambiguated embed
- * string) — not that PostgREST accepts that embed string at runtime. That gap is real and is
- * closed separately in `bookings.repository.concurrency.spec.ts` (design note §3.1).
+ * string, the update payload) — not that PostgREST accepts that embed string or arbitrates a
+ * concurrent write the way we assume at runtime. That gap is real and is closed separately in
+ * `bookings.repository.concurrency.spec.ts` (design note §3.1, §3.4).
  */
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -18,12 +19,14 @@ interface RecordedCall {
   table: string;
   select?: string;
   selectOptions?: { count?: string };
+  update?: Record<string, unknown>;
   gte?: [string, unknown];
   lte?: [string, unknown];
   lt?: [string, unknown];
   eq: Array<[string, unknown]>;
   order: Array<{ column: string; ascending: boolean }>;
   range?: [number, number];
+  maybeSingle?: true;
 }
 
 type FakeResponse = { data: unknown; error: { code: string; message: string } | null; count?: number | null };
@@ -37,6 +40,10 @@ function fakeSupabase(response: FakeResponse) {
       select(columns: string, options?: { count?: string }) {
         call.select = columns;
         if (options) call.selectOptions = options;
+        return builder;
+      },
+      update(values: Record<string, unknown>) {
+        call.update = values;
         return builder;
       },
       gte(column: string, value: unknown) {
@@ -62,6 +69,11 @@ function fakeSupabase(response: FakeResponse) {
       range(from2: number, to: number) {
         call.range = [from2, to];
         return builder;
+      },
+      maybeSingle() {
+        call.maybeSingle = true;
+        calls.push(call);
+        return Promise.resolve(response);
       },
       then(onFulfilled: (value: FakeResponse) => unknown, onRejected?: (reason: unknown) => unknown) {
         calls.push(call);
@@ -350,6 +362,119 @@ describe('adminBookingsRepository.listBookings — US-014 filters', () => {
         { column: 'created_at', ascending: true },
         { column: 'id', ascending: true },
       ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+const BOOKING_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+const ADMIN_ID = '9c858901-8a57-4791-81fe-4c455b099bc9';
+const CANCELLED_AT = new Date('2026-09-16T12:00:00.000Z');
+const TODAY: AdminBookingsFilter['from'] = '2026-09-16';
+
+describe('adminBookingsRepository.cancelAnyBooking — the write (US-015/AC-01, AC-02, AC-04, AC-05, AC-06, AC-07)', () => {
+  it('updates by id/confirmed/not-past, writing cancellation_source admin and cancelled_by the acting admin — no user_id predicate anywhere', async () => {
+    const { calls, client } = fakeSupabase({ data: { id: BOOKING_ID }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!);
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'id',
+          update: {
+            status: 'cancelled',
+            cancelled_at: CANCELLED_AT.toISOString(),
+            cancelled_by: ADMIN_ID,
+            cancellation_source: 'admin',
+          },
+          eq: [
+            ['id', BOOKING_ID],
+            ['status', 'confirmed'],
+          ],
+          gte: ['booking_date', TODAY],
+          order: [],
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ id: BOOKING_ID });
+      // The absence is REQ-014 — assert no eq() call ever names user_id.
+      expect(calls[0]?.eq.some(([column]) => column === 'user_id')).toBe(false);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined when the update matches no row (already cancelled, past-dated, or no such booking)', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!);
+      expect(result).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error rather than returning undefined (never swallowed)', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!)).rejects.toThrow(
+        /admin booking cancel failed/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('adminBookingsRepository.findBookingState — the disambiguating read (US-015/AC-09)', () => {
+  it('selects status and booking_date only, scoped by id alone — unscoped by design', async () => {
+    const { calls, client } = fakeSupabase({ data: { status: 'cancelled', booking_date: '2026-09-16' }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await adminBookingsRepository.findBookingState(BOOKING_ID);
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'status, booking_date',
+          eq: [['id', BOOKING_ID]],
+          order: [],
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ status: 'cancelled', booking_date: '2026-09-16' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined when no booking matches the id', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await adminBookingsRepository.findBookingState(BOOKING_ID);
+      expect(result).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error rather than returning undefined (never swallowed)', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(adminBookingsRepository.findBookingState(BOOKING_ID)).rejects.toThrow(/bookings lookup failed/);
     } finally {
       setSupabaseForTesting(undefined);
     }

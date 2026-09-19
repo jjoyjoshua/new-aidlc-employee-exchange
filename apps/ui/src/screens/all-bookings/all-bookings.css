@@ -124,14 +124,22 @@
   flex: 1 0 auto;
 }
 
-/* Below 768px (Figma "Card compact"): stacked, in document order — date/desk, employee, status.
- * `decisions.md` D-04: every real row here is the 160px, no-action shape. */
+/* US-015/AC-02 — the non-cancellable reason, stated in words in BOTH card densities. */
+.admin-booking-card__reason {
+  color: var(--c-text-muted);
+  font-size: var(--t-body-sm);
+}
+
+/* Below 768px (Figma "Card compact"): stacked, in document order — date/desk, employee, status,
+ * action/reason. `decisions.md` D-04: 188px, the cancellable-row shape (node `176:427`) — a mixed
+ * list also has a 160px non-cancellable shape (node `176:485`), which this fixed height does not
+ * perfectly match; named as an accepted, non-blocking cosmetic trade-off (design note §5.5). */
 @media (max-width: 767.98px) {
   .admin-booking-card {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--s-8);
-    min-height: 160px;
+    min-height: 188px;
     justify-content: center;
   }
 
@@ -186,8 +194,26 @@
 
 @media (max-width: 767.98px) {
   .admin-bookings-skeleton-row--card {
-    min-height: 160px;
+    min-height: 188px;
   }
+}
+
+/* ---- accessibility utility (US-015/AC-01, AC-02) ------------------------------------------
+ *
+ * No global visually-hidden utility exists in this codebase (availability-count.css,
+ * policy-checklist.css and my-bookings.css each define their own) — this screen's own, per that
+ * convention, rather than a new cross-cutting `sr-only` this story has no mandate to introduce.
+ */
+.all-bookings__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---- the filter bar (US-014/AC-01–AC-03, AC-05, AC-10) ----------------------------------- */

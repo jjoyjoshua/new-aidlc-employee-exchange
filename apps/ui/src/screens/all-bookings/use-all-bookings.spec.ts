@@ -207,3 +207,48 @@ describe('useAllBookings — a filter change (US-014/AC-04, AC-09, edge case)', 
     expect(result.current).toMatchObject({ status: 'ready', items: PAGE_1.items });
   });
 });
+
+describe('useAllBookings.markCancelled — update in place, never a refetch (US-015/AC-04, AC-09)', () => {
+  it('flips one item\'s status to cancelled, leaving every other field and item untouched', async () => {
+    const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => result.current.markCancelled('a'));
+
+    expect(result.current).toMatchObject({
+      status: 'ready',
+      items: [{ ...PAGE_1.items[0], status: 'cancelled' }],
+    });
+  });
+
+  it('does not decrement total, and does not issue a second fetch (no refetch)', async () => {
+    const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => result.current.markCancelled('a'));
+
+    expect(result.current).toMatchObject({ total: PAGE_1.total });
+    expect(fetchAllBookings).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an unmatched id untouched — a no-op rather than a throw', async () => {
+    const fetchAllBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => result.current.markCancelled('does-not-exist'));
+
+    expect(result.current).toMatchObject({ status: 'ready', items: PAGE_1.items });
+  });
+
+  it('is a no-op while still loading', () => {
+    const fetchAllBookings = vi.fn(() => new Promise<AllBookingsOutcome>(() => {}));
+    const { result } = renderHook(() => useAllBookings(fetchAllBookings, NO_FILTERS));
+
+    act(() => result.current.markCancelled('a'));
+
+    expect(result.current).toMatchObject({ status: 'loading' });
+  });
+});

@@ -29,6 +29,17 @@ export interface AdminBookingsQuery {
   deskId?: string;
 }
 
+export type CancelAnyBookingOutcome =
+  | { kind: 'ok' }
+  /** US-015/AC-09. The row exists and is ALREADY cancelled — the owner got there first (US-011),
+   *  a concurrent admin request won, or a deactivation cascade (US-025) voided it. Deliberately
+   *  ONE outcome, never split by `cancellation_source` (design note §3.3, `decisions.md` D-08). */
+  | { kind: 'already_cancelled' }
+  /** No such booking, or a real booking that is past-dated (US-015/AC-02). Merged for the same
+   *  reason `bookings.service.ts`'s `CancelBookingOutcome` merges its own `not_found` — no
+   *  approved copy or error code distinguishes them (design note §2.4, `decisions.md` D-07). */
+  | { kind: 'not_found' };
+
 export function createAdminBookingsService({ bookings, nowMs, officeTimezone }: AdminBookingsServiceDeps) {
   return {
     /**
@@ -88,6 +99,35 @@ export function createAdminBookingsService({ bookings, nowMs, officeTimezone }: 
       const nextPage = offset + items.length < total ? page + 1 : null;
 
       return { today, total, items, nextPage };
+    },
+
+    /**
+     * US-015/AC-02, AC-04, AC-07, AC-09. Write first, then explain: the `UPDATE` inside
+     * `cancelAnyBooking` is the sole write and the sole arbiter of "confirmed -> cancelled". The
+     * disambiguating read below runs ONLY when that write applied to nothing, and ONLY to
+     * classify the miss — reading first and writing second would reintroduce the read-then-write
+     * window `cancelAnyBooking`'s own docblock exists to avoid, and would misclassify AC-09's own
+     * race (the read says confirmed, the owner's own cancel commits, this write misses, and a
+     * stale read would report "not found" for a booking that was just cancelled).
+     *
+     * `now`/`today` are ONE clock reading shared by both `cancelledAt` and the past-date guard,
+     * exactly as `cancelBooking` (`bookings.service.ts`) states for its own — two separate
+     * `nowMs()` calls would differ only across office midnight.
+     *
+     * "The owner already cancelled it" and "another admin's request won the race" are NOT
+     * distinguished — both produce a row with `status: 'cancelled'`, and the classification read
+     * looks at `status` alone (design note §3.3, `decisions.md` D-08).
+     */
+    async cancelAnyBooking(adminId: string, bookingId: string): Promise<CancelAnyBookingOutcome> {
+      const now = nowMs();
+      const today = officeToday(now, officeTimezone);
+
+      const cancelled = await bookings.cancelAnyBooking(bookingId, adminId, new Date(now), today);
+      if (cancelled) return { kind: 'ok' };
+
+      const existing = await bookings.findBookingState(bookingId);
+      if (existing?.status === 'cancelled') return { kind: 'already_cancelled' };
+      return { kind: 'not_found' };
     },
   };
 }

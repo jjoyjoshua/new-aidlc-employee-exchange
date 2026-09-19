@@ -58,7 +58,19 @@ beforeEach(() => {
   } as unknown as Config);
 });
 
+/** Most tests in this file only exercise `GET /bookings` — spread this in so those literals don't
+ *  each have to name the US-015 write methods they never call. */
+const NOT_USED_FOR_CANCEL: Pick<AdminBookingsRepository, 'cancelAnyBooking' | 'findBookingState'> = {
+  async cancelAnyBooking() {
+    throw new Error('cancelAnyBooking not stubbed — this test only exercises GET /bookings');
+  },
+  async findBookingState() {
+    throw new Error('findBookingState not stubbed — this test only exercises GET /bookings');
+  },
+};
+
 const noBookings: AdminBookingsRepository = {
+  ...NOT_USED_FOR_CANCEL,
   async listBookings() {
     return { rows: [], total: 0 };
   },
@@ -90,7 +102,11 @@ function deskRow(overrides: Partial<DeskRow> = {}): DeskRow {
   };
 }
 
-function appWith(options: { rows?: Row[]; adminBookings?: AdminBookingsRepository; desks?: DesksRepository }) {
+function appWith(options: {
+  rows?: Row[];
+  adminBookings?: Pick<AdminBookingsRepository, 'listBookings'> & Partial<AdminBookingsRepository>;
+  desks?: DesksRepository;
+}) {
   const rows = options.rows ?? [ADMIN, EMPLOYEE];
 
   const profiles = {
@@ -113,7 +129,7 @@ function appWith(options: { rows?: Row[]; adminBookings?: AdminBookingsRepositor
     profiles,
     verifier,
     nowMs: NOW_MS,
-    adminBookings: options.adminBookings ?? noBookings,
+    adminBookings: options.adminBookings ? { ...NOT_USED_FOR_CANCEL, ...options.adminBookings } : noBookings,
     desks: options.desks ?? noDesks,
   });
 }
@@ -205,7 +221,7 @@ describe('GET /api/admin/bookings — paging boundary (US-013/AC-04)', () => {
 
   it('51 matching rows shows a next page, and ?page=2 returns the 51st', async () => {
     const allRows = Array.from({ length: 51 }, (_, i) => bookingRow({ id: `id-${i}` }));
-    const adminBookings: AdminBookingsRepository = {
+    const adminBookings: Pick<AdminBookingsRepository, 'listBookings'> = {
       async listBookings(_filter, offset, limit) {
         return { rows: allRows.slice(offset, offset + limit), total: allRows.length };
       },
@@ -289,7 +305,7 @@ describe('/api/admin/anything — unaffected by this router no longer being empt
 describe('GET /api/admin/bookings — US-014 filters', () => {
   function capturingRepository(rows: AdminBookingRow[] = []) {
     let captured: AdminBookingsFilter | undefined;
-    const repository: AdminBookingsRepository = {
+    const repository: Pick<AdminBookingsRepository, 'listBookings'> = {
       async listBookings(filter) {
         captured = filter;
         return { rows, total: rows.length };
@@ -341,7 +357,7 @@ describe('GET /api/admin/bookings — US-014 filters', () => {
     // A minimal in-memory filter application, standing in for Postgres, so this test exercises
     // the SERVICE's resolved filter end to end rather than merely capturing it.
     const allRows = [pastConfirmed, futureConfirmed];
-    const adminBookings: AdminBookingsRepository = {
+    const adminBookings: Pick<AdminBookingsRepository, 'listBookings'> = {
       async listBookings(filter) {
         const matched = allRows.filter((r) => {
           if (filter.from !== undefined && r.booking_date < filter.from) return false;
@@ -370,7 +386,7 @@ describe('GET /api/admin/bookings — US-014 filters', () => {
     const cancelledPast = bookingRow({ id: 'c1', booking_date: '2026-09-01', status: 'cancelled' });
     const cancelledFuture = bookingRow({ id: 'c2', booking_date: '2026-09-30', status: 'cancelled' });
     const allRows = [cancelledPast, cancelledFuture];
-    const adminBookings: AdminBookingsRepository = {
+    const adminBookings: Pick<AdminBookingsRepository, 'listBookings'> = {
       async listBookings(filter) {
         const matched = allRows.filter((r) => filter.status === undefined || r.status === filter.status);
         return { rows: matched, total: matched.length };
@@ -388,7 +404,7 @@ describe('GET /api/admin/bookings — US-014 filters', () => {
     const rowA = bookingRow({ id: 'a', desk_number: 'A-01' });
     const rowB = bookingRow({ id: 'b', desk_number: 'B-02' });
     const deskAId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
-    const adminBookings: AdminBookingsRepository = {
+    const adminBookings: Pick<AdminBookingsRepository, 'listBookings'> = {
       async listBookings(filter) {
         const matched = filter.deskId === deskAId ? [rowA] : [rowA, rowB];
         return { rows: matched, total: matched.length };
@@ -471,5 +487,103 @@ describe('GET /api/admin/desks (US-014/AC-03, edge case)', () => {
     const app = appWith({ desks: { async listAllDesks() { return []; } } });
     const response = await request(app).get('/api/admin/desks').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
     expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
+  const BOOKING_ID = '11111111-1111-4111-8111-111111111111';
+
+  function capturingCancel(outcome: { id: string } | undefined) {
+    const calls: Array<{ bookingId: string; adminId: string; cancelledAt: Date; today: string }> = [];
+    const repository: Pick<AdminBookingsRepository, 'listBookings' | 'cancelAnyBooking' | 'findBookingState'> = {
+      async listBookings() {
+        throw new Error('not used in this test');
+      },
+      async cancelAnyBooking(bookingId, adminId, cancelledAt, today) {
+        calls.push({ bookingId, adminId, cancelledAt, today });
+        return outcome;
+      },
+      async findBookingState() {
+        return undefined;
+      },
+    };
+    return { repository, calls };
+  }
+
+  it('cancels a confirmed booking: 200 empty body, and the acting admin session id reaches the repository as cancelled_by (US-015/AC-02, AC-04, AC-05, AC-06)', async () => {
+    const { repository, calls } = capturingCancel({ id: BOOKING_ID });
+    const app = appWith({ adminBookings: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({});
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.bookingId).toBe(BOOKING_ID);
+    expect(calls[0]?.adminId).toBe(ADMIN.id);
+  });
+
+  it('a past-dated or non-existent booking id gets 404 booking_not_found (US-015/AC-02)', async () => {
+    const { repository } = capturingCancel(undefined);
+    const app = appWith({ adminBookings: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('booking_not_found');
+  });
+
+  it('an already-cancelled booking gets 409 booking_already_cancelled (US-015/AC-09)', async () => {
+    const repository: Pick<AdminBookingsRepository, 'listBookings' | 'cancelAnyBooking' | 'findBookingState'> = {
+      async listBookings() {
+        throw new Error('not used in this test');
+      },
+      async cancelAnyBooking() {
+        return undefined;
+      },
+      async findBookingState() {
+        return { status: 'cancelled', booking_date: '2026-09-10' };
+      },
+    };
+    const app = appWith({ adminBookings: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('booking_already_cancelled');
+  });
+
+  it('a malformed id is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({});
+    const response = await request(app)
+      .post('/api/admin/bookings/not-a-uuid/cancel')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('refuses an Employee session with 403 admin_only', async () => {
+    const { repository } = capturingCancel({ id: BOOKING_ID });
+    const app = appWith({ adminBookings: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({});
+    const response = await request(app).post(`/api/admin/bookings/${BOOKING_ID}/cancel`);
+    expect(response.status).toBe(401);
   });
 });

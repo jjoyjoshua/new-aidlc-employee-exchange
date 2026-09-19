@@ -14,9 +14,17 @@
  *     — preserving US-007/AC-07's converge-don't-fail behaviour exactly (design note §8.2).
  *   - `MyBookings` (SCR-002) uses all four, because ST-09 renders `already_cancelled` and
  *     `refused`/`failed` differently (design note §5.3).
+ *
+ * US-015 adds `createAdminCancelBooking`, a SIBLING rather than a parameter on the function
+ * above: the two endpoints sit behind different guards (`/api/bookings` vs `/api/admin/bookings`),
+ * and a single function taking a variable path would erase exactly that difference at the call
+ * site — the same species of argument US-013/US-014 give for keeping their own cross-employee
+ * reads on a separate object rather than a parameterized method. The outcome mapping is identical
+ * (both endpoints answer with the same codes), so it is extracted once and shared, never
+ * duplicated.
  */
 import { ERROR_CODES } from '@desk-booking/contracts';
-import type { ApiClient } from './api-client.js';
+import type { ApiClient, ApiResult } from './api-client.js';
 
 export type CancelBookingOutcome =
   | { kind: 'ok' }
@@ -32,15 +40,32 @@ export type CancelBookingOutcome =
   | { kind: 'failed' };
 export type CancelBookingFetcher = (bookingId: string) => Promise<CancelBookingOutcome>;
 
+/** Shared by both factories below: the two endpoints answer with the identical code vocabulary
+ *  (`booking_already_cancelled`, `booking_not_found`), so there is exactly one place this mapping
+ *  is written. */
+function mapCancelResult(result: ApiResult<void>): CancelBookingOutcome {
+  if (result.kind === 'ok') return { kind: 'ok' };
+  if (result.kind === 'error' && result.code === ERROR_CODES.booking_already_cancelled) {
+    return { kind: 'already_cancelled' };
+  }
+  if (result.kind === 'error' && result.code === ERROR_CODES.booking_not_found) return { kind: 'refused' };
+  return { kind: 'failed' };
+}
+
 export function createCancelBooking(api: ApiClient): CancelBookingFetcher {
   return async (bookingId: string): Promise<CancelBookingOutcome> => {
     const result = await api.requestNoContent(`/api/bookings/${bookingId}/cancel`, { method: 'POST' });
+    return mapCancelResult(result);
+  };
+}
 
-    if (result.kind === 'ok') return { kind: 'ok' };
-    if (result.kind === 'error' && result.code === ERROR_CODES.booking_already_cancelled) {
-      return { kind: 'already_cancelled' };
-    }
-    if (result.kind === 'error' && result.code === ERROR_CODES.booking_not_found) return { kind: 'refused' };
-    return { kind: 'failed' };
+/**
+ * US-015 — the ADMIN cancel, `POST /api/admin/bookings/:id/cancel`. Behind `requireAdmin`
+ * (`http/app.ts`), never called from an employee-facing screen.
+ */
+export function createAdminCancelBooking(api: ApiClient): CancelBookingFetcher {
+  return async (bookingId: string): Promise<CancelBookingOutcome> => {
+    const result = await api.requestNoContent(`/api/admin/bookings/${bookingId}/cancel`, { method: 'POST' });
+    return mapCancelResult(result);
   };
 }

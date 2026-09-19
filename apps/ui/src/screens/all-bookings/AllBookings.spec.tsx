@@ -9,6 +9,7 @@ import type { ApiClient } from '../../lib/api-client.js';
 import type { AdminDesk, AllBookingsResponse, AuthenticatedUser, Office } from '@desk-booking/contracts';
 import type { AllBookingsFetcher, AllBookingsOutcome } from './use-all-bookings.js';
 import type { DesksFetcher } from './use-desks.js';
+import type { CancelBookingFetcher } from '../../lib/cancel-booking.js';
 
 const ADMIN: AuthenticatedUser = {
   id: '9c858901-8a57-4791-81fe-4c455b099bc9',
@@ -31,10 +32,12 @@ function SignedIn({
   initialEntries,
   fetchAllBookings,
   fetchDesks = noDesks,
+  cancelBooking,
 }: {
   initialEntries: Array<string | { pathname: string; state?: unknown }>;
   fetchAllBookings?: AllBookingsFetcher;
   fetchDesks?: DesksFetcher;
+  cancelBooking?: CancelBookingFetcher;
 }) {
   const client: ApiClient = {
     request: (async () => ({
@@ -51,7 +54,9 @@ function SignedIn({
           <Routes>
             <Route
               path="/admin/bookings"
-              element={<AllBookings fetchAllBookings={fetchAllBookings} fetchDesks={fetchDesks} />}
+              element={
+                <AllBookings fetchAllBookings={fetchAllBookings} fetchDesks={fetchDesks} cancelBooking={cancelBooking} />
+              }
             />
           </Routes>
         </Primer>
@@ -278,6 +283,178 @@ describe('AllBookings — AC-08, the receiving half of a pre-filtered arrival', 
     );
 
     expect(await screen.findByText('Nobody has booked a desk yet.')).toBeInTheDocument();
+  });
+});
+
+describe('AllBookings — the cancel dialog (US-015/AC-03, AC-07, AC-08)', () => {
+  const ROW: AllBookingsResponse['items'][number] = {
+    id: 'b1',
+    date: '2026-09-16',
+    deskNumber: 'A-01',
+    employeeName: 'Priya Raman',
+    status: 'confirmed',
+  };
+  const response: AllBookingsResponse = { today: OFFICE.today, total: 1, items: [ROW], nextPage: null };
+
+  it("opening the dialog names that row's employee, desk and date (US-015/AC-03)", async () => {
+    const user = userEvent.setup();
+    render(<SignedIn initialEntries={['/admin/bookings']} fetchAllBookings={async () => ok(response)} />);
+
+    const [cancelButton] = await screen.findAllByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton!);
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByText("Cancel Priya Raman's desk?")).toBeInTheDocument();
+    expect(screen.getByText(/A-01 · Wed 16 Sep\. The desk goes back into the pool and Priya Raman is emailed\./)).toBeInTheDocument();
+  });
+
+  it('the busy state disables both dialog actions while a cancel is in flight (US-015/AC-07)', async () => {
+    const user = userEvent.setup();
+    let resolveCancel!: (outcome: Awaited<ReturnType<CancelBookingFetcher>>) => void;
+    const cancelBooking: CancelBookingFetcher = () => new Promise((resolve) => (resolveCancel = resolve));
+
+    render(<SignedIn initialEntries={['/admin/bookings']} fetchAllBookings={async () => ok(response)} cancelBooking={cancelBooking} />);
+
+    const [cancelButton] = await screen.findAllByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton!);
+    await user.click(screen.getByRole('button', { name: 'Cancel this booking' }));
+
+    expect(screen.getByRole('button', { name: 'Keep it' })).toBeDisabled();
+
+    resolveCancel({ kind: 'ok' });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('a failure keeps the dialog open with a danger alert and a Try again confirm label; the row stays Confirmed (US-015/AC-08)', async () => {
+    const user = userEvent.setup();
+    const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'failed' });
+
+    render(<SignedIn initialEntries={['/admin/bookings']} fetchAllBookings={async () => ok(response)} cancelBooking={cancelBooking} />);
+
+    const [cancelButton] = await screen.findAllByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton!);
+    await user.click(screen.getByRole('button', { name: 'Cancel this booking' }));
+
+    expect(await screen.findByText("We couldn't cancel that just now. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
+  });
+});
+
+describe('AllBookings — successful cancel updates the row in place, never a refetch (US-015/AC-04)', () => {
+  it('with status=confirmed active in filter state, the cancelled row stays present and reads Cancelled — no second fetch', async () => {
+    const user = userEvent.setup();
+    const response: AllBookingsResponse = {
+      today: OFFICE.today,
+      total: 1,
+      items: [{ id: 'b1', date: '2026-09-16', deskNumber: 'A-01', employeeName: 'Priya Raman', status: 'confirmed' }],
+      nextPage: null,
+    };
+    let fetchCalls = 0;
+    const fetchAllBookings: AllBookingsFetcher = async () => {
+      fetchCalls += 1;
+      return ok(response);
+    };
+    const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'ok' });
+
+    render(
+      <SignedIn
+        initialEntries={['/admin/bookings?status=confirmed']}
+        fetchAllBookings={fetchAllBookings}
+        cancelBooking={cancelBooking}
+      />,
+    );
+
+    const [cancelButton] = await screen.findAllByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton!);
+    await user.click(screen.getByRole('button', { name: 'Cancel this booking' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.getAllByText('Priya Raman').length).toBeGreaterThan(0); // the row is still rendered
+    expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0);
+    expect(fetchCalls).toBe(1); // no refetch — a second fetch would be the AC-04 regression
+  });
+
+  it('focus returns to the row after a successful cancel, not to <body> (design note §5.6)', async () => {
+    const user = userEvent.setup();
+    const response: AllBookingsResponse = {
+      today: OFFICE.today,
+      total: 1,
+      items: [{ id: 'b1', date: '2026-09-16', deskNumber: 'A-01', employeeName: 'Priya Raman', status: 'confirmed' }],
+      nextPage: null,
+    };
+    const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'ok' });
+
+    render(<SignedIn initialEntries={['/admin/bookings']} fetchAllBookings={async () => ok(response)} cancelBooking={cancelBooking} />);
+
+    const [cancelButton] = await screen.findAllByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton!);
+    await user.click(screen.getByRole('button', { name: 'Cancel this booking' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    await waitFor(() => {
+      const focused = document.activeElement;
+      expect(focused?.getAttribute('data-booking-row')).toBe('b1');
+    });
+  });
+});
+
+describe('AllBookings — already cancelled (US-015/AC-09)', () => {
+  it('shows the single-action Close dialog and updates the row without a second fetch', async () => {
+    const user = userEvent.setup();
+    const response: AllBookingsResponse = {
+      today: OFFICE.today,
+      total: 1,
+      items: [{ id: 'b1', date: '2026-09-16', deskNumber: 'A-01', employeeName: 'Priya Raman', status: 'confirmed' }],
+      nextPage: null,
+    };
+    let fetchCalls = 0;
+    const fetchAllBookings: AllBookingsFetcher = async () => {
+      fetchCalls += 1;
+      return ok(response);
+    };
+    const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'already_cancelled' });
+
+    render(
+      <SignedIn initialEntries={['/admin/bookings']} fetchAllBookings={fetchAllBookings} cancelBooking={cancelBooking} />,
+    );
+
+    const [cancelButton] = await screen.findAllByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton!);
+    await user.click(screen.getByRole('button', { name: 'Cancel this booking' }));
+
+    expect(await screen.findByText('Priya Raman has already cancelled this booking.')).toBeInTheDocument();
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    expect(screen.queryByRole('button', { name: 'Cancel this booking' })).not.toBeInTheDocument();
+
+    await user.click(closeButton);
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0);
+    expect(fetchCalls).toBe(1);
+  });
+});
+
+describe('AllBookings — no bulk cancel, ever (US-015/AC-10)', () => {
+  it('has no checkbox role and one Cancel control per cancellable row, in both layouts (US-015/AC-10)', async () => {
+    const response: AllBookingsResponse = {
+      today: OFFICE.today,
+      total: 2,
+      items: [
+        { id: 'a', date: '2026-09-16', deskNumber: 'A-01', employeeName: 'Priya Raman', status: 'confirmed' },
+        { id: 'b', date: '2026-09-10', deskNumber: 'B-02', employeeName: 'Sam Okoro', status: 'completed' },
+      ],
+      nextPage: null,
+    };
+    render(<SignedIn initialEntries={['/admin/bookings']} fetchAllBookings={async () => ok(response)} />);
+
+    await screen.findAllByText('Priya Raman');
+
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /select all/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /cancel selected/i })).not.toBeInTheDocument();
+    // One cancellable row (Priya, confirmed) × two rendered layouts (table + card) = 2 controls.
+    expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(2);
   });
 });
 

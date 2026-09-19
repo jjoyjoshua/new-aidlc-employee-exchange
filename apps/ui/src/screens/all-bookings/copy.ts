@@ -61,3 +61,56 @@ export function countLine(total: number, fromLabel: string, options: CountLineOp
 /** The page header's timezone line (NFR-001) — `office.timezone`, matching `my-bookings/copy.ts`'s
  *  own `OFFICE_TIME` wording exactly. */
 export const OFFICE_TIME = (timezone: string): string => `Office time (${timezone})`;
+
+/**
+ * ST-07 — US-015/AC-01, AC-02. The reason a non-cancellable row states, verbatim against the
+ * real hi-fi frame (`HF / SCR-005 · All bookings / ST-07 Row not cancellable`). Full employee
+ * name is used throughout this story's copy (`decisions.md` D-05) — these two strings carry no
+ * name, so that decision does not touch them.
+ */
+export function cancelReason(status: 'completed' | 'cancelled'): string {
+  return status === 'completed' ? "Past bookings can't be cancelled" : 'Already cancelled';
+}
+
+/**
+ * ST-08 — US-015/AC-03. Verbatim against the real hi-fi frame: "Cancel Priya Raman's desk?" /
+ * "A-01 · Mon 7 Sep. The desk goes back into the pool and Priya is emailed." `employeeName` is
+ * the FULL name throughout (`decisions.md` D-05) — no derived first name, and no special-casing
+ * for a name already ending in "s".
+ */
+export function cancelDialogTitle(employeeName: string): string {
+  return `Cancel ${employeeName}'s desk?`;
+}
+
+export function cancelDialogBody(deskNumber: string, dateLabel: string, employeeName: string): string {
+  return `${deskNumber} · ${dateLabel}. The desk goes back into the pool and ${employeeName} is emailed.`;
+}
+
+/** ST-08's actions — verbatim against the real hi-fi frame. `CANCEL_CONFIRM_LABEL` is
+ *  deliberately NOT `my-bookings/copy.ts`'s `'Cancel booking'` — SCR-005 draws "Cancel this
+ *  booking" for this screen specifically, because on a screen full of other people's bookings
+ *  "this" is the word doing the work. */
+export const CANCEL_CONFIRM_LABEL = 'Cancel this booking';
+export const CANCEL_KEEP_LABEL = 'Keep it';
+
+/** ST-10's two distinct messages, verbatim against the real hi-fi frames. The retryable message
+ *  is deliberately generic — a past-dated cancel attempt answers the SAME `404` as "no such
+ *  booking" and gets this SAME message (`decisions.md` D-07), never a third one. */
+export const CANCEL_FAILED_RETRYABLE = "We couldn't cancel that just now. Try again.";
+export const CANCEL_RETRY_LABEL = 'Try again';
+
+/** ST-10's non-retryable branch (US-015/AC-09) — verbatim against the real hi-fi frame, kept
+ *  exactly as approved even though the endpoint cannot always verify who cancelled first
+ *  (`decisions.md` D-08). `employeeName` is the row's own, full name. */
+export function alreadyCancelledMessage(employeeName: string): string {
+  return `${employeeName} has already cancelled this booking.`;
+}
+export const CANCEL_CLOSE_LABEL = 'Close';
+
+/** ST-11 — US-015/AC-05, AC-06. Verbatim against the real hi-fi frame: "A-01 released for Mon 7
+ *  Sep. Priya Raman has been emailed." This is copy only — no email is actually sent by this
+ *  story (`decisions.md` D-03), the same pattern `cancelledToast` in `my-bookings/copy.ts`
+ *  already ships for the employee-initiated cancel. */
+export function cancelledToast(deskNumber: string, dateLabel: string, employeeName: string): string {
+  return `${deskNumber} released for ${dateLabel}. ${employeeName} has been emailed.`;
+}
