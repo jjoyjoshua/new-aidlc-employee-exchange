@@ -68,3 +68,5 @@ aidlc-check: OK (framework 0.5.0, 519 IDs, 36 warnings)
 - [x] `knowledge/traceability/manifest.json` updated; `node tools/aidlc-check.mjs` green locally
 - [ ] Regression test citing the issue — n/a, this is a new story, not a bug fix
 - [x] No unrelated changes; docs updated (`ai/standards/api-standards.md`, `apps/api/src/modules/bookings/README.md`, this spec package)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
