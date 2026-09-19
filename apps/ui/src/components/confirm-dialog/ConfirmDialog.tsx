@@ -6,24 +6,20 @@
  * needs the identical dialog for its own cancel flow and extends this one rather than
  * reconciling two copies later.
  *
- * US-011 (design note §5.1) brings this component up to its own approved Figma master component
- * (`Dialog`, node `34:122`), which this file never fully matched: a header close (✕) icon, a
- * focus trap with focus restored to the triggering element on unmount, an Escape handler that is
- * suppressed while `busy` (previously unconditional — a live defect, SCR-002 ST-08's own
- * requirement), and two additive props (`error`, `singleAction`) for ST-09's non-retryable
- * branch. None of this changes the existing caller's (`ExistingBookingState`) behaviour — it is
- * a pure improvement toward the component's own approved design.
+ * US-017 (design note §5.2) pulled the shared chrome — scrim, focus trap, focus restore, the
+ * mobile-first sheet/card treatment, the header and its close icon — into `components/dialog/Dialog`,
+ * because SCR-007's own form needs that same chrome under `role="dialog"` with a non-destructive
+ * confirm action, which this component's original hardcoded `role="alertdialog"` and `danger`
+ * button could not give it. This file now composes `Dialog`, unchanged in every behaviour this
+ * component's own tests assert.
  *
  * The confirm action uses `Button`'s `danger` variant, the solid destructive fill added
  * 2026-09-08 in the design file.
  */
-import { useEffect, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '../button/Button.js';
 import { Alert } from '../alert/Alert.js';
-import closeIconMarkup from '../../assets/icon-close.svg?raw';
-import './confirm-dialog.css';
-
-const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+import { Dialog } from '../dialog/Dialog.js';
 
 export interface ConfirmDialogProps {
   title: string;
@@ -55,91 +51,14 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  // The element that had focus before this dialog opened (US-011/AC-03) — captured once, on
-  // mount, before focus moves into the dialog below.
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-
-    return () => {
-      previouslyFocusedRef.current?.focus();
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // US-011/AC-07, SCR-002 ST-08 — "Escape is suppressed while in flight". Previously
-      // unconditional: a live defect, since it let Escape dismiss a dialog whose request was
-      // still in flight, contradicting AC-07's "the dialog stays open" (design note §5.1b).
-      if (event.key === 'Escape') {
-        if (!busy) onCancel();
-        return;
-      }
-
-      // A focus trap, so Tab never leaves the dialog while it is open (SCR-002 ST-07 — "Focus is
-      // trapped in the dialog"). Only acts on Tab; every other key passes through untouched.
-      if (event.key !== 'Tab' || !dialogRef.current) return;
-
-      const focusables = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-      if (focusables.length === 0) return;
-
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement;
-
-      if (event.shiftKey) {
-        if (active === first || !dialogRef.current.contains(active)) {
-          event.preventDefault();
-          last?.focus();
-        }
-      } else if (active === last || !dialogRef.current.contains(active)) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [busy, onCancel]);
-
   return (
-    <div className="confirm-dialog__overlay">
-      <div
-        ref={dialogRef}
-        className="confirm-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        tabIndex={-1}
-      >
-        <div className="confirm-dialog__header">
-          <h2 id="confirm-dialog-title" className="confirm-dialog__title">
-            {title}
-          </h2>
-          {/* Figma `Icon / close` (node 11:50) — "Dismiss a dialog", the same icon and asset
-              `StatusChip` already uses for the Cancelled booking variant. Calls the same
-              `onCancel` as "Keep it" / Escape — not a new prop, not a third dismissal path. */}
-          <button
-            type="button"
-            className="confirm-dialog__close"
-            aria-label="Dismiss"
-            onClick={onCancel}
-            disabled={busy}
-          >
-            <span className="confirm-dialog__close-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: closeIconMarkup }} />
-          </button>
-        </div>
-        <div className="confirm-dialog__body">
-          {body}
-          {error ? (
-            <Alert tone="danger" live="assertive">
-              {error}
-            </Alert>
-          ) : null}
-        </div>
-        <div className="confirm-dialog__actions">
+    <Dialog
+      title={title}
+      role="alertdialog"
+      busy={busy}
+      onDismiss={onCancel}
+      footer={
+        <>
           <Button variant="secondary" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </Button>
@@ -148,8 +67,15 @@ export function ConfirmDialog({
               {confirmLabel}
             </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      {body}
+      {error ? (
+        <Alert tone="danger" live="assertive">
+          {error}
+        </Alert>
+      ) : null}
+    </Dialog>
   );
 }

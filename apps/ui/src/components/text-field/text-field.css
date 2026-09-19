@@ -127,3 +127,11 @@
   height: var(--icon-sm);
   margin-top: var(--s-2);
 }
+
+/* US-017 design note §5.4 (SCR-007). States the rule and what it is for — quiet, not an error. */
+.field__helper {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  color: var(--c-text-muted);
+}

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bookedAheadLabel, bookedAheadAccessibleText, summaryLine } from './copy.js';
+import {
+  bookedAheadLabel,
+  bookedAheadAccessibleText,
+  deskAddedToast,
+  deskNumberFormatError,
+  duplicateDeskTitle,
+  summaryLine,
+} from './copy.js';
 
 describe('bookedAheadLabel (US-016/AC-05 — zero is a dash, not blank)', () => {
   it('renders zero as an em dash', () => {
@@ -40,5 +47,29 @@ describe('summaryLine (US-016 — the "N desks · M active, K inactive" line, de
   it('pluralizes correctly for a single desk', () => {
     const desks = [{ id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 0 }];
     expect(summaryLine(desks)).toBe('1 desk · 1 active, 0 inactive');
+  });
+});
+
+describe('deskAddedToast (US-017/AC-01, SCR-007 ST-06)', () => {
+  it('names the effect on bookability, not just the outcome', () => {
+    expect(deskAddedToast('A-12')).toBe('Desk A-12 added. People can book it from today.');
+  });
+});
+
+describe('duplicateDeskTitle (US-017/AC-04, PRIN-3 — leads with the colliding number)', () => {
+  it('names the colliding desk number', () => {
+    expect(duplicateDeskTitle('A-01')).toBe('A-01 is already taken by another desk.');
+  });
+});
+
+describe('deskNumberFormatError (US-017/AC-02 — two messages, empty vs bad shape)', () => {
+  it('asks for a number when the entry is empty or whitespace only', () => {
+    expect(deskNumberFormatError('')).toBe('Give the desk a number.');
+    expect(deskNumberFormatError('   ')).toBe('Give the desk a number.');
+  });
+
+  it('restates the rule when the shape is wrong', () => {
+    expect(deskNumberFormatError('A-1')).toBe('Use one letter, a dash and two digits — like A-01.');
+    expect(deskNumberFormatError('Window seat 3')).toBe('Use one letter, a dash and two digits — like A-01.');
   });
 });

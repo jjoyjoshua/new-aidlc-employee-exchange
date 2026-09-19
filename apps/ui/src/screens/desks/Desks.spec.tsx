@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -8,7 +9,8 @@ import { RequireRole } from '../../lib/auth/require-role.js';
 import type { ApiClient } from '../../lib/api-client.js';
 import type { AdminDesk, AuthenticatedUser, Office } from '@desk-booking/contracts';
 import type { DesksFetcher, DesksOutcome } from '../../lib/use-desks.js';
-import { PAGE_TITLE, UNAVAILABLE_CONTROL_REASON } from './copy.js';
+import type { AddDeskFetcher, AddDeskOutcome } from '../../lib/add-desk.js';
+import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
   id: '9c858901-8a57-4791-81fe-4c455b099bc9',
@@ -22,7 +24,17 @@ const EMPLOYEE: AuthenticatedUser = { ...ADMIN, id: '3f2504e0-4f89-41d3-9a0c-030
 
 const OFFICE: Office = { timezone: 'Asia/Kolkata', today: '2026-09-19' };
 
-function SignedIn({ fetchDesks, user = ADMIN, guarded = false }: { fetchDesks: DesksFetcher; user?: AuthenticatedUser; guarded?: boolean }) {
+function SignedIn({
+  fetchDesks,
+  addDesk,
+  user = ADMIN,
+  guarded = false,
+}: {
+  fetchDesks: DesksFetcher;
+  addDesk?: AddDeskFetcher;
+  user?: AuthenticatedUser;
+  guarded?: boolean;
+}) {
   const client: ApiClient = {
     request: (async () => ({
       kind: 'ok',
@@ -31,7 +43,7 @@ function SignedIn({ fetchDesks, user = ADMIN, guarded = false }: { fetchDesks: D
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screen = <Desks fetchDesks={fetchDesks} />;
+  const screen = <Desks fetchDesks={fetchDesks} addDesk={addDesk} />;
 
   return (
     <MemoryRouter initialEntries={['/admin/desks']}>
@@ -81,14 +93,14 @@ describe('Desks — the ready view (US-016/AC-01, AC-02, AC-04, AC-05)', () => {
 });
 
 describe('Desks — empty inventory (US-016/AC-06)', () => {
-  it('renders the empty state with no table and a disabled Add desk action', async () => {
+  it('renders the empty state with no table and an enabled Add desk action (US-017 deletes US-016\'s disabled treatment)', async () => {
     render(<SignedIn fetchDesks={async () => okDesks([])} />);
 
     expect(await screen.findByText('No desks yet. Nobody can book until you add one.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     const addDeskButtons = screen.getAllByRole('button', { name: /^Add desk/ });
     expect(addDeskButtons.length).toBeGreaterThan(0);
-    for (const button of addDeskButtons) expect(button).toBeDisabled();
+    for (const button of addDeskButtons) expect(button).toBeEnabled();
   });
 });
 
@@ -140,12 +152,80 @@ describe('Desks — no overflow menu at any width (US-016/AC-08)', () => {
   });
 });
 
-describe('Desks — unbuilt controls ship visible and disabled (US-016/AC-06, AC-08 — removed once their own stories ship)', () => {
-  it('the add-desk story deletes this: the header Add desk is disabled with a reason', async () => {
+describe('Desks — add a desk (US-017/AC-01, AC-04, AC-06)', () => {
+  it('opens the add-desk dialog from the header action', async () => {
     render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
-    const addDesk = await screen.findByRole('button', { name: /^Add desk/ });
-    expect(addDesk).toBeDisabled();
-    expect(addDesk).toHaveAccessibleName(new RegExp(`Add desk.*${UNAVAILABLE_CONTROL_REASON}`));
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Add desk/ }));
+
+    expect(screen.getByRole('dialog', { name: 'Add desk' })).toBeInTheDocument();
+  });
+
+  it('a successful add inserts the new desk into the list, in number order, with no second GET /desks fetch, and shows a toast (US-017/AC-01)', async () => {
+    let fetchCount = 0;
+    const fetchDesks: DesksFetcher = async () => {
+      fetchCount += 1;
+      return okDesks([ACTIVE, INACTIVE]); // A-01, C-05
+    };
+    const addDesk: AddDeskFetcher = async () => ({
+      kind: 'ok',
+      desk: { id: 'new', deskNumber: 'B-03', isActive: true, bookedAhead: 0 },
+    });
+
+    render(<SignedIn fetchDesks={fetchDesks} addDesk={addDesk} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Add desk/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Add desk' });
+    await userEvent.type(within(dialog).getByLabelText('Desk number'), 'b-03');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add desk' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(fetchCount).toBe(1); // still one — the list was updated in place, never refetched
+    expect(await screen.findByText('Desk B-03 added. People can book it from today.')).toBeInTheDocument();
+    expect(await screen.findByText('3 desks · 2 active, 1 inactive')).toBeInTheDocument();
+  });
+
+  it('a duplicate desk number keeps the dialog open with the collision named (US-017/AC-04)', async () => {
+    const addDesk: AddDeskFetcher = async () => ({ kind: 'duplicate' });
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} addDesk={addDesk} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Add desk/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Add desk' });
+    await userEvent.type(within(dialog).getByLabelText('Desk number'), 'A-01');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add desk' }));
+
+    expect(await screen.findByText('A-01 is already taken by another desk.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add desk' })).toBeInTheDocument();
+  });
+
+  it('Cancel closes the dialog without adding anything', async () => {
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Add desk/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('a second activation while the first save is in flight issues exactly one request (US-017/AC-06)', async () => {
+    let resolveAdd!: (outcome: AddDeskOutcome) => void;
+    let calls = 0;
+    const addDesk: AddDeskFetcher = () => {
+      calls += 1;
+      return new Promise((resolve) => (resolveAdd = resolve));
+    };
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} addDesk={addDesk} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Add desk/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Add desk' });
+    await userEvent.type(within(dialog).getByLabelText('Desk number'), 'B-03');
+    const confirm = within(dialog).getByRole('button', { name: 'Add desk' });
+    await userEvent.click(confirm);
+    await userEvent.click(confirm);
+
+    expect(calls).toBe(1);
+    resolveAdd({ kind: 'ok', desk: { id: 'new', deskNumber: 'B-03', isActive: true, bookedAhead: 0 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });
 

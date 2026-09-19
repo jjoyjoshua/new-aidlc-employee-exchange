@@ -61,3 +61,41 @@ export function summaryLine(desks: AdminDesk[]): string {
   const inactive = total - active;
   return `${total} desk${total === 1 ? '' : 's'} · ${active} active, ${inactive} inactive`;
 }
+
+/**
+ * SCR-007 (US-017 — the add-desk dialog). Verified against the real hi-fi frames
+ * (`HF / SCR-007 · Desk form / ST-01`, node `225:20`), not the written spec alone.
+ */
+export const ADD_DESK_DIALOG_TITLE = 'Add desk';
+export const DESK_NUMBER_LABEL = 'Desk number';
+export const DESK_NUMBER_HELPER =
+  'One letter, a dash, two digits — like A-01. The letter groups desks into zones on the booking screen.';
+export const CANCEL_LABEL = 'Cancel';
+
+/** ST-03 — US-017/AC-02. Two messages, because the two mistakes need different corrections: the
+ *  empty case names what is missing, the bad-shape case restates the rule rather than saying
+ *  "invalid" (SCR-007's own reasoning). */
+export function deskNumberFormatError(raw: string): string {
+  if (raw.trim().length === 0) return 'Give the desk a number.';
+  return 'Use one letter, a dash and two digits — like A-01.';
+}
+
+/** ST-04 — US-017/AC-04 (PRIN-3). Leads with the colliding number rather than stating a rule. */
+export function duplicateDeskTitle(deskNumber: string): string {
+  return `${deskNumber} is already taken by another desk.`;
+}
+
+/** ST-04's body. The case sentence is a separate, conditional half — see `DeskFormDialog`, which
+ *  appends it only when the collision was case-insensitive rather than exact. */
+export const DUPLICATE_DESK_BODY = 'Desk numbers have to be unique, and capitals don’t make a difference.';
+export const DUPLICATE_DESK_CASE_SENTENCE = 'a-01 and A-01 count as the same.';
+
+/** ST-07 — US-017/AC-07. */
+export const SAVE_FAILED = "We couldn't save that just now. Try again.";
+export const RETRY_LABEL = 'Try again';
+
+/** ST-06. Names the effect on BOOKABILITY, not just the outcome — the fact everyone else in the
+ *  office cares about, the same reasoning `my-bookings`' own cancellation toast states. */
+export function deskAddedToast(deskNumber: string): string {
+  return `Desk ${deskNumber} added. People can book it from today.`;
+}

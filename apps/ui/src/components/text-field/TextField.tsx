@@ -27,14 +27,23 @@ export interface TextFieldProps
   invalid?: boolean;
   /** Rendered inside the control, after the input — SCR-001's show/hide toggle. */
   trailing?: ReactNode;
+  /**
+   * Rendered after the error message (US-017 design note §5.4, SCR-007) — states the field's
+   * rule and what it is for. Folded into the composed `aria-describedby` alongside `error`, so a
+   * caller cannot accidentally drop the error's own association by supplying a describedby of its
+   * own: this component owns the id, the caller never sees it.
+   */
+  helper?: ReactNode;
   /** Supplied by a parent that needs to move focus here (US-001/AC-05, AC-04). */
   inputRef?: React.Ref<HTMLInputElement>;
 }
 
-export function TextField({ label, error, invalid, trailing, inputRef, readOnly, ...rest }: TextFieldProps) {
+export function TextField({ label, error, invalid, trailing, helper, inputRef, readOnly, ...rest }: TextFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
+  const helperId = `${id}-helper`;
   const isInvalid = Boolean(error) || Boolean(invalid);
+  const describedBy = [error ? messageId : undefined, helper ? helperId : undefined].filter(Boolean).join(' ') || undefined;
 
   const classes = [
     'field',
@@ -59,7 +68,7 @@ export function TextField({ label, error, invalid, trailing, inputRef, readOnly,
           // Both are what a screen reader needs to announce the field as invalid and to read
           // the reason. `aria-invalid` alone announces "invalid" with no explanation.
           aria-invalid={isInvalid ? true : undefined}
-          aria-describedby={error ? messageId : undefined}
+          aria-describedby={describedBy}
           {...rest}
         />
         {trailing}
@@ -82,6 +91,12 @@ export function TextField({ label, error, invalid, trailing, inputRef, readOnly,
             <path d="M8 11.2v.2" strokeLinecap="round" />
           </svg>
           {error}
+        </p>
+      ) : null}
+
+      {helper ? (
+        <p className="field__helper" id={helperId}>
+          {helper}
         </p>
       ) : null}
     </div>

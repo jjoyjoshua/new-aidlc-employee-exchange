@@ -1,12 +1,15 @@
 /**
  * US-014's slice — `GET /api/admin/desks` — extended by US-016/AC-04, AC-05 to also tally each
- * desk's `bookedAhead` count. No longer "a pure mapping, no clock read": one `officeToday`
- * reading per call, threaded to the borrowed predicate and nowhere else (US-016 design note §2.3).
+ * desk's `bookedAhead` count, and by US-017/AC-01, AC-04 to add `createDesk`, the write side.
+ * No longer "a pure mapping, no clock read": one `officeToday` reading per call, threaded to the
+ * borrowed predicate and nowhere else (US-016 design note §2.3).
  */
 import type { AdminDesk } from '@desk-booking/contracts';
 import { officeToday } from '../../domain/booking-window.js';
 import { displayStatusPredicate } from '../../domain/booking-history.js';
 import type { DesksRepository } from './desks.repository.js';
+
+export type CreateDeskOutcome = { kind: 'ok'; desk: AdminDesk } | { kind: 'duplicate' };
 
 export interface DesksServiceDeps {
   desks: DesksRepository;
@@ -54,6 +57,26 @@ export function createDesksService({ desks, nowMs, officeTimezone }: DesksServic
         // and the em dash SCR-006 draws is a rendering of 0, not a second wire value.
         bookedAhead: counts.get(row.id) ?? 0,
       }));
+    },
+
+    /**
+     * US-017/AC-01, AC-04. `deskNumber` arrives already normalised (`deskCreateSchema` at the
+     * route edge) — this method does not normalise. `bookedAhead: 0` is a fact, not a filler: the
+     * row was inserted microseconds ago, so no booking can reference it yet (design note §3.2).
+     */
+    async createDesk(deskNumber: string): Promise<CreateDeskOutcome> {
+      const result = await desks.insertDesk(deskNumber);
+      if (result.kind === 'duplicate') return result;
+
+      return {
+        kind: 'ok',
+        desk: {
+          id: result.desk.id,
+          deskNumber: result.desk.desk_number,
+          isActive: result.desk.is_active,
+          bookedAhead: 0,
+        },
+      };
     },
   };
 }

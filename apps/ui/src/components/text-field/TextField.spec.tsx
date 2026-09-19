@@ -57,6 +57,37 @@ describe('TextField (US-001/AC-05)', () => {
     expect(container.querySelector('.field')).toHaveClass('field--readonly');
   });
 
+  it('renders helper text after the error message, when both are present (US-017 design note §5.4)', () => {
+    render(<TextField label="Desk number" error="Give the desk a number." helper="One letter, a dash, two digits — like A-01." />);
+
+    const messages = screen.getAllByText(/Give the desk a number\.|One letter, a dash, two digits/);
+    expect(messages.map((el) => el.textContent)).toEqual([
+      'Give the desk a number.',
+      'One letter, a dash, two digits — like A-01.',
+    ]);
+  });
+
+  it('folds helper into the accessible description when there is no error (US-017 design note §5.4)', () => {
+    render(<TextField label="Desk number" helper="One letter, a dash, two digits — like A-01." />);
+
+    expect(screen.getByLabelText('Desk number')).toHaveAccessibleDescription(
+      'One letter, a dash, two digits — like A-01.',
+    );
+  });
+
+  it('composes error AND helper into one accessible description when both are present (US-017 design note §5.4)', () => {
+    render(<TextField label="Desk number" error="Give the desk a number." helper="One letter, a dash, two digits — like A-01." />);
+
+    expect(screen.getByLabelText('Desk number')).toHaveAccessibleDescription(
+      'Give the desk a number. One letter, a dash, two digits — like A-01.',
+    );
+  });
+
+  it('renders no helper element when omitted', () => {
+    const { container } = render(<TextField label="Email" />);
+    expect(container.querySelector('.field__helper')).not.toBeInTheDocument();
+  });
+
   it('takes the invalid modifier with no message when a caller carries its own explanation elsewhere (US-004/AC-04)', () => {
     // SCR-010 ST-02: the new-password field's edge and ring take the error colour, but the
     // policy checklist beside it is the field's message — a second sentence here would either
