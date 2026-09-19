@@ -979,7 +979,7 @@
         "apps/ui/src/screens/desks/copy.spec.ts",
         "apps/ui/src/screens/desks/DeskFormDialog.spec.tsx",
         "apps/ui/src/screens/desks/Desks.spec.tsx",
-        "apps/ui/src/screens/desks/use-add-desk-dialog.spec.ts"
+        "apps/ui/src/screens/desks/use-desk-form-dialog.spec.ts"
       ],
       "screens": [
         "SCR-006",
@@ -1005,7 +1005,21 @@
         "AC-08",
         "AC-09"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/admin/admin.concurrency.spec.ts",
+        "apps/api/src/modules/desks/desks.repository.spec.ts",
+        "apps/api/src/modules/desks/desks.service.spec.ts",
+        "apps/ui/src/components/text-field/TextField.spec.tsx",
+        "apps/ui/src/lib/use-desks.spec.ts",
+        "apps/ui/src/screens/desks/DeskFormDialog.spec.tsx",
+        "apps/ui/src/screens/desks/DeskInventoryRow.spec.tsx",
+        "apps/ui/src/screens/desks/Desks.spec.tsx",
+        "apps/ui/src/screens/desks/copy.spec.ts",
+        "libs/contracts/src/desks.spec.ts",
+        "apps/ui/src/lib/rename-desk.spec.ts",
+        "apps/ui/src/screens/desks/use-desk-form-dialog.spec.ts"
+      ],
       "screens": [
         "SCR-006",
         "SCR-007"

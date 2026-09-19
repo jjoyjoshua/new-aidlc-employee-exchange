@@ -18,7 +18,7 @@
 | FR-03  | `libs/contracts/src/desks.ts`                        | `normalizeDeskNumber`   | `desks.spec.ts`, `desks.repository.spec.ts`          | implemented |
 | FR-04  | `apps/api/src/modules/desks/desks.repository.ts`, `libs/contracts/src/error.ts` | `insertDesk`, `'desk_number_taken'` | `desks.repository.spec.ts`, `admin.routes.spec.ts`, `DeskFormDialog.spec.tsx` | implemented |
 | FR-05  | `supabase/migrations/0002_desks.sql` (existing), `libs/contracts/src/desks.ts` | `desks_desk_number_format` + `desks_desk_number_key` + `normalizeDeskNumber` | `desks.spec.ts`                                      | implemented |
-| FR-06  | `apps/ui/src/screens/desks/use-add-desk-dialog.ts`   | the `inFlight` ref       | `use-add-desk-dialog.spec.ts`                        | implemented |
+| FR-06  | `apps/ui/src/screens/desks/use-desk-form-dialog.ts` (renamed from `use-add-desk-dialog.ts` in US-018, which generalised this hook — design note §6.2) | the `inFlight` ref | `use-desk-form-dialog.spec.ts` | implemented |
 | FR-07  | `apps/ui/src/lib/add-desk.ts`                        | `AddDeskOutcome`        | `add-desk.spec.ts`, `DeskFormDialog.spec.tsx`        | implemented |
 | FR-08  | inherited — `apps/api/src/http/middleware/require-admin.ts` (existing) | `requireAdmin` mount    | `admin.routes.spec.ts`                               | implemented |
 | FR-09  | `apps/ui/src/components/dialog/dialog.css`           | the mobile-first sheet   | `Dialog.spec.tsx` (stylesheet assertion)             | implemented |
@@ -39,5 +39,5 @@ Every `FR-##` and `NFR-##` in `spec.md` has a row here. `aidlc-check` check 16 e
 | `createDesk`                 | `apps/api/src/modules/desks/desks.service.ts`                |
 | `markAdded`                  | `apps/ui/src/lib/use-desks.ts`                                |
 | `Dialog`                     | `apps/ui/src/components/dialog/Dialog.tsx`                    |
-| `useAddDeskDialog`           | `apps/ui/src/screens/desks/use-add-desk-dialog.ts`            |
+| `useDeskFormDialog` (was `useAddDeskDialog`) | `apps/ui/src/screens/desks/use-desk-form-dialog.ts` |
 | `DeskFormDialog`             | `apps/ui/src/screens/desks/DeskFormDialog.tsx`                |

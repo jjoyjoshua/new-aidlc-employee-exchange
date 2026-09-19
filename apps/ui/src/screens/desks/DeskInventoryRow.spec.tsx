@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import type { AdminDesk } from '@desk-booking/contracts';
 import { DeskInventoryRow } from './DeskInventoryRow.js';
 import { UNAVAILABLE_CONTROL_REASON } from './copy.js';
@@ -7,20 +8,20 @@ import { UNAVAILABLE_CONTROL_REASON } from './copy.js';
 const ACTIVE_DESK: AdminDesk = { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 3 };
 const INACTIVE_DESK: AdminDesk = { id: 'b', deskNumber: 'C-05', isActive: false, bookedAhead: 0 };
 
-function renderTableRow(desk: AdminDesk) {
+function renderTableRow(desk: AdminDesk, onEdit: (desk: AdminDesk) => void = vi.fn()) {
   return render(
     <table>
       <tbody>
-        <DeskInventoryRow desk={desk} layout="table" />
+        <DeskInventoryRow desk={desk} layout="table" onEdit={onEdit} />
       </tbody>
     </table>,
   );
 }
 
-function renderCardRow(desk: AdminDesk) {
+function renderCardRow(desk: AdminDesk, onEdit: (desk: AdminDesk) => void = vi.fn()) {
   return render(
     <ul>
-      <DeskInventoryRow desk={desk} layout="card" />
+      <DeskInventoryRow desk={desk} layout="card" onEdit={onEdit} />
     </ul>,
   );
 }
@@ -75,14 +76,23 @@ describe.each([
     expect(screen.queryByRole('button', { name: /more|options|⋯/i })).not.toBeInTheDocument();
   });
 
-  it('Edit and the activate/deactivate control are both disabled with an accessible reason (US-016/AC-06, AC-08 — removed once their own stories ship)', () => {
+  it('the activate/deactivate control is disabled with an accessible reason (US-016/AC-06, AC-08 — removed once its own story ships)', () => {
     renderRow(ACTIVE_DESK);
-    const edit = screen.getByRole('button', { name: /^Edit/ });
     const deactivate = screen.getByRole('button', { name: /^Deactivate/ });
 
-    expect(edit).toBeDisabled();
     expect(deactivate).toBeDisabled();
-    expect(within(edit).getByText(UNAVAILABLE_CONTROL_REASON)).toBeInTheDocument();
     expect(within(deactivate).getByText(UNAVAILABLE_CONTROL_REASON)).toBeInTheDocument();
+  });
+
+  it('Edit is enabled and calls onEdit with the desk (US-018/AC-01)', async () => {
+    const onEdit = vi.fn();
+    renderRow(ACTIVE_DESK, onEdit);
+    const edit = screen.getByRole('button', { name: 'Edit' });
+
+    expect(edit).toBeEnabled();
+    expect(within(edit).queryByText(UNAVAILABLE_CONTROL_REASON)).not.toBeInTheDocument();
+
+    await userEvent.click(edit);
+    expect(onEdit).toHaveBeenCalledWith(ACTIVE_DESK);
   });
 });

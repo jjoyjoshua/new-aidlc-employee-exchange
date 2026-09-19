@@ -3,7 +3,9 @@
  * (`inception/specs/US-014-filter-all-bookings/design-note.md`); ADR-004 for why this read lives
  * in its own module rather than inside `modules/bookings`. US-017 adds the write side —
  * `POST /api/admin/desks` — and the desk-number format rule both sides evaluate identically
- * (`inception/specs/US-017-add-a-desk/design-note.md` §2, §5).
+ * (`inception/specs/US-017-add-a-desk/design-note.md` §2, §5). US-018 adds the update side —
+ * `PATCH /api/admin/desks/:id` — reusing `deskNumberSchema` rather than restating it
+ * (`inception/specs/US-018-correct-a-desk-number/design-note.md` §3.2).
  */
 import { z } from 'zod';
 
@@ -90,7 +92,8 @@ export function normalizeDeskNumber(raw: string): string {
  * to remember to uppercase (design note §2.4). `a-07` parses to `A-07`; `a-7` does not parse
  * at all.
  *
- * Exported on its own so a future edit request (US-018) reuses it rather than restating the rule.
+ * Exported on its own so a future edit request (US-018) reuses it rather than restating the
+ * rule — and it now does (`deskUpdateSchema`, below).
  */
 export const deskNumberSchema = z
   .string()
@@ -113,3 +116,46 @@ export const deskNumberSchema = z
  */
 export const deskCreateSchema = z.object({ deskNumber: deskNumberSchema }).strict();
 export type DeskCreateRequest = z.input<typeof deskCreateSchema>;
+
+/**
+ * `PATCH /api/admin/desks/:id`'s path parameter (US-018/AC-01). One param, a uuid, `.strict()` —
+ * the shape `cancelBookingParamsSchema` (`bookings.ts`) established and US-015 reused verbatim.
+ *
+ * NOT `cancelBookingParamsSchema` itself, although it is structurally identical: that schema's
+ * name asserts the id is a booking's. A desk id validated by a booking's schema typechecks and
+ * then misleads every future reader of both.
+ */
+export const deskIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
+export type DeskIdParams = z.infer<typeof deskIdParamsSchema>;
+
+/**
+ * `PATCH /api/admin/desks/:id`'s one legitimate body (US-018/AC-01, AC-02). `.strict()` — an
+ * unknown field is rejected, not ignored, matching every other request schema in this package.
+ *
+ * `deskNumberSchema` is REUSED, not restated — AC-02's "the same format and uniqueness rules
+ * apply as on create" is true because it is the SAME object, not because two copies agree today.
+ *
+ * NOT `export const deskUpdateSchema = deskCreateSchema`, although the two are structurally
+ * identical right now. They are two contracts that happen to coincide: issue #49 may add a
+ * required `isActive` to CREATE, which SCR-007 forbids on EDIT ("Status choice on add, absent on
+ * edit"). An alias would put a status field on this endpoint silently, the day that resolves.
+ *
+ * No `id` in the body: it is the path parameter, and accepting it in both places creates two
+ * sources for one fact that can disagree (design note §3.2).
+ */
+export const deskUpdateSchema = z.object({ deskNumber: deskNumberSchema }).strict();
+export type DeskUpdateRequest = z.input<typeof deskUpdateSchema>;
+
+/**
+ * `PATCH /api/admin/desks/:id`'s `200` body (US-018/AC-01).
+ *
+ * DERIVED from `adminDeskSchema` with `.omit`, never re-declared — so it cannot drift from the
+ * shape `GET /api/admin/desks` returns.
+ *
+ * `bookedAhead` is omitted deliberately: a rename cannot change it (bookings reference `desks.id`,
+ * never the number — US-018/AC-06), the server has not re-read it, and sending it back would cost
+ * a second query to restate an invariant. The browser keeps the count it already has (design note
+ * §3.3, §4).
+ */
+export const deskUpdateResponseSchema = adminDeskSchema.omit({ bookedAhead: true });
+export type DeskUpdateResponse = z.infer<typeof deskUpdateResponseSchema>;

@@ -10,12 +10,14 @@
  * (`desks.css`) — the same zero-`matchMedia`, dual-tree device `all-bookings/AdminBookingRow` uses
  * (US-016 design note §7.1).
  *
- * Both row actions (**Edit** and the Deactivate-or-Activate toggle) are always rendered and always
- * `disabled`: their destinations (US-017, US-018, US-019) do not exist yet, and AC-06/AC-08 make
- * the controls themselves the story's subject, so omitting them would fail those ACs rather than
- * merely under-deliver them (design note §6.2). Each carries `UNAVAILABLE_CONTROL_REASON` as a
- * mouse `title` and a visually-hidden span, the pattern `AdminBookingRow` already uses for its own
- * non-cancellable action.
+ * Both row actions were originally always rendered and always `disabled` (US-016 design note
+ * §6.2): their destinations (US-017, US-018, US-019) did not exist yet, and AC-06/AC-08 made the
+ * controls themselves the story's subject, so omitting them would have failed those ACs rather
+ * than merely under-delivered them. **US-018 is the first to change that**: `Edit` is now live,
+ * the exact inverse of US-017 design note §9.1's "this story must not touch this file". The
+ * activate/deactivate toggle stays `disabled`, carrying `UNAVAILABLE_CONTROL_REASON` as a mouse
+ * `title` and a visually-hidden span (the pattern `AdminBookingRow` uses for its own
+ * non-cancellable action), until US-019 wires it.
  */
 import type { AdminDesk } from '@desk-booking/contracts';
 import { Button } from '../../components/button/Button.js';
@@ -46,15 +48,16 @@ export type DeskInventoryRowLayout = 'table' | 'card';
 export interface DeskInventoryRowProps {
   desk: AdminDesk;
   layout: DeskInventoryRowLayout;
+  /** US-018/AC-01. Opens SCR-007's edit dialog for this desk. */
+  onEdit: (desk: AdminDesk) => void;
 }
 
-function ActionButtons({ desk }: { desk: AdminDesk }) {
+function ActionButtons({ desk, onEdit }: { desk: AdminDesk; onEdit: (desk: AdminDesk) => void }) {
   const toggleLabel = desk.isActive ? DEACTIVATE_LABEL : ACTIVATE_LABEL;
   return (
     <>
-      <Button variant="secondary" disabled title={UNAVAILABLE_CONTROL_REASON}>
+      <Button variant="secondary" onClick={() => onEdit(desk)}>
         {EDIT_LABEL}
-        <span className="desks__visually-hidden"> {UNAVAILABLE_CONTROL_REASON}</span>
       </Button>
       <Button variant="secondary" disabled title={UNAVAILABLE_CONTROL_REASON}>
         {toggleLabel}
@@ -79,7 +82,7 @@ function BookedAheadCell({ count }: { count: number }) {
   return <span>{bookedAheadLabel(count)}</span>;
 }
 
-export function DeskInventoryRow({ desk, layout }: DeskInventoryRowProps) {
+export function DeskInventoryRow({ desk, layout, onEdit }: DeskInventoryRowProps) {
   const status = desk.isActive ? 'active' : 'inactive';
 
   if (layout === 'table') {
@@ -93,7 +96,7 @@ export function DeskInventoryRow({ desk, layout }: DeskInventoryRowProps) {
           <BookedAheadCell count={desk.bookedAhead} />
         </td>
         <td className="desk-inventory-table__actions">
-          <ActionButtons desk={desk} />
+          <ActionButtons desk={desk} onEdit={onEdit} />
         </td>
       </tr>
     );
@@ -107,7 +110,7 @@ export function DeskInventoryRow({ desk, layout }: DeskInventoryRowProps) {
         <BookedAheadCell count={desk.bookedAhead} />
       </div>
       <div className="desk-inventory-card__actions">
-        <ActionButtons desk={desk} />
+        <ActionButtons desk={desk} onEdit={onEdit} />
       </div>
     </li>
   );

@@ -88,6 +88,37 @@ describe('TextField (US-001/AC-05)', () => {
     expect(container.querySelector('.field__helper')).not.toBeInTheDocument();
   });
 
+  it('composes a caller-supplied describedBy alongside the helper — it does not displace it (US-018/NFR-01)', () => {
+    render(
+      <TextField label="Desk number" helper="One letter, a dash, two digits — like A-01." describedBy="external-note" />,
+    );
+
+    const describedBy = screen.getByLabelText('Desk number').getAttribute('aria-describedby') ?? '';
+    expect(describedBy.split(' ')).toContain('external-note');
+    // The helper's own id must still be present — describedBy augments, it does not replace.
+    expect(describedBy.split(' ').length).toBeGreaterThan(1);
+  });
+
+  it('composes describedBy alongside BOTH error and helper when all three are present (US-018/NFR-01)', () => {
+    render(
+      <TextField
+        label="Desk number"
+        error="Give the desk a number."
+        helper="One letter, a dash, two digits — like A-01."
+        describedBy="external-note"
+      />,
+    );
+
+    const describedBy = screen.getByLabelText('Desk number').getAttribute('aria-describedby') ?? '';
+    expect(describedBy.split(' ')).toEqual(expect.arrayContaining(['external-note']));
+    expect(describedBy.split(' ').length).toBe(3);
+  });
+
+  it('omits describedBy from the composed list when not supplied — no stray token', () => {
+    render(<TextField label="Email" />);
+    expect(screen.getByLabelText('Email')).not.toHaveAttribute('aria-describedby');
+  });
+
   it('takes the invalid modifier with no message when a caller carries its own explanation elsewhere (US-004/AC-04)', () => {
     // SCR-010 ST-02: the new-password field's edge and ring take the error colour, but the
     // policy checklist beside it is the field's message — a second sentence here would either

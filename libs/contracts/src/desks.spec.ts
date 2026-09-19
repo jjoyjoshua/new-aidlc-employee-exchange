@@ -4,6 +4,9 @@ import {
   adminDeskSchema,
   adminDesksResponseSchema,
   deskCreateSchema,
+  deskIdParamsSchema,
+  deskUpdateResponseSchema,
+  deskUpdateSchema,
   normalizeDeskNumber,
 } from './desks.js';
 
@@ -142,6 +145,84 @@ describe('deskCreateSchema (US-017/AC-02, AC-03, AC-05 — POST /api/admin/desks
     );
     expect(new Set(values).size).toBe(1);
     expect(values[0]).toBe('A-01');
+  });
+});
+
+describe('deskIdParamsSchema (US-018/AC-01 — PATCH /api/admin/desks/:id)', () => {
+  it('parses a well-formed uuid', () => {
+    expect(deskIdParamsSchema.safeParse({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' }).success).toBe(true);
+  });
+
+  it('rejects a non-uuid id', () => {
+    expect(deskIdParamsSchema.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('rejects an unknown field (.strict())', () => {
+    expect(deskIdParamsSchema.safeParse({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', extra: 'x' }).success).toBe(false);
+  });
+});
+
+describe('deskUpdateSchema (US-018/AC-02 — PATCH /api/admin/desks/:id)', () => {
+  it('is a distinct object from deskCreateSchema, not an alias', () => {
+    expect(deskUpdateSchema).not.toBe(deskCreateSchema);
+  });
+
+  it('parses a well-formed upper-case number unchanged', () => {
+    const result = deskUpdateSchema.safeParse({ deskNumber: 'A-01' });
+    expect(result.success).toBe(true);
+    expect(result.data?.deskNumber).toBe('A-01');
+  });
+
+  it('normalises a lower-case entry to upper case on the parsed OUTPUT (US-018/AC-02)', () => {
+    const result = deskUpdateSchema.safeParse({ deskNumber: 'a-07' });
+    expect(result.success).toBe(true);
+    expect(result.data?.deskNumber).toBe('A-07');
+  });
+
+  it('normalises whitespace before validating the shape (US-018/AC-02)', () => {
+    const result = deskUpdateSchema.safeParse({ deskNumber: '  b-12  ' });
+    expect(result.success).toBe(true);
+    expect(result.data?.deskNumber).toBe('B-12');
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+    ['a single letter and one digit', 'A-1'],
+    ['two letters', 'AA-01'],
+    ['three digits', 'A-001'],
+    ['free text', 'Window seat 3'],
+  ])('rejects %s — the same format deskCreateSchema enforces (US-018/AC-02)', (_label, bad) => {
+    expect(deskUpdateSchema.safeParse({ deskNumber: bad }).success).toBe(false);
+    expect(deskCreateSchema.safeParse({ deskNumber: bad }).success).toBe(false);
+  });
+
+  it('rejects an unknown field, including isActive (.strict())', () => {
+    expect(deskUpdateSchema.safeParse({ deskNumber: 'A-01', isActive: false }).success).toBe(false);
+  });
+
+  it('rejects an id in the body — it is the path parameter, not the body', () => {
+    expect(deskUpdateSchema.safeParse({ deskNumber: 'A-01', id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' }).success).toBe(false);
+  });
+
+  it('rejects a missing deskNumber', () => {
+    expect(deskUpdateSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('deskUpdateResponseSchema (US-018/AC-01 — PATCH /api/admin/desks/:id 200 body)', () => {
+  it('parses the desk without bookedAhead', () => {
+    const { bookedAhead: _bookedAhead, ...withoutCount } = VALID_DESK;
+    expect(deskUpdateResponseSchema.safeParse(withoutCount).success).toBe(true);
+  });
+
+  it('tolerates bookedAhead present (an .omit()-derived schema strips extras, it does not refuse them)', () => {
+    expect(deskUpdateResponseSchema.safeParse(VALID_DESK).success).toBe(true);
+  });
+
+  it('rejects a missing deskNumber', () => {
+    const { deskNumber: _deskNumber, bookedAhead: _bookedAhead, ...rest } = VALID_DESK;
+    expect(deskUpdateResponseSchema.safeParse(rest).success).toBe(false);
   });
 });
 

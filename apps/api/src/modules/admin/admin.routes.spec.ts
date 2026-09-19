@@ -11,7 +11,7 @@ import { buildApp } from '../../composition.js';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 import type { SessionVerifier } from '../../http/middleware/require-session.js';
 import type { AdminBookingRow, AdminBookingsFilter, AdminBookingsRepository } from '../bookings/admin-bookings.repository.js';
-import type { DeskRow, DesksRepository, InsertDeskOutcome } from '../desks/desks.repository.js';
+import type { DeskRow, DesksRepository, InsertDeskOutcome, UpdateDeskOutcome } from '../desks/desks.repository.js';
 
 interface Row {
   id: string;
@@ -85,6 +85,9 @@ const noDesks: DesksRepository = {
   },
   async insertDesk() {
     throw new Error('insertDesk not stubbed — this test only exercises GET /desks');
+  },
+  async updateDeskNumber() {
+    throw new Error('updateDeskNumber not stubbed — this test only exercises GET /desks');
   },
 };
 
@@ -623,6 +626,146 @@ describe('POST /api/admin/desks (US-017/AC-01, AC-02, AC-04, AC-08)', () => {
   it('refuses a request with no token at all', async () => {
     const app = appWith({ desks: noDesks });
     const response = await request(app).post('/api/admin/desks').send({ deskNumber: 'A-01' });
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('PATCH /api/admin/desks/:id (US-018/AC-01, AC-02, AC-07, AC-09)', () => {
+  const DESK_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  function updatingDesksRepository(outcomes: UpdateDeskOutcome[]) {
+    const calls: Array<{ id: string; deskNumber: string }> = [];
+    let i = 0;
+    const repository: DesksRepository = {
+      ...noDesks,
+      async updateDeskNumber(id, deskNumber) {
+        calls.push({ id, deskNumber });
+        const outcome = outcomes[i] ?? outcomes[outcomes.length - 1];
+        i += 1;
+        if (!outcome) throw new Error('no outcome stubbed');
+        return outcome;
+      },
+    };
+    return { repository, calls };
+  }
+
+  it('a valid body renames the desk and returns 200 with NO bookedAhead (US-018/AC-01)', async () => {
+    const { repository } = updatingDesksRepository([{ kind: 'ok', desk: { id: DESK_ID, desk_number: 'B-05', is_active: true } }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'b-05' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: DESK_ID, deskNumber: 'B-05', isActive: true });
+    expect(response.body.bookedAhead).toBeUndefined();
+  });
+
+  it('normalises the body BEFORE it reaches the repository (US-018/AC-02)', async () => {
+    const { repository, calls } = updatingDesksRepository([{ kind: 'ok', desk: { id: DESK_ID, desk_number: 'B-05', is_active: true } }]);
+    const app = appWith({ desks: repository });
+
+    await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'b-05' });
+
+    expect(calls).toEqual([{ id: DESK_ID, deskNumber: 'B-05' }]);
+  });
+
+  it('renaming to the current number succeeds, not refused as a duplicate (US-018/AC-07)', async () => {
+    const { repository } = updatingDesksRepository([{ kind: 'ok', desk: { id: DESK_ID, desk_number: 'A-01', is_active: true } }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'A-01' });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('a malformed body is refused at the edge with 400 invalid_request, and no update is attempted (US-018/AC-02)', async () => {
+    const { repository, calls } = updatingDesksRepository([]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'A-1' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+    expect(calls).toEqual([]);
+  });
+
+  it('an unknown field is refused at the edge (.strict()), including isActive', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'A-01', isActive: false });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .patch('/api/admin/desks/not-a-uuid')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'A-01' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('a duplicate desk number gets 409 desk_number_taken (US-018/AC-02)', async () => {
+    const { repository } = updatingDesksRepository([{ kind: 'duplicate' }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'A-01' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('desk_number_taken');
+  });
+
+  it('a desk id matching no row gets 404 desk_not_found', async () => {
+    const { repository } = updatingDesksRepository([{ kind: 'not_found' }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ deskNumber: 'A-01' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('desk_not_found');
+  });
+
+  it('refuses an Employee session with 403 admin_only, reaching the real mount (US-018/AC-09)', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .patch(`/api/admin/desks/${DESK_ID}`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`)
+      .send({ deskNumber: 'A-01' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ desks: noDesks });
+    const response = await request(app).patch(`/api/admin/desks/${DESK_ID}`).send({ deskNumber: 'A-01' });
     expect(response.status).toBe(401);
   });
 });

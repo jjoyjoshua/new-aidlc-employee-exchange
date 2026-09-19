@@ -1,0 +1,9 @@
+# US-018 — change log
+
+> The curated history of this spec: what changed and why, in the words of whoever changed it.
+
+| Date       | Change                                              | Why                                                        | Requirements affected |
+| ---------- | ------------------------------------------------------| -------------------------------------------------------------| ------------------------ |
+| 2026-09-19 | Spec package created; Architect design note obtained and persisted | New Complex-tier story (US-018), gated on a design note before code | all |
+| 2026-09-19 | Gate D1 approved (Joy Joshua); all 14 implementation-plan steps completed, test-first: the contract schemas, the repository's `updateDeskNumber`, the service's `renameDesk`, `PATCH /api/admin/desks/:id`, `TextField`'s `describedBy`, `use-desks.ts`'s `markRenamed`, the `rename-desk` fetcher, `use-add-desk-dialog.ts` generalised and renamed to `use-desk-form-dialog.ts`, `DeskFormDialog`'s edit mode, `DeskInventoryRow`'s Edit button wired, `Desks.tsx`'s end-to-end wiring, two gated real-Postgres tests for AC-06/AC-07, and the framework housekeeping (`desks/README.md`, `api-standards.md`, US-017's repathed traceability). Full workspace `npm test`, `npm run typecheck` and `npm run lint` green | Ready for the human to commit, push, and open the story PR | FR-01 through FR-13, NFR-01, NFR-02 — all implemented |
+| 2026-09-19 | Step 13's gated tests moved from `bookings.repository.concurrency.spec.ts` (as the design note and the original plan named) to a new `apps/api/src/modules/admin/admin.concurrency.spec.ts` | `npm run lint` caught what the design note missed: `eslint.config.mjs`'s module boundary (ADR-004) forbids `modules/bookings` from importing `modules/desks`, and the AC-06 test needs both. `modules/admin` already composes across both legitimately | FR-05, FR-10 — file path only, no behaviour change |

@@ -2,7 +2,9 @@
  * A recording-fake Supabase client for `DesksRepository`, matching the pattern
  * `admin-bookings.repository.spec.ts` established. This proves the QUERY we issue — in
  * particular that it carries NO `is_active` filter, the deliberate opposite of
- * `modules/bookings`'s `listActiveDesks` (US-014 design note §3.2).
+ * `modules/bookings`'s `listActiveDesks` (US-014 design note §3.2), and — for
+ * `updateDeskNumber` (US-018) — that no `.select()` precedes the `.update()` (the absence that
+ * proves AC-07's no-pre-check discipline, US-018 design note §2.3).
  */
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -16,7 +18,9 @@ interface RecordedCall {
   gte?: [string, unknown];
   order: Array<{ column: string; ascending: boolean }>;
   insert?: unknown;
+  update?: Record<string, unknown>;
   single?: boolean;
+  maybeSingle?: true;
 }
 
 type FakeResponse = { data: unknown; error: { code?: string; message: string } | null };
@@ -47,9 +51,18 @@ function fakeSupabase(response: FakeResponse) {
         call.insert = row;
         return builder;
       },
+      update(values: Record<string, unknown>) {
+        call.update = values;
+        return builder;
+      },
       single() {
         call.single = true;
         return builder;
+      },
+      maybeSingle() {
+        call.maybeSingle = true;
+        calls.push(call);
+        return Promise.resolve(response);
       },
       then(onFulfilled: (value: FakeResponse) => unknown, onRejected?: (reason: unknown) => unknown) {
         calls.push(call);
@@ -266,6 +279,116 @@ describe('desksRepository.insertDesk (US-017/AC-01, AC-04, AC-05 — the first w
 
     try {
       await expect(desksRepository.insertDesk('A-01')).rejects.toThrow(/desk insert failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('desksRepository.updateDeskNumber (US-018/AC-01, AC-02, AC-03, AC-07)', () => {
+  const UPDATED_AT = new Date('2026-09-19T10:00:00.000Z');
+
+  it('updates desk_number and updated_at ONLY, keyed on id, with NO preceding .select() (US-018/AC-01, AC-07)', async () => {
+    const row = { id: '5f2504e0-4f89-41d3-9a0c-0305e82c3303', desk_number: 'B-05', is_active: true };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.updateDeskNumber(row.id, 'B-05', UPDATED_AT);
+
+      expect(calls).toEqual([
+        {
+          table: 'desks',
+          select: 'id, desk_number, is_active',
+          eq: [['id', row.id]],
+          order: [],
+          update: { desk_number: 'B-05', updated_at: UPDATED_AT.toISOString() },
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ kind: 'ok', desk: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('renaming to the current value is still an ordinary update — no pre-check precedes it (US-018/AC-07)', async () => {
+    const row = { id: '5f2504e0-4f89-41d3-9a0c-0305e82c3303', desk_number: 'A-01', is_active: true };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.updateDeskNumber(row.id, 'A-01', UPDATED_AT);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.update).toEqual({ desk_number: 'A-01', updated_at: UPDATED_AT.toISOString() });
+      expect(result).toEqual({ kind: 'ok', desk: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when no row matches the id — zero rows, not an error', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.updateDeskNumber('missing-id', 'A-01', UPDATED_AT);
+      expect(result).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "duplicate" } on a 23505 naming desks_desk_number_key (US-018/AC-02)', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "desks_desk_number_key"' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.updateDeskNumber('some-id', 'A-01', UPDATED_AT);
+      expect(result).toEqual({ kind: 'duplicate' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a 23505 naming an unrecognised index', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_key"' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(desksRepository.updateDeskNumber('some-id', 'A-01', UPDATED_AT)).rejects.toThrow(/unrecognised unique violation/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a 23514 (the format CHECK) — reaching it means the normaliser or schema failed', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: '23514', message: 'new row for relation "desks" violates check constraint "desks_desk_number_format"' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(desksRepository.updateDeskNumber('some-id', 'a-01', UPDATED_AT)).rejects.toThrow(/desk update failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on any other repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(desksRepository.updateDeskNumber('some-id', 'A-01', UPDATED_AT)).rejects.toThrow(/desk update failed/);
     } finally {
       setSupabaseForTesting(undefined);
     }
