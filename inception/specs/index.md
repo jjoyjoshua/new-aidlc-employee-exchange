@@ -16,7 +16,8 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-010 | View my own bookings, past and upcoming | Complex | implemented | [`US-010-view-my-bookings/`](US-010-view-my-bookings/) |
 | US-011 | Cancel my own booking | Complex | implemented | [`US-011-cancel-my-own-booking/`](US-011-cancel-my-own-booking/) |
 | US-012 | Come back to a booking list that is still true | Complex | implemented (My bookings only — SCR-005 half deferred to US-013) | [`US-012-refresh-booking-list-on-focus/`](US-012-refresh-booking-list-on-focus/) |
-| US-013 | See every booking in the office | Complex | in progress — Gate D1 approved, implementing | [`US-013-see-every-booking/`](US-013-see-every-booking/) |
+| US-013 | See every booking in the office | Complex | implemented | [`US-013-see-every-booking/`](US-013-see-every-booking/) |
+| US-014 | Filter all bookings by date, status and desk | Complex | in progress — Gate D1 approved, code complete, awaiting PR review | [`US-014-filter-all-bookings/`](US-014-filter-all-bookings/) |
 
 ## How to update
 

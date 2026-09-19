@@ -10,11 +10,12 @@
  */
 import { allBookingsResponseSchema, type AllBookingsResponse } from '@desk-booking/contracts';
 import type { ApiClient } from '../../lib/api-client.js';
+import { toQueryString } from './filters.js';
 import type { AllBookingsFetcher, AllBookingsOutcome } from './use-all-bookings.js';
 
 export function createFetchAllBookings(api: ApiClient): AllBookingsFetcher {
-  return async (page: number, signal: AbortSignal): Promise<AllBookingsOutcome> => {
-    const query = page > 1 ? `?page=${page}` : '';
+  return async (filters, page: number, signal: AbortSignal): Promise<AllBookingsOutcome> => {
+    const query = toQueryString(filters, page);
     const result = await api.request(`/api/admin/bookings${query}`, allBookingsResponseSchema, { signal });
 
     if (result.kind !== 'ok') return { kind: 'failed' };

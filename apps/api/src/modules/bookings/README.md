@@ -116,4 +116,24 @@ Paged with `?page`, not `?before` — a row-count page tolerates the offset this
 from US-010's date cursor, and `inception/specs/US-013-see-every-booking/design-note.md` §2.4 for
 the full argument.
 
+**US-014** extends the same endpoint with four optional filters (`from`, `to`, `status`,
+`deskId`), all resolved in `admin-bookings.service.ts` before reaching the repository —
+`admin-bookings.repository.ts`'s `listBookings` (renamed from `listBookingsFromDate`) stays a
+plain intersection of independent bounds and knows nothing about a "presented" status. The status
+filter is the one genuinely new rule: `confirmed` and `completed` are both **compound predicates**
+over the stored two-value enum (`status='confirmed' AND booking_date >= today`, and
+`status='confirmed' AND booking_date < today` respectively) — never an equality test. That
+inversion lives in `apps/api/src/domain/booking-history.ts`'s `displayStatusPredicate`, the exact
+inverse of `bookingDisplayStatus` (ADR-007), added beside it and never replacing it. One
+consequence worth stating explicitly: an absent `from` under `status=completed` gets **no**
+default floor — the usual "absent from = today" default (US-013/AC-02) would intersect with
+`completed`'s own before-today ceiling and make every Completed-only query structurally empty, so
+`AdminBookingsFilter.from` is optional and the service only injects "today" when no status filter
+(or `cancelled`) leaves it unconstrained. No migration —
+`bookings_desk_id_booking_date_idx` (`0003_bookings.sql:79`, comment: `REQ-031, BR-001.9`) was
+already placed for the desk filter by US-006. The desk-filter's own vocabulary (every desk, active
+and inactive) is served by `GET /api/admin/desks`, in `modules/desks`, not here — see that
+module's README for why the read lives there instead of a sibling method on this module's
+`listActiveDesks`, which keeps its `is_active` filter unchanged for US-006/AC-04.
+
 See `../README.md` for what this module owns and the boundary it must respect.

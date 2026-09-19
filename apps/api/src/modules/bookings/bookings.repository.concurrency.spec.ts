@@ -179,7 +179,7 @@ describe.runIf(RUN)('availabilityRepository.insertConfirmedBooking — real Post
  * PostgREST (`bookings` has two FKs into `user_profiles`), and that a page past the last row
  * comes back as an empty `200` rather than a `416`.
  */
-describe.runIf(RUN)('adminBookingsRepository.listBookingsFromDate — real Postgres (US-013/AC-03, AC-04)', () => {
+describe.runIf(RUN)('adminBookingsRepository.listBookings — real Postgres (US-013/AC-03, AC-04)', () => {
   it('the user_profiles embed resolves via user_id, never cancelled_by — the HOLDER\'s name, not the canceller\'s (US-013/AC-03, design note §3.1)', async () => {
     const cleanup = newCleanup();
     try {
@@ -203,8 +203,8 @@ describe.runIf(RUN)('adminBookingsRepository.listBookingsFromDate — real Postg
       if (error || !data) throw new Error(`fixture booking could not be created: ${error?.message}`);
       cleanup.bookingIds.push((data as { id: string }).id);
 
-      const page = await adminBookingsRepository.listBookingsFromDate(DATE, 0, 50);
-      const row = page.rows.find((r) => r.id === (data as { id: string }).id);
+      const page = await adminBookingsRepository.listBookings({ from: DATE }, 0, 50);
+      const row = page.rows.find((r: { id: string }) => r.id === (data as { id: string }).id);
 
       expect(row?.employee_name).toBe('US013 Holder');
       expect(row?.employee_name).not.toBe('US013 Canceller');
@@ -216,7 +216,7 @@ describe.runIf(RUN)('adminBookingsRepository.listBookingsFromDate — real Postg
   it('a page far beyond the last row resolves to an empty page, never a thrown error (US-013/AC-04, design note §3.4)', async () => {
     // No fixture data needed: an offset far beyond anything this disposable project holds for
     // this DATE is enough to exercise PostgREST's out-of-range Range behaviour.
-    const page = await adminBookingsRepository.listBookingsFromDate(DATE, 1_000_000, 50);
+    const page = await adminBookingsRepository.listBookings({ from: DATE }, 1_000_000, 50);
 
     expect(page.rows).toEqual([]);
   });

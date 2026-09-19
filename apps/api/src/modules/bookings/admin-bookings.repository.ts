@@ -26,22 +26,51 @@ export interface AdminBookingRow {
   employee_name: string;
 }
 
-/** `listBookingsFromDate`'s outcome — the page's rows, and the total matching the predicate
+/** `listBookings`'s outcome — the page's rows, and the total matching the predicate
  *  (design note §2.5, §3.4), from the SAME query via `{ count: 'exact' }`. */
 export interface AdminBookingsPage {
   rows: AdminBookingRow[];
   total: number;
 }
 
+/**
+ * The plain date/status/desk bounds `listBookings` applies — resolved by the SERVICE, never
+ * computed here (US-014 design note §6.3). This repository does not know what a PRESENTED
+ * status is; `status` below is always the STORED two-value shape, and `before` (the compound
+ * status predicate's exclusive upper bound) arrives already separated from `to` (the caller's
+ * own date-range ceiling) so Postgres ANDs `<= to` and `< before` independently — the
+ * intersection is Postgres's job, not a date-arithmetic step here.
+ */
+export interface AdminBookingsFilter {
+  /** Inclusive. Absent = no floor at all — US-013/AC-05 already established there is no archive
+   *  cutoff. US-013's own default view supplies "today" here at the SERVICE, not as a rule this
+   *  repository enforces; a `completed` status filter must NOT get a floor of "today" injected
+   *  under it, since a Completed booking is by definition dated before today — that combination
+   *  would make every Completed-only query structurally empty (US-014/AC-02). Passed in, never
+   *  read here — this repository holds no clock. */
+  from?: OfficeDate;
+  /** Inclusive. US-014/AC-01. Absent = no ceiling. */
+  to?: OfficeDate;
+  /** Exclusive. Contributed only by a `completed` status filter (US-014/AC-02, ADR-007). */
+  before?: OfficeDate;
+  /** The STORED value. Absent = all statuses — AC-02's "all statuses" is the ABSENCE of a
+   *  predicate, not a predicate matching everything. */
+  status?: BookingStatus;
+  /** US-014/AC-03. */
+  deskId?: string;
+}
+
 export interface AdminBookingsRepository {
   /**
-   * US-013/AC-02–AC-05. `from` is the caller's own "today" (passed in, never read here — this
-   * repository holds no clock, matching every other method in this module). No status predicate:
-   * AC-02's "all statuses" is the ABSENCE of a filter, not a filter that matches everything.
+   * US-013/AC-02–AC-05; US-014/AC-01–AC-04. Applies each bound in `filter` independently
+   * (`.gte`/`.lte`/`.lt`/`.eq`) — Postgres computes the intersection for free, so this method
+   * never combines them itself.
    *
    * Ordered `booking_date asc, created_at asc, id asc` — a TOTAL order. The third key is
    * load-bearing, not belt-and-braces: offset paging over a non-unique sort key is unstable
-   * without it (design note §3.2).
+   * without it (design note §3.2). UNCHANGED by filtering — a diff here invalidates the
+   * real-Postgres verification in `bookings.repository.concurrency.spec.ts` (US-014 design note
+   * §6.3, §10).
    *
    * The `user_profiles` embed is disambiguated by COLUMN (`!user_id`), not by the
    * Postgres-generated FK constraint name — `bookings` has two foreign keys into `user_profiles`
@@ -51,15 +80,22 @@ export interface AdminBookingsRepository {
    * RUNTIME-ONLY property the recording-fake test below cannot prove — verified separately
    * against real Postgres in `bookings.repository.concurrency.spec.ts`.
    */
-  listBookingsFromDate(from: OfficeDate, offset: number, limit: number): Promise<AdminBookingsPage>;
+  listBookings(filter: AdminBookingsFilter, offset: number, limit: number): Promise<AdminBookingsPage>;
 }
 
 export const adminBookingsRepository: AdminBookingsRepository = {
-  async listBookingsFromDate(from, offset, limit) {
-    const { data, error, count } = await supabase()
+  async listBookings(filter, offset, limit) {
+    let query = supabase()
       .from('bookings')
-      .select('id, booking_date, status, desks(desk_number), user_profiles!user_id(full_name)', { count: 'exact' })
-      .gte('booking_date', from)
+      .select('id, booking_date, status, desks(desk_number), user_profiles!user_id(full_name)', { count: 'exact' });
+
+    if (filter.from !== undefined) query = query.gte('booking_date', filter.from);
+    if (filter.to !== undefined) query = query.lte('booking_date', filter.to);
+    if (filter.before !== undefined) query = query.lt('booking_date', filter.before);
+    if (filter.status !== undefined) query = query.eq('status', filter.status);
+    if (filter.deskId !== undefined) query = query.eq('desk_id', filter.deskId);
+
+    const { data, error, count } = await query
       .order('booking_date', { ascending: true })
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })

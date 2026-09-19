@@ -189,3 +189,210 @@
     min-height: 160px;
   }
 }
+
+/* ---- the filter bar (US-014/AC-01–AC-03, AC-05, AC-10) ----------------------------------- */
+
+.all-bookings-filter-bar {
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  padding: var(--s-16);
+  margin-bottom: var(--s-24);
+}
+
+.all-bookings-filter-bar__toggle-row {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.all-bookings-filter-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+  height: var(--control-lg);
+  padding-inline: var(--s-16);
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-control);
+  border-radius: var(--r-md);
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+  cursor: pointer;
+}
+
+.all-bookings-filter-bar__toggle-chevron {
+  display: inline-flex;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  transition: transform 0.15s ease;
+}
+
+.all-bookings-filter-bar__toggle-chevron[data-open='true'] {
+  transform: rotate(180deg);
+}
+
+.all-bookings-filter-bar__panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-16);
+}
+
+.all-bookings-filter-bar__group {
+  display: flex;
+  gap: var(--s-16);
+  flex: 1 1 auto;
+}
+
+.all-bookings-filter-bar__group > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Below 1024px: two rows — Dates, then Status/Desk/Clear (Figma "Filter bar · 768"). The Clear
+ * button moves into the second group's flow via source order; no JS needed. */
+@media (max-width: 1023.98px) {
+  .all-bookings-filter-bar__panel {
+    flex-direction: column;
+  }
+}
+
+/* Below 480px (Figma "Filter bar · 360"): collapsed behind the Filters toggle. The toggle and
+ * Clear stay visible; ONLY the panel hides, and only here — widening past this point reveals it
+ * regardless of the toggle's own state (design note §7.5). */
+@media (max-width: 479.98px) {
+  .all-bookings-filter-bar__toggle-row {
+    display: flex;
+  }
+
+  .all-bookings-filter-bar__panel--collapsed {
+    display: none;
+  }
+
+  .all-bookings-filter-bar__group {
+    flex-direction: column;
+  }
+}
+
+/* ---- Select (US-014/AC-02, AC-03) — a CUSTOM listbox, not a native <select> ------------------
+ *
+ * A native <select>'s options popup is drawn by the OS/browser, not this stylesheet. Confirmed
+ * against the real running app: Windows Chrome renders it in a light listbox regardless of
+ * `color-scheme` on the element, in both a desktop browser and Claude's own browser pane. This
+ * component paints the popup itself so it always matches the app's theme.
+ */
+
+.all-bookings-select__control {
+  position: relative;
+}
+
+.all-bookings-select__trigger {
+  appearance: none;
+  width: 100%;
+  padding-right: var(--s-24);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.all-bookings-select__trigger:disabled {
+  cursor: not-allowed;
+  color: var(--c-text-disabled);
+}
+
+.all-bookings-select__listbox {
+  position: absolute;
+  top: calc(100% + var(--s-4));
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: var(--s-4);
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+}
+
+.all-bookings-select__option {
+  padding: var(--s-8) var(--s-12);
+  border-radius: var(--r-sm);
+  font-size: var(--t-body);
+  color: var(--c-text);
+  cursor: pointer;
+}
+
+.all-bookings-select__option:hover {
+  background: var(--c-fill-subtle);
+}
+
+.all-bookings-select__option--selected {
+  background: var(--c-fill-muted);
+  font-weight: var(--fw-medium);
+}
+
+/* ---- DateField (US-014/AC-01) — a custom HTML calendar popover, requested directly rather than
+ * the browser's own native <input type="date"> popup (`decisions.md` D-08). Reuses `Calendar`'s
+ * own `.date-picker` chrome (`components/date-picker/date-picker.css`) for the panel itself; only
+ * the trigger and the Clear/Today footer are this screen's own. ------------------------------- */
+
+.all-bookings-calendar-popover {
+  position: absolute;
+  top: calc(100% + var(--s-4));
+  left: 0;
+  z-index: 10;
+}
+
+.all-bookings-calendar__footer {
+  display: flex;
+  justify-content: space-between;
+  padding-inline: var(--s-4);
+}
+
+.all-bookings-calendar__link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-action);
+  cursor: pointer;
+}
+
+.all-bookings-calendar__link:hover {
+  text-decoration: underline;
+}
+
+/* The adjacent-month days that fill the first/last week's empty slots (`decisions.md` D-09) —
+ * layered on `date-picker__cell` for identical sizing, dimmed and never interactive. */
+.all-bookings-calendar__cell--adjacent {
+  color: var(--c-text-disabled);
+  cursor: default;
+}
+
+/* `components/date-picker/date-picker.css`'s `.date-picker__weekdays` sets NO gap between its
+ * seven Mo…Su labels, while `.date-picker__week` sets `gap: var(--s-4)` between its seven date
+ * cells (`decisions.md` D-10). Two flex rows of 7 equal-width items with different total gap
+ * consume different amounts of the same width for gaps, so the header's columns are slightly
+ * WIDER than the grid's, and the drift compounds moving right — confirmed live: a human saw
+ * later columns visibly off from their header. Overridden here, scoped to this component, rather
+ * than edited in the shared stylesheet — `DatePicker` itself is unaffected. */
+.all-bookings-calendar .date-picker__weekdays {
+  gap: var(--s-4);
+}
+
+.all-bookings-select__chevron {
+  position: absolute;
+  right: var(--s-16);
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--c-text-muted);
+  pointer-events: none;
+}

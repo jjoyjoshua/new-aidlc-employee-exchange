@@ -854,9 +854,30 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/bookings.spec.ts",
+        "libs/contracts/src/desks.spec.ts",
+        "apps/api/src/domain/booking-history.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.service.spec.ts",
+        "apps/api/src/modules/desks/desks.repository.spec.ts",
+        "apps/api/src/modules/desks/desks.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/ui/src/screens/all-bookings/filters.spec.ts",
+        "apps/ui/src/screens/all-bookings/use-all-bookings.spec.ts",
+        "apps/ui/src/screens/all-bookings/use-desks.spec.ts",
+        "apps/ui/src/screens/all-bookings/Select.spec.tsx",
+        "apps/ui/src/screens/all-bookings/DateField.spec.tsx",
+        "apps/ui/src/screens/all-bookings/FilterBar.spec.tsx",
+        "apps/ui/src/screens/all-bookings/copy.spec.ts",
+        "apps/ui/src/screens/all-bookings/AllBookings.spec.tsx"
+      ],
       "screens": [
         "SCR-005"
+      ],
+      "decisions": [
+        "ADR-004",
+        "ADR-007"
       ]
     },
     "US-015": {
