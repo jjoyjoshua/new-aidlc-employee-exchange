@@ -221,3 +221,102 @@ describe.runIf(RUN)('adminBookingsRepository.listBookings — real Postgres (US-
     expect(page.rows).toEqual([]);
   });
 });
+
+/**
+ * US-015 design note §3.4, §9 — the two runtime-only assumptions no unit test (a recording fake)
+ * can prove: that two concurrent `UPDATE`s carrying the SAME `status = 'confirmed'` predicate
+ * really do arbitrate to exactly one winner when the WHERE clause is the only guard (there is no
+ * row-version column), and that the arbitration holds ACROSS two different writers
+ * (`cancelOwnedBooking` and `cancelAnyBooking`), not only between two copies of the same one.
+ */
+describe.runIf(RUN)('cancelOwnedBooking vs cancelAnyBooking — real Postgres arbitration (US-015/AC-07, AC-09)', () => {
+  it('a booking owner and an admin racing to cancel the SAME booking: exactly one wins, and the stored cancellation_source matches the winner (US-015/AC-09, the two-actor race)', async () => {
+    const cleanup = newCleanup();
+    try {
+      const owner = await createEmployee(cleanup, 'Race Owner');
+      const admin = await createEmployee(cleanup, 'Race Admin');
+      const deskId = await createDesk(cleanup, 'Z-06');
+
+      const { data, error } = await supabase()
+        .from('bookings')
+        .insert({ user_id: owner, desk_id: deskId, booking_date: DATE })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`fixture booking could not be created: ${error?.message}`);
+      const bookingId = (data as { id: string }).id;
+      cleanup.bookingIds.push(bookingId);
+
+      const now = new Date();
+      const [ownerResult, adminResult] = await Promise.all([
+        availabilityRepository.cancelOwnedBooking(owner, bookingId, now, DATE),
+        adminBookingsRepository.cancelAnyBooking(bookingId, admin, now, DATE),
+      ]);
+
+      // Exactly one of the two writes matched a row — the database arbitrated, not application
+      // logic (design note §3.4).
+      const winners = [ownerResult, adminResult].filter((r) => r !== undefined);
+      expect(winners).toHaveLength(1);
+
+      const { data: row, error: readError } = await supabase()
+        .from('bookings')
+        .select('status, cancellation_source, cancelled_by')
+        .eq('id', bookingId)
+        .single();
+      if (readError || !row) throw new Error(`fixture readback failed: ${readError?.message}`);
+
+      expect((row as { status: string }).status).toBe('cancelled');
+      // The winner's own write is what the stored row reflects — whichever of the two actually
+      // matched the row, never a mix of one's status with the other's attribution.
+      if (ownerResult !== undefined) {
+        expect((row as { cancellation_source: string }).cancellation_source).toBe('owner');
+        expect((row as { cancelled_by: string }).cancelled_by).toBe(owner);
+      } else {
+        expect((row as { cancellation_source: string }).cancellation_source).toBe('admin');
+        expect((row as { cancelled_by: string }).cancelled_by).toBe(admin);
+      }
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+
+  it('two admins racing to cancel the SAME booking: exactly one row updated, one cancelled_at, a database-side count of 1 (US-015/AC-07, the server half)', async () => {
+    const cleanup = newCleanup();
+    try {
+      const owner = await createEmployee(cleanup, 'Race Owner 2');
+      const adminA = await createEmployee(cleanup, 'Race Admin A');
+      const adminB = await createEmployee(cleanup, 'Race Admin B');
+      const deskId = await createDesk(cleanup, 'Z-07');
+
+      const { data, error } = await supabase()
+        .from('bookings')
+        .insert({ user_id: owner, desk_id: deskId, booking_date: DATE })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`fixture booking could not be created: ${error?.message}`);
+      const bookingId = (data as { id: string }).id;
+      cleanup.bookingIds.push(bookingId);
+
+      const now = new Date();
+      const [resultA, resultB] = await Promise.all([
+        adminBookingsRepository.cancelAnyBooking(bookingId, adminA, now, DATE),
+        adminBookingsRepository.cancelAnyBooking(bookingId, adminB, now, DATE),
+      ]);
+
+      const winners = [resultA, resultB].filter((r) => r !== undefined);
+      expect(winners).toHaveLength(1);
+
+      // AC-07's real guarantee: the DATABASE's own count, not the application's belief about how
+      // many requests it issued.
+      const { data: rows, error: countError } = await supabase()
+        .from('bookings')
+        .select('id, cancelled_by')
+        .eq('id', bookingId)
+        .eq('status', 'cancelled');
+      if (countError) throw new Error(countError.message);
+      expect(rows).toHaveLength(1);
+      expect([adminA, adminB]).toContain((rows as Array<{ cancelled_by: string }>)[0]?.cancelled_by);
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+});

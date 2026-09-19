@@ -1,16 +1,18 @@
 /**
- * The one cross-employee read in this codebase (US-013, REQ-011). Deliberately a SEPARATE object
- * from `AvailabilityRepository` in `bookings.repository.ts`, not a twelfth method there — every
- * method on that object is desk-scoped or filtered to `user_id`, which is a cheap, checkable
- * invariant US-006/AC-06 and US-007/D-03 lean on. Putting an unscoped read next to those would put
- * a copy-paste hazard one line away from the exact surface AC-10 protects (Architect design note
- * §4.2, this story's folder in `inception/specs/`).
+ * The one cross-employee READ AND WRITE in this codebase (US-013/US-015, REQ-011/REQ-014).
+ * Deliberately a SEPARATE object from `AvailabilityRepository` in `bookings.repository.ts`, not a
+ * twelfth method there — every method on that object is desk-scoped or filtered to `user_id`,
+ * which is a cheap, checkable invariant US-006/AC-06 and US-007/D-03 lean on. Putting an unscoped
+ * read or write next to those would put a copy-paste hazard one line away from the exact surface
+ * AC-10 protects (Architect design note §4.2, this story's folder in `inception/specs/`).
  *
  * Reachable only behind `requireAdmin` (`apps/api/src/modules/admin/admin.router.ts`) — never call
  * this from a route outside `/api/admin/*`.
  *
  * ADR-004 follow-up 3 anticipated this module reading `user_profiles` in addition to `bookings`
- * and `desks`; `README.md` in this directory states it.
+ * and `desks`; `README.md` in this directory states it. US-015/REQ-014 is the first WRITE this
+ * module makes to `bookings` — `cancelAnyBooking`'s missing `.eq('user_id', …)` predicate is that
+ * requirement, not an oversight (design note §3.1, §3.2).
  */
 import { supabase } from '../../infra/supabase/index.js';
 import type { BookingStatus, OfficeDate } from '@desk-booking/contracts';
@@ -81,6 +83,58 @@ export interface AdminBookingsRepository {
    * against real Postgres in `bookings.repository.concurrency.spec.ts`.
    */
   listBookings(filter: AdminBookingsFilter, offset: number, limit: number): Promise<AdminBookingsPage>;
+
+  /**
+   * US-015/AC-01, AC-02, AC-04, AC-07. One `UPDATE … RETURNING id`, scoped to id / confirmed /
+   * not-past — NO read-then-write window, exactly as `cancelOwnedBooking` (bookings.repository.ts).
+   *
+   * There is deliberately no `.eq('user_id', …)`, and the absence IS REQ-014. This is the only
+   * write in the codebase that changes a row belonging to somebody other than the caller; the
+   * authority comes from the `/api/admin` mount (`http/app.ts`), never from a predicate here.
+   *
+   * `adminId` is ATTRIBUTION, never scope — it is written to `cancelled_by` and is not in the
+   * `WHERE` at all. That is why `bookingId` comes FIRST here and `userId` comes first in
+   * `cancelOwnedBooking`: the parameter orders differ because the roles differ, and two adjacent
+   * uuids are a swap hazard worth naming. A swap fails loudly (`cancelled_by = <a booking id>`
+   * violates the FK to `user_profiles`, a `23503`, and `where id = <an admin id>` matches
+   * nothing), never silently.
+   *
+   * `cancelledAt` and `today` are the caller's ONE clock reading, from the SAME instant — two
+   * `nowMs()` calls would differ across office midnight (US-011 design note §8.4).
+   *
+   * `cancellation_source: 'admin'` is BR-001.20's own key (`0003_bookings.sql`), not a label:
+   * US-029/US-032 select their wording from it and must never compare ids to infer the actor.
+   *
+   * `status = 'confirmed'` in the `WHERE` is the ENTIRE optimistic-concurrency guard — there is no
+   * row-version column, and none is needed, because the `confirmed -> cancelled` transition is
+   * one-way and terminal: no code path anywhere sets `status` back to `'confirmed'` (design note
+   * §3.4). If a future feature ever restores a cancelled booking to `confirmed`, THAT is the
+   * change that would reopen the ABA problem this predicate currently forecloses, and it would
+   * need a real version column or an explicit `cancelled_at IS NULL` guard.
+   */
+  cancelAnyBooking(
+    bookingId: string,
+    adminId: string,
+    cancelledAt: Date,
+    today: OfficeDate,
+  ): Promise<{ id: string } | undefined>;
+
+  /**
+   * US-015/AC-09, design note §3.1, §3.3. Read-only, issued ONLY when `cancelAnyBooking` above
+   * returns nothing, and ONLY to classify that miss — never to decide whether to write. Select
+   * list is `status, booking_date` and nothing wider; no `desk_id`, no join, and deliberately
+   * no `cancellation_source` — AC-09 does not distinguish "the owner cancelled it first" from
+   * "another admin's request won the race", and widening this select to make that distinction
+   * would put "who cancelled this" on the response of an endpoint whose job is to cancel, for
+   * copy nobody approved.
+   *
+   * Unscoped by design — this is the disambiguating read for a write that is itself unscoped.
+   * Do not give this a `.eq('user_id', …)` twin next to `findMyBookingState`
+   * (`bookings.repository.ts`): that file's every method is scoped-by-construction, and a
+   * near-identical sibling differing by one omitted predicate is precisely the copy-paste hazard
+   * this repository exists to keep separate from that one (design note §3.1).
+   */
+  findBookingState(bookingId: string): Promise<{ status: BookingStatus; booking_date: OfficeDate } | undefined>;
 }
 
 export const adminBookingsRepository: AdminBookingsRepository = {
@@ -140,5 +194,35 @@ export const adminBookingsRepository: AdminBookingsRepository = {
         };
       }),
     };
+  },
+
+  async cancelAnyBooking(bookingId, adminId, cancelledAt, today) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .update({
+        status: 'cancelled',
+        cancelled_at: cancelledAt.toISOString(),
+        cancelled_by: adminId,
+        cancellation_source: 'admin',
+      })
+      .eq('id', bookingId)
+      .eq('status', 'confirmed')
+      .gte('booking_date', today)
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw new Error(`admin booking cancel failed: ${error.message}`);
+    return (data as { id: string } | null) ?? undefined;
+  },
+
+  async findBookingState(bookingId) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('status, booking_date')
+      .eq('id', bookingId)
+      .maybeSingle();
+
+    if (error) throw new Error(`bookings lookup failed: ${error.message}`);
+    return (data as { status: BookingStatus; booking_date: OfficeDate } | null) ?? undefined;
   },
 };

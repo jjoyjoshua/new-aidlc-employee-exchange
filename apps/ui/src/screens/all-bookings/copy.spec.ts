@@ -9,6 +9,16 @@ import {
   OFFICE_TIME,
   SHOW_MORE,
   statusLabel,
+  cancelReason,
+  cancelDialogTitle,
+  cancelDialogBody,
+  CANCEL_CONFIRM_LABEL,
+  CANCEL_KEEP_LABEL,
+  CANCEL_FAILED_RETRYABLE,
+  CANCEL_RETRY_LABEL,
+  alreadyCancelledMessage,
+  CANCEL_CLOSE_LABEL,
+  cancelledToast,
 } from './copy.js';
 
 describe('countLine (US-013/AC-07)', () => {
@@ -76,5 +86,50 @@ describe('SHOW_MORE / OFFICE_TIME', () => {
 
   it('OFFICE_TIME states the timezone', () => {
     expect(OFFICE_TIME('Asia/Kolkata')).toBe('Office time (Asia/Kolkata)');
+  });
+});
+
+describe('cancelReason — ST-07 (US-015/AC-01, AC-02)', () => {
+  it('matches the real frame exactly for each non-cancellable status', () => {
+    expect(cancelReason('completed')).toBe("Past bookings can't be cancelled");
+    expect(cancelReason('cancelled')).toBe('Already cancelled');
+  });
+});
+
+describe('cancel dialog copy — ST-08 (US-015/AC-03)', () => {
+  it('titles and bodies the dialog with the FULL employee name, matching the real frame exactly (US-015/AC-03)', () => {
+    expect(cancelDialogTitle('Priya Raman')).toBe("Cancel Priya Raman's desk?");
+    expect(cancelDialogBody('A-01', 'Mon 7 Sep', 'Priya Raman')).toBe(
+      'A-01 · Mon 7 Sep. The desk goes back into the pool and Priya Raman is emailed.',
+    );
+  });
+
+  it('uses the plain possessive for a name already ending in s, with no special-casing (decisions.md D-05)', () => {
+    expect(cancelDialogTitle('James Rollins')).toBe("Cancel James Rollins's desk?");
+  });
+
+  it('action labels match the real frame — "Cancel this booking", not my-bookings\' "Cancel booking"', () => {
+    expect(CANCEL_CONFIRM_LABEL).toBe('Cancel this booking');
+    expect(CANCEL_KEEP_LABEL).toBe('Keep it');
+  });
+});
+
+describe('cancel failure copy — ST-10 (US-015/AC-08, AC-09)', () => {
+  it('the retryable message and its button label match the real frame', () => {
+    expect(CANCEL_FAILED_RETRYABLE).toBe("We couldn't cancel that just now. Try again.");
+    expect(CANCEL_RETRY_LABEL).toBe('Try again');
+  });
+
+  it('the already-cancelled message names the row\'s employee and offers only Close', () => {
+    expect(alreadyCancelledMessage('Priya Raman')).toBe('Priya Raman has already cancelled this booking.');
+    expect(CANCEL_CLOSE_LABEL).toBe('Close');
+  });
+});
+
+describe('cancelledToast — ST-11 (US-015/AC-05, AC-06)', () => {
+  it('matches the real frame exactly, naming the employee, never an email address (US-015/AC-05, US-015/AC-06)', () => {
+    expect(cancelledToast('A-01', 'Mon 7 Sep', 'Priya Raman')).toBe(
+      'A-01 released for Mon 7 Sep. Priya Raman has been emailed.',
+    );
   });
 });

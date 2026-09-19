@@ -2,12 +2,15 @@
 
 ## Ownership (ADR-004 — read across, write within)
 
-**Owns (may write):** `bookings`. **Reads:** `desks`, via an explicit column list
+**Owns (may write):** `bookings`, from **two** objects as of US-015: the owner-scoped
+`AvailabilityRepository` (`bookings.repository.ts`) and the cross-employee
+`AdminBookingsRepository` (`admin-bookings.repository.ts`) — see US-015's paragraph below for why
+the second object writes at all. **Reads:** `desks`, via an explicit column list
 (`bookings.repository.ts`'s `listActiveDesks`) — never writes it. Desk inventory writes stay
-exclusively in `modules/desks` once US-015/US-017 build it. **Also reads `user_profiles`** as of
-US-013 — `admin-bookings.repository.ts`'s `listBookingsFromDate` joins to it for the employee's
-name (`full_name`), disambiguated by column (`user_profiles!user_id(...)`) because `bookings` has
-two foreign keys into that table (`user_id`, `cancelled_by`). Never writes it.
+exclusively in `modules/desks` once US-017 builds them. **Also reads `user_profiles`** as of
+US-013 — `admin-bookings.repository.ts`'s `listBookings` joins to it for the employee's name
+(`full_name`), disambiguated by column (`user_profiles!user_id(...)`) because `bookings` has two
+foreign keys into that table (`user_id`, `cancelled_by`). Never writes it.
 
 ## What's here
 
@@ -135,5 +138,44 @@ already placed for the desk filter by US-006. The desk-filter's own vocabulary (
 and inactive) is served by `GET /api/admin/desks`, in `modules/desks`, not here — see that
 module's README for why the read lives there instead of a sibling method on this module's
 `listActiveDesks`, which keeps its `is_active` filter unchanged for US-006/AC-04.
+
+**US-015** adds `POST /api/admin/bookings/:id/cancel` — the first WRITE `AdminBookingsRepository`
+makes to `bookings`, and the first write in this codebase to a row belonging to somebody other
+than the caller. `cancelAnyBooking` mirrors `cancelOwnedBooking`'s exact `UPDATE ... WHERE`
+shape — one atomic statement, `status='confirmed' AND booking_date >= today`, no read-then-write
+window — with one predicate removed and one value changed: **no `.eq('user_id', …)`, and that
+absence IS REQ-014**, not an oversight. The authority for this write comes entirely from the
+`/api/admin` mount (`requireAdmin`); there is no ownership predicate to enforce it, because there
+is nothing to check — an administrator is allowed to cancel any booking. `findBookingState`
+(unscoped, `status`/`booking_date` only) is the disambiguating read, run only after the write
+misses, mirroring `findMyBookingState`'s own discipline but never sharing its file: the two must
+stay visibly separate, since a near-identical sibling three lines from a scoped method is the
+copy-paste hazard US-013/D-08 put this whole object here to prevent.
+
+**No new row-version column, and none is needed.** `status = 'confirmed'` in the `WHERE` is the
+entire optimistic-concurrency guard, sufficient because the `confirmed -> cancelled` transition is
+one-way and terminal — no code path anywhere sets `status` back to `'confirmed'`. Two concurrent
+writes (owner vs admin, or two admins) are arbitrated by Postgres itself: whichever `UPDATE`
+commits first wins, the second re-evaluates its `WHERE` against the now-`cancelled` row and
+matches nothing. **If a future feature ever restores a cancelled booking to `confirmed`, this
+proof breaks** and a real version column (or an explicit `cancelled_at IS NULL` guard) becomes
+necessary — that is the one assumption a change here must not disturb silently.
+
+**Three forward constraints for whichever stories build the actual sends** (US-029's cancellation
+email, US-032's push alert) — this story writes only the attribution columns
+(`cancellation_source`, `cancelled_by`), never sends anything itself:
+
+1. The email must go to `bookings.user_id`'s address, never `cancelled_by`'s — BRD-001 §10
+   forbids admin copies.
+2. Wording must key off `cancellation_source` (`'admin'` vs `'owner'` vs `'deactivation_cascade'`),
+   never off comparing `cancelled_by` to `user_id` — that comparison cannot tell an admin cancel
+   from US-025's deactivation cascade.
+3. Any send must be triggered by this write's own returned row, never by the router's `200` and
+   never on the `409` branch — otherwise two racing actors would double-send the moment one loses.
+
+No migration — `cancellation_source` and `cancelled_by` were both placed by `0003_bookings.sql`
+specifically for this story. See
+`inception/specs/US-015-cancel-a-booking-on-behalf/design-note.md` for the full argument,
+including why AC-09 deliberately does not distinguish who cancelled a booking first.
 
 See `../README.md` for what this module owns and the boundary it must respect.

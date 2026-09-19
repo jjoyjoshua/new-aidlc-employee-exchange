@@ -16,26 +16,44 @@
  * the placeholder.
  */
 import { Router } from 'express';
-import { allBookingsQuerySchema } from '@desk-booking/contracts';
-import { ERROR_CODES, badRequest } from '../../http/errors.js';
+import { allBookingsQuerySchema, cancelBookingParamsSchema } from '@desk-booking/contracts';
+import { ERROR_CODES, badRequest, conflict, notFound, unauthorized } from '../../http/errors.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
+import '../../http/request-user.js';
 
 export interface AdminRouterDeps {
   bookings: AdminBookingsService;
   desks: DesksService;
 }
 
+/**
+ * US-015/design note §4. `req.user` is always present here in practice — this whole router is
+ * mounted behind `requireSession` (`http/app.ts`). Refusing rather than asserting (`req.user!`)
+ * means reaching this function without a user fails loudly rather than crashing on a misconfigured
+ * mount, the same shape `bookings.router.ts`'s own `requireUser` and `require-admin.ts` use.
+ *
+ * Read ONLY for ATTRIBUTION (`cancelled_by`), never for authorization — `requireAdmin` (the mount)
+ * is the sole authority over who reaches this router at all. This is the one place in this file
+ * that reads `req.user`, and it does not decide anything by doing so.
+ */
+function requireActingAdmin(req: { user?: { id: string } }) {
+  const user = req.user;
+  if (!user) {
+    throw unauthorized(ERROR_CODES.no_session, 'Sign in to continue.');
+  }
+  return user;
+}
+
 export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router {
   const router = Router();
 
   /**
-   * US-013/AC-02–AC-10; US-014/AC-01–AC-04. No `requireUser`/role check here — the mount already
-   * decided who may reach this handler (design note §5); reading `req.user` again would be a
-   * second, forgettable copy of `requireAdmin`. A repository failure propagates to `next(error)`,
-   * never caught into an empty page — that is what keeps AC-08's real-empty-system `total: 0`
-   * distinguishable from a load failure (ST-05), the same reasoning `bookings.router.ts`'s
-   * `GET /` states.
+   * US-013/AC-02–AC-10; US-014/AC-01–AC-04. No role check here — the mount already decided who
+   * may reach this handler (design note §5); a role check here would be a second, forgettable
+   * copy of `requireAdmin`. A repository failure propagates to `next(error)`, never caught into
+   * an empty page — that is what keeps AC-08's real-empty-system `total: 0` distinguishable from
+   * a load failure (ST-05), the same reasoning `bookings.router.ts`'s `GET /` states.
    */
   router.get('/bookings', async (req, res, next) => {
     try {
@@ -70,6 +88,40 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
       const result = await desks.listAllDesks();
       res.setHeader('Cache-Control', 'private, no-store');
       res.json({ desks: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-015/AC-02, AC-04, AC-09. `POST`, not `DELETE` — the row survives the transition (AC-04).
+   * `cancelBookingParamsSchema` is reused verbatim from `bookings.router.ts` — one route param, a
+   * uuid, `.strict()`. `200` with an empty body on success, matching the employee cancel endpoint
+   * exactly (design note §2.1, §2.3) — the two cancel endpoints differ in precisely which mount
+   * they sit on, and therefore who may call them.
+   */
+  router.post('/bookings/:id/cancel', async (req, res, next) => {
+    try {
+      const parsed = cancelBookingParamsSchema.safeParse(req.params);
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const admin = requireActingAdmin(req);
+      const outcome = await bookings.cancelAnyBooking(admin.id, parsed.data.id);
+
+      if (outcome.kind === 'already_cancelled') {
+        // AC-09, ST-10's non-retryable branch. The browser renders its OWN copy keyed on the
+        // `code`; this message is for logs and non-browser consumers.
+        throw conflict(ERROR_CODES.booking_already_cancelled, 'That booking has already been cancelled.');
+      }
+      if (outcome.kind === 'not_found') {
+        // Covers "no such booking" AND a real, past-dated booking (AC-02) — deliberately
+        // undiscriminated, matching the employee cancel endpoint (decisions.md D-07).
+        throw notFound(ERROR_CODES.booking_not_found, 'That booking could not be found.');
+      }
+
+      res.status(200).end();
     } catch (error) {
       next(error);
     }

@@ -42,6 +42,21 @@ export type UseAllBookingsResult = AllBookingsState & {
   /** No-ops when not `ready`, when `nextPage` is `null`, or when a previous `loadMore()` is
    *  still in flight (double-press guard). */
   loadMore: () => void;
+  /**
+   * US-015/AC-04, AC-09. Flips ONE item's `status` to `'cancelled'` in place — NEVER a `retry()`.
+   * Under an active `status=confirmed` filter (US-014), a refetch would make the just-cancelled
+   * row stop matching the query and vanish from the page, which is the exact behaviour AC-04
+   * forbids ("the row stays in place showing its new status rather than disappearing"). Called on
+   * BOTH a successful cancel and an `already_cancelled` response — a `409` from the cancel
+   * endpoint means the row exists and its status IS `cancelled` (the server just asserted it), so
+   * this is applying a known fact, not guessing (design note §5.3). Never called on a transport
+   * failure — that taught us nothing, and the booking is still Confirmed (AC-08).
+   *
+   * `total` is deliberately NOT decremented: it counts bookings matching the view, and the row is
+   * still in the view (AC-04 keeps it there) — decrementing would make the count line disagree
+   * with the visible list.
+   */
+  markCancelled: (bookingId: string) => void;
 };
 
 export function useAllBookings(
@@ -112,5 +127,15 @@ export function useAllBookings(
     });
   }, [fetchAllBookings, filters, state]);
 
-  return { ...state, retry: () => setAttempt((a) => a + 1), loadMore };
+  const markCancelled = useCallback((bookingId: string) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+      return {
+        ...current,
+        items: current.items.map((item) => (item.id === bookingId ? { ...item, status: 'cancelled' } : item)),
+      };
+    });
+  }, []);
+
+  return { ...state, retry: () => setAttempt((a) => a + 1), loadMore, markCancelled };
 }

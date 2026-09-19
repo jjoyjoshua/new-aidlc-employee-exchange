@@ -60,6 +60,20 @@ the first endpoint whose entire value is that it never fails.
 retrying differently can succeed. `422` means the rule says no. Two people racing for desk
 A-01 is `409`; SCR-006's "this desk has 3 upcoming bookings, so it can't be retired" is `422`.
 
+**A `404` may deliberately merge several distinct causes when discriminating between them would
+be an existence oracle.** Discriminating among the states of a resource the caller already owns
+discloses nothing, because the caller can already read those states. Discriminating **across** an
+ownership boundary is the oracle — it tells a caller something exists that they otherwise
+couldn't see. `POST /api/bookings/:id/cancel` folds "no such booking", "not the caller's" and
+"the caller's own but past-dated" into one undiscriminated `404 booking_not_found` for exactly
+this reason (US-011). Where there is **no** ownership boundary — an administrator calling
+`POST /api/admin/bookings/:id/cancel` can already read every booking's status via
+`GET /api/admin/bookings` — the rule's own test says the oracle argument does not apply, and the
+same fold is instead a **scope** decision: no approved copy or error code exists for a distinct
+"no longer cancellable" outcome, so both causes answer `404` there too (US-015). Same status code,
+different reason each time; state which one applies rather than assuming the anti-enumeration
+argument travels automatically to every `404`.
+
 ### One `403` carries extra weight
 
 When `must_change_password` is set, every route except the password-change route, `GET

@@ -896,9 +896,24 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/bookings/admin-bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.concurrency.spec.ts",
+        "apps/ui/src/lib/cancel-booking.spec.ts",
+        "apps/ui/src/screens/all-bookings/use-admin-cancel-dialog.spec.ts",
+        "apps/ui/src/screens/all-bookings/use-all-bookings.spec.ts",
+        "apps/ui/src/screens/all-bookings/AdminBookingRow.spec.tsx",
+        "apps/ui/src/screens/all-bookings/AllBookings.spec.tsx",
+        "apps/ui/src/screens/all-bookings/copy.spec.ts"
+      ],
       "screens": [
         "SCR-005"
+      ],
+      "decisions": [
+        "ADR-004",
+        "ADR-007"
       ]
     },
     "US-016": {
