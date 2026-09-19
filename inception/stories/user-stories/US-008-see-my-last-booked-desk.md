@@ -44,7 +44,7 @@ So that I can find my usual seat without remembering its number.
 
 ### AC-05 A taken or absent usual desk is not labelled
 
-- **Given** the most recently booked desk is **Taken** on the selected date, or is now **Inactive**, or has been renamed
+- **Given** the most recently booked desk is **Taken** on the selected date, or is now **Inactive**, or no longer exists
 - **When** availability is rendered
 - **Then** no label appears on any row — the hint is only useful on a row that can be chosen, and a label on a taken desk would read as a tease
 
