@@ -35,7 +35,7 @@ describe('parseFilters (US-014/AC-08)', () => {
     expect(parseFilters('')).toEqual({});
   });
 
-  it('parses a well-formed deskId + status query — the exact shape US-019 must construct', () => {
+  it('parses a well-formed deskId + status query — the shape a future pre-filtered arrival must construct', () => {
     expect(parseFilters(`?deskId=${VALID_DESK_ID}&status=confirmed`)).toEqual({
       deskId: VALID_DESK_ID,
       status: 'confirmed',
