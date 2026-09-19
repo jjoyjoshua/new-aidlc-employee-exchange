@@ -81,6 +81,12 @@ describe('ERROR_CODES', () => {
     expect(errorCodeSchema.parse('booking_already_cancelled')).toBe('booking_already_cancelled');
   });
 
+  it('carries desk_number_taken, distinct from desk_already_booked (US-017/AC-04)', () => {
+    expect(ERROR_CODES.desk_number_taken).toBe('desk_number_taken');
+    expect(ERROR_CODES.desk_number_taken).not.toBe(ERROR_CODES.desk_already_booked);
+    expect(errorCodeSchema.parse('desk_number_taken')).toBe('desk_number_taken');
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

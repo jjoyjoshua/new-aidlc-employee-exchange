@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDesksService } from './desks.service.js';
-import type { DesksRepository } from './desks.repository.js';
+import type { DesksRepository, InsertDeskOutcome } from './desks.repository.js';
 
 const TODAY = '2026-09-19';
 const NOW_MS = Date.parse(`${TODAY}T12:00:00Z`);
@@ -10,15 +10,19 @@ interface StubOptions {
   /** desk ids of confirmed, upcoming bookings — one entry per booking, matching the repository's
    *  own one-row-per-booking shape (US-016 design note §2.2). */
   upcomingDeskIds?: string[];
+  insertResult?: InsertDeskOutcome;
 }
 
-function stubRepository({ rows, upcomingDeskIds = [] }: StubOptions): {
+function stubRepository({ rows, upcomingDeskIds = [], insertResult }: StubOptions): {
   repository: DesksRepository;
   calls: Array<{ status: string; from: string }>;
+  insertCalls: string[];
 } {
   const calls: Array<{ status: string; from: string }> = [];
+  const insertCalls: string[] = [];
   return {
     calls,
+    insertCalls,
     repository: {
       async listAllDesks() {
         return rows;
@@ -26,6 +30,10 @@ function stubRepository({ rows, upcomingDeskIds = [] }: StubOptions): {
       async listUpcomingConfirmedDeskIds(status, from) {
         calls.push({ status, from });
         return upcomingDeskIds;
+      },
+      async insertDesk(deskNumber) {
+        insertCalls.push(deskNumber);
+        return insertResult ?? { kind: 'ok', desk: { id: 'new', desk_number: deskNumber, is_active: true } };
       },
     },
   };
@@ -125,5 +133,37 @@ describe('createDesksService.listAllDesks — the booked-ahead count (US-016/AC-
     await service(repository, nowMs).listAllDesks();
 
     expect(calls).toBe(1);
+  });
+});
+
+describe('createDesksService.createDesk (US-017/AC-01, AC-04)', () => {
+  it('maps a successful insert to an AdminDesk with bookedAhead: 0 (US-017/AC-01)', async () => {
+    const { repository } = stubRepository({
+      rows: [],
+      insertResult: { kind: 'ok', desk: { id: 'new-id', desk_number: 'A-07', is_active: true } },
+    });
+
+    const result = await service(repository).createDesk('A-07');
+
+    expect(result).toEqual({
+      kind: 'ok',
+      desk: { id: 'new-id', deskNumber: 'A-07', isActive: true, bookedAhead: 0 },
+    });
+  });
+
+  it('passes the desk number through to the repository unchanged (US-017/AC-03 — normalisation is the caller\'s)', async () => {
+    const { repository, insertCalls } = stubRepository({ rows: [] });
+
+    await service(repository).createDesk('A-07');
+
+    expect(insertCalls).toEqual(['A-07']);
+  });
+
+  it('reports a duplicate outcome without mapping a desk (US-017/AC-04)', async () => {
+    const { repository } = stubRepository({ rows: [], insertResult: { kind: 'duplicate' } });
+
+    const result = await service(repository).createDesk('A-01');
+
+    expect(result).toEqual({ kind: 'duplicate' });
   });
 });

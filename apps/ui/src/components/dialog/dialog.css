@@ -1,15 +1,13 @@
 /*
- * ConfirmDialog — D-06: no `bookings` vocabulary here, only the shape.
- *
- * US-011 (design note §5.1) corrects this file to match the approved Figma `Dialog` master
- * component (node `34:122`), which it never fully matched: `480px` centred card on
- * `--c-surface-overlay` + `--shadow-3` with NO border, over a `--c-scrim` overlay (previously a
- * raw `rgba(0,0,0,0.4)`), collapsing to a full-width bottom sheet with squared bottom corners on
- * `--shadow-sheet` below 768px — mobile-first, so the sheet is the default and the centred card
- * is the override, matching this codebase's own breakpoint convention.
+ * Dialog — the shared shell (US-017 design note §5.2). Moved from `confirm-dialog.css`, which
+ * carried it first (D-06): `480px` centred card on `--c-surface-overlay` + `--shadow-3` with NO
+ * border, over a `--c-scrim` overlay, collapsing to a full-width bottom sheet with squared bottom
+ * corners on `--shadow-sheet` below 768px — mobile-first, so the sheet is the default and the
+ * centred card is the override, matching this codebase's own breakpoint convention. Nothing here
+ * changed in the move; only the class prefix did (`confirm-dialog__*` -> `dialog__*`).
  */
 
-.confirm-dialog__overlay {
+.dialog__overlay {
   position: fixed;
   inset: 0;
   display: flex;
@@ -19,7 +17,7 @@
   z-index: 100;
 }
 
-.confirm-dialog {
+.dialog {
   width: 100%;
   background: var(--c-surface-overlay);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
@@ -30,18 +28,18 @@
   gap: var(--s-12);
 }
 
-.confirm-dialog:focus-visible {
+.dialog:focus-visible {
   outline: var(--bw-2) solid var(--c-focus-ring);
   outline-offset: var(--bw-2);
 }
 
-.confirm-dialog__header {
+.dialog__header {
   display: flex;
   align-items: center;
   gap: var(--s-16);
 }
 
-.confirm-dialog__title {
+.dialog__title {
   flex: 1 0 0;
   margin: 0;
   font-family: var(--f-body);
@@ -51,7 +49,7 @@
   color: var(--c-text);
 }
 
-.confirm-dialog__close {
+.dialog__close {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -65,27 +63,27 @@
   cursor: pointer;
 }
 
-.confirm-dialog__close:hover:not(:disabled) {
+.dialog__close:hover:not(:disabled) {
   color: var(--c-text);
 }
 
-.confirm-dialog__close:focus-visible {
+.dialog__close:focus-visible {
   outline: var(--bw-2) solid var(--c-focus-ring);
   outline-offset: var(--bw-2);
 }
 
-.confirm-dialog__close:disabled {
+.dialog__close:disabled {
   color: var(--c-text-disabled);
   cursor: default;
 }
 
-.confirm-dialog__close-icon {
+.dialog__close-icon {
   display: flex;
   width: 24px;
   height: 24px;
 }
 
-.confirm-dialog__body {
+.dialog__body {
   display: flex;
   flex-direction: column;
   gap: var(--s-12);
@@ -95,7 +93,7 @@
   color: var(--c-text-secondary);
 }
 
-.confirm-dialog__actions {
+.dialog__footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--s-8);
@@ -103,14 +101,14 @@
   border-top: var(--bw-1) solid var(--c-border);
 }
 
-/* >=768px: centred card, not a bottom sheet (Figma `Dialog`, node 34:122). */
+/* >=768px: centred card, not a bottom sheet. */
 @media (min-width: 768px) {
-  .confirm-dialog__overlay {
+  .dialog__overlay {
     align-items: center;
     padding: var(--s-16);
   }
 
-  .confirm-dialog {
+  .dialog {
     max-width: 480px;
     border-radius: var(--r-lg);
     box-shadow: var(--shadow-3);

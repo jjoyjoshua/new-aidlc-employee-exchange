@@ -16,7 +16,7 @@
  * the placeholder.
  */
 import { Router } from 'express';
-import { allBookingsQuerySchema, cancelBookingParamsSchema } from '@desk-booking/contracts';
+import { allBookingsQuerySchema, cancelBookingParamsSchema, deskCreateSchema } from '@desk-booking/contracts';
 import { ERROR_CODES, badRequest, conflict, notFound, unauthorized } from '../../http/errors.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
@@ -106,6 +106,31 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
    * exactly (design note §2.1, §2.3) — the two cancel endpoints differ in precisely which mount
    * they sit on, and therefore who may call them.
    */
+  /**
+   * US-017/AC-01, AC-02, AC-04, AC-08. `deskCreateSchema` trims, uppercases and validates the
+   * shape at the edge — a raw lower-case or badly-shaped body never reaches `desks.createDesk`
+   * (design note §2.4). No pre-check: the service's insert is the sole arbiter of a duplicate,
+   * so `outcome.kind === 'duplicate'` is the ONLY branch besides success.
+   */
+  router.post('/desks', async (req, res, next) => {
+    try {
+      const parsed = deskCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await desks.createDesk(parsed.data.deskNumber);
+
+      if (outcome.kind === 'duplicate') {
+        throw conflict(ERROR_CODES.desk_number_taken, 'That desk number is already in use.');
+      }
+
+      res.status(201).json(outcome.desk);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/bookings/:id/cancel', async (req, res, next) => {
     try {
       const parsed = cancelBookingParamsSchema.safeParse(req.params);

@@ -1,7 +1,9 @@
 /**
- * US-014's slice — `GET /api/admin/desks`. Architect design note §3
+ * US-014's read slice — `GET /api/admin/desks`. Architect design note §3
  * (`inception/specs/US-014-filter-all-bookings/design-note.md`); ADR-004 for why this read lives
- * in its own module rather than inside `modules/bookings`.
+ * in its own module rather than inside `modules/bookings`. US-017 adds the write side —
+ * `POST /api/admin/desks` — and the desk-number format rule both sides evaluate identically
+ * (`inception/specs/US-017-add-a-desk/design-note.md` §2, §5).
  */
 import { z } from 'zod';
 
@@ -52,3 +54,62 @@ export const adminDesksResponseSchema = z.object({
   desks: z.array(adminDeskSchema),
 });
 export type AdminDesksResponse = z.infer<typeof adminDesksResponseSchema>;
+
+/** BR-001.4, V-16 (US-017/AC-02). The ONE statement of the desk-number format in this project.
+ *  Both sides test against this constant — never a re-typed literal, the lesson `password.ts`
+ *  records for its own policy ("two regexes for one rule is how the checklist and the refusal
+ *  come to disagree"). */
+export const DESK_NUMBER_PATTERN = /^[A-Z]-\d{2}$/;
+
+/**
+ * BR-001.4, BR-001.8, V-08, US-017/AC-03, AC-05. Trim, then upper — in that order, and it is
+ * IDEMPOTENT (`f(f(x)) === f(x)`), which is what lets the browser normalise before sending and
+ * the server normalise again on arrival with no third answer possible.
+ *
+ * This produces the STORED value, not merely a comparison key: AC-03 requires `a-07` to be
+ * stored and displayed as `A-07`, and `0002_desks.sql`'s
+ * `desks_desk_number_format` CHECK would REFUSE anything else — which is that migration's own
+ * stated intent.
+ *
+ * `toUpperCase()`, not `toLocaleUpperCase()`: the alphabet is `A`-`Z` and a locale (e.g. Turkish
+ * dotless `ı`) must never enter this function's behaviour.
+ */
+export function normalizeDeskNumber(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
+/**
+ * The desk number as it may arrive on a request (US-017/AC-02, AC-03, AC-05; V-08, V-16).
+ *
+ * `.max(20)` is a guard against a pathological body, NOT a policy — the same distinction
+ * `password.ts` draws for its own `.max(200)`. It bounds the string BEFORE the trim so a
+ * megabyte of spaces is refused rather than trimmed.
+ *
+ * `.transform` then `.refine`, in that order and not the reverse: the parsed OUTPUT is the
+ * normalised value, so `parsed.data.deskNumber` is what gets stored and there is no second place
+ * to remember to uppercase (design note §2.4). `a-07` parses to `A-07`; `a-7` does not parse
+ * at all.
+ *
+ * Exported on its own so a future edit request (US-018) reuses it rather than restating the rule.
+ */
+export const deskNumberSchema = z
+  .string()
+  .max(20)
+  .transform(normalizeDeskNumber)
+  .refine((value) => DESK_NUMBER_PATTERN.test(value), {
+    message: 'Use one letter, a dash and two digits — like A-01.',
+  });
+
+/**
+ * `POST /api/admin/desks`'s one legitimate body (US-017/AC-01). `.strict()` — an unknown field is
+ * rejected, not ignored, matching every other request schema in this package.
+ *
+ * ONE field. No `isActive`: BRD-001 gives no way to create an inactive desk and US-017's own
+ * edge cases refuse to add one (design note §1.1 — a Gate 1 conflict with SCR-007's approved
+ * frames, tracked for reconciliation as a change-request rather than built speculatively here).
+ *
+ * No `id`: the database mints it. A caller-supplied primary key is an attack surface, not a
+ * convenience.
+ */
+export const deskCreateSchema = z.object({ deskNumber: deskNumberSchema }).strict();
+export type DeskCreateRequest = z.input<typeof deskCreateSchema>;

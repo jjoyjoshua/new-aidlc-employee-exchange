@@ -58,6 +58,11 @@ export const errorCodeSchema = z.enum([
   // enumerate via `GET /api/bookings` (US-010), so no new information crosses the ownership
   // boundary (design note §1.2). Returned as 409, never 404 or 422 (design note §1.3).
   'booking_already_cancelled',
+  // US-017/AC-04 — `desks_desk_number_key` fired (V-08, BR-001.8). The number is already held by
+  // a desk, ACTIVE OR INACTIVE: there is no delete, so a deactivated desk still holds its number
+  // (US-017 edge cases). Distinct from `desk_already_booked`, which is a BOOKING race on a desk
+  // that exists — one character apart in a switch, which is why both are constants.
+  'desk_number_taken',
   'route_not_found',
   'service_unavailable',
   'internal_error',

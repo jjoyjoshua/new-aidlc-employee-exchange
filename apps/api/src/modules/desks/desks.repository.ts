@@ -1,8 +1,8 @@
 /**
- * The desk INVENTORY read (US-014, REQ-031). A read-only repository over `desks` — US-014 design
- * note §3.2, §3.3 (`inception/specs/US-014-filter-all-bookings/`), placed here rather than inside
- * `modules/bookings` per ADR-004's own precedent (US-013 §4.1: "put the read where the write will
- * have to live") — desk WRITES will land here once US-015/US-017 build them.
+ * The desk inventory read AND write (US-014, US-016, US-017; REQ-031, REQ-015). Placed here
+ * rather than inside `modules/bookings` per ADR-004's own precedent (US-013 §4.1: "put the read
+ * where the write will have to live") — desk writes landed with US-017 (add a desk); US-018
+ * (rename) and US-019 (activate/deactivate) are this module's remaining write paths.
  *
  * Deliberately NOT `modules/bookings`'s `listActiveDesks` (`bookings.repository.ts`): that method
  * filters `is_active = true` for US-006/AC-04's availability grid, an invariant that method must
@@ -41,7 +41,31 @@ export interface DesksRepository {
    *  returns at most `desks x 31` uuids — about 3,100 at BR-001.4's 100-desk ceiling. Served by
    *  `bookings_booking_date_status_idx`. */
   listUpcomingConfirmedDeskIds(status: BookingStatus, from: OfficeDate): Promise<string[]>;
+  /**
+   * US-017/AC-01, AC-04, AC-05 (REQ-015, BR-001.4, BR-001.8, V-08, V-16). Inserts one desk and
+   * returns the created row, or reports the duplicate. `deskNumber` arrives ALREADY normalised
+   * (`normalizeDeskNumber`, applied by `deskCreateSchema` at the route edge) — this method does
+   * not normalise and must not, or the rule would have two homes.
+   *
+   * `is_active` is NOT named: `0002_desks.sql`'s `is_active boolean not null default true`
+   * defaults it to `true`, which IS US-017/AC-01's "created Active". Naming it here would be a
+   * second statement of the same default. `created_at`/`updated_at` likewise default — this
+   * schema has one trigger (`db-design.md` §3) and it is not on this table.
+   *
+   * NO availability/existence pre-check precedes this. `desks_desk_number_key` is the sole
+   * arbiter, exactly as the two partial unique indexes are for `insertConfirmedBooking`
+   * (`bookings.repository.ts`, US-007/D-04): a `SELECT … WHERE desk_number = ?` followed by an
+   * `INSERT` is a read-then-write window two concurrent admins can both pass.
+   *
+   * Only a `23505` naming the ONE known index becomes an outcome; everything else throws, the
+   * mapping contract `insertConfirmedBooking` states for the same class of failure. A `23514`
+   * (the format CHECK) is deliberately NOT mapped: reaching it means the normaliser or the schema
+   * failed, which must surface as a 500 rather than be reported to an administrator as a
+   * duplicate. */
+  insertDesk(deskNumber: string): Promise<InsertDeskOutcome>;
 }
+
+export type InsertDeskOutcome = { kind: 'ok'; desk: DeskRow } | { kind: 'duplicate' };
 
 export const desksRepository: DesksRepository = {
   async listAllDesks() {
@@ -63,5 +87,18 @@ export const desksRepository: DesksRepository = {
 
     if (error) throw new Error(`bookings lookup failed: ${error.message}`);
     return ((data ?? []) as Array<{ desk_id: string }>).map((row) => row.desk_id);
+  },
+
+  async insertDesk(deskNumber) {
+    const { data, error } = await supabase()
+      .from('desks')
+      .insert({ desk_number: deskNumber })
+      .select('id, desk_number, is_active')
+      .single();
+
+    if (!error) return { kind: 'ok', desk: data as DeskRow };
+    if (error.code !== '23505') throw new Error(`desk insert failed: ${error.message}`);
+    if (error.message.includes('desks_desk_number_key')) return { kind: 'duplicate' };
+    throw new Error(`unrecognised unique violation: ${error.message}`);
   },
 };
