@@ -80,7 +80,7 @@ describe('useAdminCancelDialog — open/confirm/dismiss (US-015)', () => {
     expect(onCancelled).not.toHaveBeenCalled();
   });
 
-  it('dismiss() after already_cancelled calls onAlreadyCancelled with the item — NEVER a refresh/refetch callback (US-015/AC-09, design note §5.2 divergence from US-011)', async () => {
+  it('dismiss() after already_cancelled calls onAlreadyCancelled with the item — NEVER a refresh/refetch callback (US-015/AC-09, design note §5.2\'s divergence from the employee-side dialog)', async () => {
     const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'already_cancelled' });
     const onAlreadyCancelled = vi.fn();
     const { result } = renderHook(() => useAdminCancelDialog(cancelBooking, vi.fn(), onAlreadyCancelled));
