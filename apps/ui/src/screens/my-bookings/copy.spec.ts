@@ -8,8 +8,10 @@ import {
   CANCEL_KEEP_LABEL,
   cancelDialogBody,
   cancelledToast,
+  LOAD_FAILED,
   NEVER_BOOKED,
   NOTHING_UPCOMING,
+  QUIET_REFRESH_FAILED,
   readyAnnouncement,
   SHOW_MORE_ARIA_LABEL,
 } from './copy.js';
@@ -74,5 +76,12 @@ describe('cancel dialog copy (US-011/AC-03, AC-08, AC-09, design note §5.5)', (
     expect(cancelledToast('B-02', 'Wed 9 Sep', 'priya@company.com')).toBe(
       'Desk B-02 released for Wed 9 Sep. Cancellation emailed to priya@company.com.',
     );
+  });
+});
+
+describe('QUIET_REFRESH_FAILED — US-012/AC-04', () => {
+  it('is distinct from LOAD_FAILED (a still-showing list, not a gone one)', () => {
+    expect(QUIET_REFRESH_FAILED).not.toBe(LOAD_FAILED);
+    expect(QUIET_REFRESH_FAILED).toBeTruthy();
   });
 });

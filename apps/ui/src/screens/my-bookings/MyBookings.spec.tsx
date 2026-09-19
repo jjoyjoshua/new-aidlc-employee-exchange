@@ -1,8 +1,8 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MyBookings } from './MyBookings.js';
 import { AuthProvider, useAuth, type AuthContextValue } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
@@ -10,7 +10,14 @@ import type { AuthenticatedUser, MyBookingsResponse, Office } from '@desk-bookin
 import type { MyBookingsFetcher, MyBookingsOutcome } from './use-my-bookings.js';
 import type { CancelBookingFetcher, CancelBookingOutcome } from '../../lib/cancel-booking.js';
 import { formatOfficeDateLong } from '../../lib/format-office-date.js';
-import { SHOW_MORE_ARIA_LABEL } from './copy.js';
+import { QUIET_REFRESH_FAILED, SHOW_MORE_ARIA_LABEL } from './copy.js';
+
+function regainFocus() {
+  return act(async () => {
+    window.dispatchEvent(new Event('focus'));
+    await Promise.resolve();
+  });
+}
 
 const EMPLOYEE: AuthenticatedUser = {
   id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
@@ -468,5 +475,104 @@ describe('MyBookings — Book a desk navigates to /book', () => {
     await user.click(await screen.findByRole('button', { name: 'Book a desk' }));
 
     expect(await screen.findByTestId('landed-on-book-a-desk')).toBeInTheDocument();
+  });
+});
+
+describe('MyBookings — US-012, refresh on regaining focus', () => {
+  afterEach(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  });
+
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'confirmed' }],
+    nextBefore: null,
+  };
+
+  it('re-fetches and re-renders when the window regains focus (US-012/AC-01) — the SCR-002 half of US-012/AC-06; SCR-005 deferred per decisions.md D-01', async () => {
+    const refreshed: MyBookingsResponse = {
+      today: OFFICE.today,
+      items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'cancelled' }],
+      nextBefore: null,
+    };
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(response)).mockResolvedValueOnce(ok(refreshed));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} />);
+
+    await screen.findByText('Desk A-01');
+    await regainFocus();
+
+    await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
+  });
+
+  it('a row cancelled elsewhere shows Cancelled with no Cancel control on the next regain (US-012/AC-02)', async () => {
+    const cancelledElsewhere: MyBookingsResponse = {
+      today: OFFICE.today,
+      items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'cancelled' }],
+      nextBefore: null,
+    };
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(response)).mockResolvedValueOnce(ok(cancelledElsewhere));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} />);
+
+    await screen.findByRole('button', { name: 'Cancel' });
+    await regainFocus();
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument());
+    const pastSection = screen.getByText('Past bookings').closest('details');
+    if (!pastSection) throw new Error('Past section not found');
+    expect(within(pastSection).getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('shows no skeleton and keeps the list mounted while the refresh is in flight (US-012/AC-03)', async () => {
+    let resolveRefresh!: (value: MyBookingsOutcome) => void;
+    const fetchMyBookings = vi
+      .fn()
+      .mockResolvedValueOnce(ok(response))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveRefresh = resolve)));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} />);
+
+    await screen.findByText('Desk A-01');
+    await regainFocus();
+
+    await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
+    expect(document.querySelectorAll('.skeleton-row').length).toBe(0);
+    expect(screen.getByText('Desk A-01')).toBeInTheDocument(); // still on screen, not unmounted
+
+    await act(async () => {
+      resolveRefresh(ok(response));
+      await Promise.resolve();
+    });
+  });
+
+  it('a failed refresh keeps the prior list and shows a retryable, unobtrusive notice (US-012/AC-04)', async () => {
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(response)).mockResolvedValueOnce(failed);
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} />);
+
+    await screen.findByText('Desk A-01');
+    await regainFocus();
+
+    expect(await screen.findByText(QUIET_REFRESH_FAILED)).toBeInTheDocument();
+    expect(screen.getByText('Desk A-01')).toBeInTheDocument(); // the list is untouched
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('does not refresh while the cancel dialog is open, and leaves it undisturbed (US-012/AC-05)', async () => {
+    const cancelledElsewhere: MyBookingsResponse = {
+      today: OFFICE.today,
+      items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'cancelled' }],
+      nextBefore: null,
+    };
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(response)).mockResolvedValueOnce(ok(cancelledElsewhere));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} cancelBooking={vi.fn()} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+
+    await regainFocus();
+
+    // No refresh fired — still exactly the initial call.
+    expect(fetchMyBookings).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(within(screen.getByRole('alertdialog')).getByText(/A-01/)).toBeInTheDocument();
   });
 });

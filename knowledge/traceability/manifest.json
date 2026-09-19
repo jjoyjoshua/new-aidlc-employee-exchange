@@ -783,10 +783,18 @@
         "AC-05",
         "AC-06"
       ],
-      "tests": [],
+      "tests": [
+        "apps/ui/src/lib/data-refresh.spec.ts",
+        "apps/ui/src/screens/my-bookings/use-my-bookings.spec.ts",
+        "apps/ui/src/screens/my-bookings/copy.spec.ts",
+        "apps/ui/src/screens/my-bookings/MyBookings.spec.tsx"
+      ],
       "screens": [
         "SCR-002",
         "SCR-005"
+      ],
+      "decisions": [
+        "ADR-008"
       ]
     },
     "US-013": {

@@ -39,7 +39,7 @@
 | REQ-033 | US-022 | 0/6 | planned |
 | REQ-034 | US-008 | 6/6 | delivered |
 | REQ-035 | US-009 | 7/7 | delivered |
-| REQ-036 | US-012 | 0/6 | planned |
+| REQ-036 | US-012 | 6/6 | delivered |
 | NFR-001 | US-005 | 8/8 | delivered |
 | NFR-002 | US-033 | 0/9 | planned |
 | NFR-003 | US-001 | 8/8 | delivered |

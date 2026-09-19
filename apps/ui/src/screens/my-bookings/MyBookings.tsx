@@ -26,6 +26,7 @@ import { EmptyState } from '../../components/empty-state/EmptyState.js';
 import { SkeletonRow } from '../../components/skeleton-row/SkeletonRow.js';
 import { BookingRow } from './BookingRow.js';
 import { useAuth } from '../../lib/auth/auth-context.js';
+import { useFocusRefresh } from '../../lib/data-refresh.js';
 import { useMyBookings, type MyBookingsFetcher } from './use-my-bookings.js';
 import { useCancelDialog } from './use-cancel-dialog.js';
 import { createFetchMyBookings } from './fetch-my-bookings.js';
@@ -46,6 +47,7 @@ import {
   NOTHING_UPCOMING,
   OFFICE_TIME,
   PAST_BOOKINGS_HEADING,
+  QUIET_REFRESH_FAILED,
   readyAnnouncement,
   SHOW_MORE,
   SHOW_MORE_ARIA_LABEL,
@@ -121,6 +123,11 @@ function MyBookingsContent({
   );
   const cancelDialog = useCancelDialog(resolvedCancelBooking, handleCancelled, bookings.retry);
 
+  // US-012/AC-05: suppressed while the cancel dialog is open, so a regain can never pull the row
+  // out from under a confirmation (US-012/D-05) — the shared listener itself lives in
+  // `lib/data-refresh.ts` (ADR-008), not here.
+  useFocusRefresh(bookings.refreshQuietly, { enabled: cancelDialog.dialog === undefined });
+
   const goBookADesk = () => navigate('/book');
 
   return (
@@ -155,6 +162,22 @@ function MyBookingsContent({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : null}
+
+      {/* US-012/AC-04. Sits above the still-showing list — never replaces it, unlike the
+          status === 'error' Alert below, which has no list left to sit above. */}
+      {bookings.status === 'ready' && bookings.quietRefreshFailed ? (
+        <Alert
+          tone="warning"
+          live="assertive"
+          actions={
+            <Button variant="secondary" onClick={bookings.refreshQuietly}>
+              Try again
+            </Button>
+          }
+        >
+          {QUIET_REFRESH_FAILED}
+        </Alert>
       ) : null}
 
       {bookings.status === 'error' ? (

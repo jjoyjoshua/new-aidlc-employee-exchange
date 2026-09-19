@@ -25,6 +25,12 @@ export const NOTHING_UPCOMING = {
  *  booking that vanished. */
 export const LOAD_FAILED = "We couldn't load your bookings. They're safe — this is a display problem.";
 
+/** US-012/AC-04. No hi-fi frame draws this state — it did not exist before this story — so this
+ *  is written copy, not a verified frame quote. Deliberately distinct from `LOAD_FAILED`: that
+ *  one replaces the list; this one sits above a list that is still showing, so it reads as "this
+ *  check failed" rather than "your bookings are gone". */
+export const QUIET_REFRESH_FAILED = "Couldn't check for updates just now. Your list may be out of date.";
+
 /** AC-08's single live-region announcement, while the initial page is in flight. */
 export const LOADING_ANNOUNCEMENT = 'Loading your bookings';
 
