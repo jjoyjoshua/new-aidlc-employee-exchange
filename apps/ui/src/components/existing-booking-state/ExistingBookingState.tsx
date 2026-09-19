@@ -3,15 +3,18 @@
  * already holds a Confirmed booking for the selected date — no desk row, no confirm action, the
  * wasted choice never rendered in the first place.
  *
- * FR-12, AC-07: opens `ConfirmDialog` (D-06's shared primitive) to cancel that one booking; on
- * an `ok` outcome — which `cancel-booking.ts`'s real fetcher already treats a `404` the same as
- * a success (design note §3.4, F-6) — `onCancelled` fires so the caller reloads availability for
- * the same date and the desk list becomes selectable again.
+ * FR-12, AC-07: opens `ConfirmDialog` (D-06's shared primitive) to cancel that one booking. The
+ * shared fetcher (`lib/cancel-booking.ts`, widened by US-011) now answers with one of four
+ * outcomes; this component folds `already_cancelled` and `refused` into its own success alongside
+ * `ok` — preserving US-007/AC-07's original converge-don't-fail behaviour exactly (design note
+ * §5.2, §8.2): whatever the reason, the booking is no longer Confirmed, which is the state this
+ * screen asked for. Only a genuine `failed` (a transport failure, a real 5xx) leaves the dialog
+ * open with nothing further specified by this story.
  */
 import { useState } from 'react';
 import { Button } from '../button/Button.js';
 import { ConfirmDialog } from '../confirm-dialog/ConfirmDialog.js';
-import type { CancelBookingFetcher } from './cancel-booking.js';
+import type { CancelBookingFetcher } from '../../lib/cancel-booking.js';
 import './existing-booking-state.css';
 
 export interface ExistingBookingStateProps {
@@ -40,9 +43,10 @@ export function ExistingBookingState({
     setBusy(false);
 
     // `failed` (a transport failure, a genuine 500) leaves the dialog open with nothing further
-    // specified by this story — the employee can retry the same confirm action. Only `ok`
-    // (cancelled, or already gone) closes the loop.
-    if (outcome.kind === 'ok') {
+    // specified by this story — the employee can retry the same confirm action. `ok`,
+    // `already_cancelled` and `refused` all close the loop: whichever it was, the booking is no
+    // longer Confirmed, which is exactly the state this screen asked for (design note §5.2).
+    if (outcome.kind === 'ok' || outcome.kind === 'already_cancelled' || outcome.kind === 'refused') {
       setDialogOpen(false);
       onCancelled();
     }

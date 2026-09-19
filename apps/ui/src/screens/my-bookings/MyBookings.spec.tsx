@@ -8,6 +8,7 @@ import { AuthProvider, useAuth, type AuthContextValue } from '../../lib/auth/aut
 import type { ApiClient } from '../../lib/api-client.js';
 import type { AuthenticatedUser, MyBookingsResponse, Office } from '@desk-booking/contracts';
 import type { MyBookingsFetcher, MyBookingsOutcome } from './use-my-bookings.js';
+import type { CancelBookingFetcher, CancelBookingOutcome } from '../../lib/cancel-booking.js';
 import { formatOfficeDateLong } from '../../lib/format-office-date.js';
 import { SHOW_MORE_ARIA_LABEL } from './copy.js';
 
@@ -29,9 +30,11 @@ const OFFICE: Office = { timezone: 'Asia/Kolkata', today: '2026-09-16' };
 function SignedIn({
   initialEntries,
   fetchMyBookings,
+  cancelBooking,
 }: {
   initialEntries: Array<string | { pathname: string; state?: unknown }>;
   fetchMyBookings?: MyBookingsFetcher;
+  cancelBooking?: CancelBookingFetcher;
 }) {
   const client: ApiClient = {
     request: (async () => ({
@@ -46,7 +49,7 @@ function SignedIn({
       <AuthProvider client={client} onSession={() => undefined} getStoredSession={async () => undefined}>
         <Primer>
           <Routes>
-            <Route path="/bookings" element={<MyBookings fetchMyBookings={fetchMyBookings} />} />
+            <Route path="/bookings" element={<MyBookings fetchMyBookings={fetchMyBookings} cancelBooking={cancelBooking} />} />
             {/* Where the "Book a desk" action leads — a bare probe, not the real BookADesk
                 screen; that rendering is BookADesk.spec.tsx's own job. */}
             <Route path="/book" element={<p data-testid="landed-on-book-a-desk">Book a desk screen</p>} />
@@ -237,14 +240,187 @@ describe('MyBookings — AC-01, AC-02, upcoming and today (design note §4.1, §
     expect(desks).toEqual(['Desk C-03', 'Desk A-01']); // Sep 17 then Sep 18
   });
 
-  it("puts a Cancelled row dated in the FUTURE in Past, never in Upcoming, with no Cancel control anywhere on the screen (design note §7.1, decisions.md D-05)", async () => {
+  it("puts a Cancelled row dated in the FUTURE in Past, never in Upcoming, with no Cancel control on any Past row (design note §7.1; US-011/AC-01 renders Cancel on Confirmed rows elsewhere on this fixture)", async () => {
     render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={async () => ok(response)} />);
 
     await screen.findByText('Past bookings');
     const pastSection = screen.getByText('Past bookings').closest('details');
     if (!pastSection) throw new Error('Past section not found');
     expect(within(pastSection).getByText('Desk D-04')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(within(pastSection).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
+});
+
+describe('MyBookings — US-011/AC-01, the Cancel control appears only where BR-001.6 allows it', () => {
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [
+      { id: 'today', deskNumber: 'B-02', date: '2026-09-16', status: 'confirmed' },
+      { id: 'future', deskNumber: 'C-03', date: '2026-09-18', status: 'confirmed' },
+      { id: 'past-completed', deskNumber: 'A-01', date: '2026-09-10', status: 'completed' },
+      { id: 'past-cancelled', deskNumber: 'D-04', date: '2026-09-05', status: 'cancelled' },
+    ],
+    nextBefore: null,
+  };
+
+  it('renders Cancel on the TODAY row and every Upcoming row, and on no Past row', async () => {
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={async () => ok(response)} />);
+
+    await screen.findByText('TODAY');
+    const cancelButtons = screen.getAllByRole('button', { name: 'Cancel' });
+    expect(cancelButtons).toHaveLength(2); // TODAY + one Upcoming row
+
+    const pastSection = screen.getByText('Past bookings').closest('details');
+    if (!pastSection) throw new Error('Past section not found');
+    expect(within(pastSection).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
+});
+
+describe('MyBookings — US-011/AC-03, opening and dismissing the cancel dialog', () => {
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'confirmed' }],
+    nextBefore: null,
+  };
+
+  it('names the desk and date in the dialog; Escape dismisses without any cancel request', async () => {
+    const cancelBooking = vi.fn();
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={async () => ok(response)} cancelBooking={cancelBooking} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText(/A-01/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Fri 18 Sep/)).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(cancelBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe('MyBookings — US-011/AC-04, AC-05, a successful cancellation', () => {
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'confirmed' }],
+    nextBefore: null,
+  };
+
+  it('flips the row to Cancelled in Past (US-011/AC-05), shows a toast naming the desk/date/email (US-011/AC-04), issues no re-fetch, and no password prompt anywhere (US-011/AC-06)', async () => {
+    const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'ok' });
+    const fetchMyBookings = vi.fn().mockResolvedValue(ok(response));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} cancelBooking={cancelBooking} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+    expect(
+      await screen.findByText('Desk A-01 released for Fri 18 Sep. Cancellation emailed to priya@company.com.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    const pastSection = screen.getByText('Past bookings').closest('details');
+    if (!pastSection) throw new Error('Past section not found');
+    expect(within(pastSection).getByText('Cancelled')).toBeInTheDocument();
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument();
+
+    // No re-fetch — the initial load is the only call to fetchMyBookings.
+    expect(fetchMyBookings).toHaveBeenCalledTimes(1);
+    expect(document.querySelectorAll('.skeleton-row').length).toBe(0);
+
+    // AC-06 — no password prompt anywhere in the flow.
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('MyBookings — US-011/AC-07, a cancellation in flight cannot be sent twice', () => {
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'confirmed' }],
+    nextBefore: null,
+  };
+
+  it('activating confirm twice issues exactly one request; the dialog stays busy; Escape does nothing', async () => {
+    let resolveCancel!: (outcome: CancelBookingOutcome) => void;
+    const cancelBooking = vi.fn(() => new Promise<CancelBookingOutcome>((resolve) => (resolveCancel = resolve)));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={async () => ok(response)} cancelBooking={cancelBooking} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    const confirmButton = screen.getByRole('button', { name: 'Cancel booking' });
+    await user.click(confirmButton);
+    await user.click(confirmButton); // second activation while the first is still in flight
+
+    expect(cancelBooking).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Cancel booking' })).toHaveAttribute('aria-busy', 'true');
+
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument(); // still open — Escape suppressed while busy
+
+    resolveCancel({ kind: 'ok' });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+});
+
+describe('MyBookings — US-011/AC-08, a failed cancellation', () => {
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'confirmed' }],
+    nextBefore: null,
+  };
+
+  it('keeps the dialog open with the retryable message, the row stays Confirmed, and retry works', async () => {
+    const cancelBooking = vi.fn().mockResolvedValueOnce({ kind: 'failed' }).mockResolvedValueOnce({ kind: 'ok' });
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={async () => ok(response)} cancelBooking={cancelBooking} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+    expect(await screen.findByText("We couldn't cancel that just now. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    const upcomingSection = screen.getByText('Upcoming').closest('section');
+    if (!upcomingSection) throw new Error('Upcoming section not found');
+    expect(within(upcomingSection).getByText('Confirmed')).toBeInTheDocument();
+
+    // Retry succeeds.
+    await user.click(screen.getByRole('button', { name: 'Cancel booking' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(cancelBooking).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('MyBookings — US-011/AC-09, already cancelled elsewhere', () => {
+  const response: MyBookingsResponse = {
+    today: OFFICE.today,
+    items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'confirmed' }],
+    nextBefore: null,
+  };
+
+  it('renders the non-retryable message with Close, and dismissal re-fetches the default page', async () => {
+    const cancelBooking: CancelBookingFetcher = async () => ({ kind: 'already_cancelled' });
+    const refreshedResponse: MyBookingsResponse = {
+      today: OFFICE.today,
+      items: [{ id: 'b1', deskNumber: 'A-01', date: '2026-09-18', status: 'cancelled' }],
+      nextBefore: null,
+    };
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(response)).mockResolvedValueOnce(ok(refreshedResponse));
+    render(<SignedIn initialEntries={['/bookings']} fetchMyBookings={fetchMyBookings} cancelBooking={cancelBooking} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+    expect(await screen.findByText('That booking has already been cancelled.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+
+    await user.click(closeButton);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
   });
 });
 

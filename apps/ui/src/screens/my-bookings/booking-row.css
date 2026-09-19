@@ -1,7 +1,10 @@
 /*
- * BookingRow — SCR-002 `Booking row` (Figma node `83:5041`). `p-16`, gap `--s-12`. No `Cancel`
- * control (`decisions.md` D-05), so one geometry serves every row — Upcoming, Today and Past
- * alike — unlike the approved frame's two heights (80px with Cancel, 60px without).
+ * BookingRow — SCR-002 `Booking row` (Figma node `83:5041`). `p-16`, gap `--s-12`. Kept at ONE
+ * geometry for every row — Upcoming, Today and Past alike — rather than the approved frame's two
+ * heights (80px with Cancel, 60px without): `--desk-row-height` is shared with `SkeletonRow` and
+ * every section (US-011 decisions.md), and this keeps that invariant rather than re-deriving a
+ * per-section skeleton height. `min-height: 44px` plus the Cancel control's own 48px still clear
+ * every stated touch-target floor.
  *
  * Height feeds `--desk-row-height`, the same custom property `SkeletonRow` reads (scoped in
  * `my-bookings.css`), so the loading skeleton (AC-08) does not shift the layout when real rows
@@ -10,10 +13,10 @@
 
 .booking-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s-12);
-  height: var(--desk-row-height, 56px);
-  min-height: 44px;
+  min-height: var(--desk-row-height, 56px);
   padding: var(--s-16);
 }
 
@@ -58,4 +61,19 @@
   font-size: var(--t-heading);
   line-height: var(--lh-heading);
   font-weight: var(--fw-semibold);
+}
+
+/* US-011/AC-01. SCR-002's structural decision: "at 360px the row's Cancel sits on its own line,
+ * right-aligned at its natural width — not full width" (rejected: full-width, which would
+ * dominate the card). `flex-basis: 100%` on the narrowest supported width forces the wrap this
+ * row's `flex-wrap: wrap` alone would not guarantee; from 768px up it sits inline, trailing. */
+.booking-row__cancel {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 479.98px) {
+  .booking-row__cancel {
+    flex-basis: 100%;
+  }
 }

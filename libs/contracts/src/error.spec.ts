@@ -75,6 +75,12 @@ describe('ERROR_CODES', () => {
     }
   });
 
+  it('carries booking_already_cancelled, distinct from booking_not_found (US-011/AC-09)', () => {
+    expect(ERROR_CODES.booking_already_cancelled).toBe('booking_already_cancelled');
+    expect(ERROR_CODES.booking_already_cancelled).not.toBe(ERROR_CODES.booking_not_found);
+    expect(errorCodeSchema.parse('booking_already_cancelled')).toBe('booking_already_cancelled');
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

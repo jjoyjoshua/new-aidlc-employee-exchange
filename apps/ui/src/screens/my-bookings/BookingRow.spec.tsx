@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { BookingRow } from './BookingRow.js';
 
 describe('BookingRow (US-010/AC-01, AC-05)', () => {
@@ -19,10 +20,20 @@ describe('BookingRow (US-010/AC-01, AC-05)', () => {
     expect(screen.getByText('Cancelled')).toBeInTheDocument();
   });
 
-  it('renders no Cancel control (decisions.md D-05 — cancellation is a later story’s, not this one)', () => {
+  it('renders no Cancel control when onCancel is omitted (Past rows, US-011/AC-01)', () => {
     render(<BookingRow deskNumber="A-01" date="2026-09-16" status="confirmed" />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('renders a Cancel control that calls onCancel, when it is supplied (US-011/AC-01)', async () => {
+    const onCancel = vi.fn();
+    render(<BookingRow deskNumber="A-01" date="2026-09-16" status="confirmed" onCancel={onCancel} />);
+
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    await userEvent.click(cancel);
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('applies an emphasis class for the TODAY row (ST-05), and not for an ordinary row', () => {

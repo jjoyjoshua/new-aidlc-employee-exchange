@@ -24,7 +24,7 @@
 | FR-09  | `apps/ui/src/screens/book-a-desk/BookADesk.tsx` | selection reset on date change | `BookADesk.spec.tsx` | implemented |
 | FR-10  | `apps/ui/src/screens/book-a-desk/BookADesk.tsx`, `apps/ui/src/screens/my-bookings/MyBookings.tsx` | post-confirm navigation + `bookingConfirmation` toast | `BookADesk.spec.tsx`, `MyBookings.spec.tsx` | implemented (toast only — "visible in Upcoming" is US-010's, D-08) |
 | FR-11  | `apps/ui/src/components/existing-booking-state/`, `BookADesk.tsx` | `ExistingBookingState` | `ExistingBookingState.spec.tsx`, `BookADesk.spec.tsx` | implemented |
-| FR-12  | `apps/ui/src/components/existing-booking-state/` | `ConfirmDialog` wiring, `cancel-booking.ts` | `ExistingBookingState.spec.tsx`, `cancel-booking.spec.ts` | implemented |
+| FR-12  | `apps/ui/src/components/existing-booking-state/`, `apps/ui/src/lib/cancel-booking.ts` | `ConfirmDialog` wiring, `cancel-booking.ts` (moved to `lib/` by US-011 once it gained a second consumer) | `ExistingBookingState.spec.tsx`, `cancel-booking.spec.ts` | implemented |
 | FR-13  | `apps/ui/src/screens/book-a-desk/BookADesk.tsx` | `409 desk_already_booked` handler | `BookADesk.spec.tsx` | implemented |
 | FR-14  | `apps/ui/src/screens/book-a-desk/BookADesk.tsx` | `409 already_booked_that_date` handler (refetch-then-render) | `BookADesk.spec.tsx` | implemented |
 | FR-15  | `apps/ui/src/components/confirm-booking-bar/`, `apps/ui/src/screens/book-a-desk/use-book-desk.ts` | busy state, request de-dup | `ConfirmBookingBar.spec.tsx`, `use-book-desk.spec.ts`, `BookADesk.spec.tsx` | implemented |
@@ -46,6 +46,6 @@
 | `ConfirmBookingBar`        | `apps/ui/src/components/confirm-booking-bar/`           |
 | `ConfirmDialog`            | `apps/ui/src/components/confirm-dialog/`                |
 | `ExistingBookingState`     | `apps/ui/src/components/existing-booking-state/`        |
-| `createCancelBooking`      | `apps/ui/src/components/existing-booking-state/cancel-booking.ts` |
+| `createCancelBooking`      | `apps/ui/src/lib/cancel-booking.ts` (moved from `components/existing-booking-state/` by US-011) |
 | `useBookDesk`              | `apps/ui/src/screens/book-a-desk/use-book-desk.ts`      |
 | `createCreateBooking`      | `apps/ui/src/screens/book-a-desk/create-booking.ts`     |

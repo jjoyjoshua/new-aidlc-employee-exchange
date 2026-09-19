@@ -44,10 +44,20 @@ export const errorCodeSchema = z.enum([
   'desk_not_found',
   // US-007/FR-04 — the posted deskId names a desk with is_active = false (BR-001.7, AC-12).
   'desk_inactive',
-  // US-007/FR-06 — one code for "no such booking", "not the caller's" and "not currently
-  // confirmed" alike (D-03, design note §3.3): distinguishing them would turn the endpoint into
-  // an existence oracle over booking ids, the same enumeration weakness US-001/AC-04 rejects.
+  // US-007/FR-06, amended by US-011 (design note §3). Two of D-03's original three cases stay
+  // merged here — "no such booking" and "not the caller's" — deliberately: distinguishing them
+  // would turn the endpoint into an existence oracle over booking ids, the same enumeration
+  // weakness US-001/AC-04 rejects. The third case, "the caller's own booking but past-dated"
+  // (US-011/AC-02), also lands here — it is a refusal with no business value to a person, not a
+  // fact worth a distinguishable message (US-011 design note §2.2).
   'booking_not_found',
+  // US-011/AC-09 — the row exists, belongs to the caller, and is ALREADY `cancelled`: an admin
+  // got there first (US-015), a deactivation cascade voided it (US-025), or a concurrent request
+  // of the caller's own won the race. This is the ONE case that peels off D-03's original single
+  // undiscriminated 404 — and only among the caller's OWN bookings, which the caller can already
+  // enumerate via `GET /api/bookings` (US-010), so no new information crosses the ownership
+  // boundary (design note §1.2). Returned as 409, never 404 or 422 (design note §1.3).
+  'booking_already_cancelled',
   'route_not_found',
   'service_unavailable',
   'internal_error',

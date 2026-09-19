@@ -192,3 +192,62 @@ describe('useMyBookings.retry — the default page only (design note §4.3)', ()
     expect(result.current).toMatchObject({ status: 'ready', items: PAGE_1.items });
   });
 });
+
+describe('useMyBookings.markCancelled — US-011/AC-05, design note §5.3', () => {
+  it('flips exactly the named item\'s status to cancelled, with no re-fetch', async () => {
+    const fetchMyBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => {
+      if (result.current.status === 'ready') result.current.markCancelled('a');
+    });
+
+    expect(result.current).toMatchObject({
+      status: 'ready',
+      items: [{ id: 'a', status: 'cancelled' }],
+    });
+    // No second fetch — success flips the row in place, it does not re-announce loading (§8.5).
+    expect(fetchMyBookings).toHaveBeenCalledTimes(1);
+  });
+
+  it('never transitions through status: loading (would re-announce over ST-10\'s toast)', async () => {
+    const fetchMyBookings = vi.fn().mockResolvedValue(ok(PAGE_1));
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    const statuses: string[] = [];
+    act(() => {
+      if (result.current.status === 'ready') result.current.markCancelled('a');
+      statuses.push(result.current.status);
+    });
+
+    expect(statuses).not.toContain('loading');
+  });
+
+  it('leaves nextBefore and every other item untouched', async () => {
+    const twoItemPage: MyBookingsResponse = {
+      today: '2026-09-18',
+      items: [
+        { id: 'a', deskNumber: 'A-01', date: '2026-09-20', status: 'confirmed' },
+        { id: 'b', deskNumber: 'B-02', date: '2026-09-21', status: 'confirmed' },
+      ],
+      nextBefore: '2026-08-19',
+    };
+    const fetchMyBookings = vi.fn().mockResolvedValue(ok(twoItemPage));
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => {
+      if (result.current.status === 'ready') result.current.markCancelled('a');
+    });
+
+    expect(result.current).toMatchObject({
+      nextBefore: '2026-08-19',
+      items: [
+        { id: 'a', status: 'cancelled' },
+        { id: 'b', status: 'confirmed' },
+      ],
+    });
+  });
+});

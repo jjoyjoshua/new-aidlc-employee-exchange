@@ -460,28 +460,160 @@ describe('POST /api/bookings — request validation and the session chain (defen
   });
 });
 
-describe('POST /api/bookings/:id/cancel — US-007/AC-07, FR-06 (D-03: one undiscriminated 404)', () => {
-  it('cancels the caller\'s own confirmed booking and returns 200 with an empty body, and a second cancel of the same id returns 404 booking_not_found (US-007/AC-07)', async () => {
-    const bookingId = '22222222-2222-4222-8222-222222222222';
-    let cancelled = false;
+/**
+ * A single in-memory `bookings` row, mutated by a stub that reproduces the REAL repository's two
+ * predicates (US-011 design note §4.2): `cancelOwnedBooking`'s `UPDATE ... WHERE id / user_id /
+ * status='confirmed' / booking_date >= today` and `findMyBookingState`'s owner-scoped read. Used
+ * where the fixture must behave like the actual write-then-explain sequence, not just return a
+ * canned outcome — the cross-endpoint consistency and two-actor tests below both depend on that.
+ */
+function bookingRow(overrides: Partial<{
+  id: string;
+  user_id: string;
+  desk_id: string;
+  desk_number: string;
+  booking_date: string;
+  status: 'confirmed' | 'cancelled';
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancellation_source: 'owner' | 'admin' | 'deactivation_cascade' | null;
+}>) {
+  return {
+    id: '22222222-2222-4222-8222-222222222222',
+    user_id: EMPLOYEE.id,
+    desk_id: 'desk-1',
+    desk_number: 'A-01',
+    booking_date: TODAY,
+    status: 'confirmed' as const,
+    cancelled_at: null,
+    cancelled_by: null,
+    cancellation_source: null,
+    ...overrides,
+  };
+}
+
+function repositoryOverRow(row: ReturnType<typeof bookingRow>): Partial<AvailabilityRepository> {
+  return {
+    async cancelOwnedBooking(userId, bookingId, cancelledAt, today) {
+      if (row.id !== bookingId || row.user_id !== userId || row.status !== 'confirmed' || row.booking_date < today) {
+        return undefined;
+      }
+      row.status = 'cancelled';
+      row.cancelled_at = cancelledAt.toISOString();
+      row.cancelled_by = userId;
+      row.cancellation_source = 'owner';
+      return { id: row.id };
+    },
+    async findMyBookingState(userId, bookingId) {
+      if (row.id !== bookingId || row.user_id !== userId) return undefined;
+      return { status: row.status, booking_date: row.booking_date };
+    },
+    async listMyBookingsInWindow() {
+      return [{ id: row.id, booking_date: row.booking_date, status: row.status, desk_number: row.desk_number }];
+    },
+  };
+}
+
+describe('POST /api/bookings/:id/cancel — US-007/AC-07, FR-06, amended by US-011/AC-02, AC-09 (design note §3)', () => {
+  it('cancels the caller\'s own confirmed booking and returns 200 with an empty body, and a second cancel of the same id returns 409 booking_already_cancelled (US-007/AC-07, US-011/AC-09)', async () => {
+    const row = bookingRow({});
+    const app = appWith({ availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) } });
+
+    const first = await cancelBooking(app, row.id);
+    expect(first.status).toBe(200);
+    expect(first.text).toBe('');
+
+    // The SAME actor cancelling the SAME booking again is a single-actor, sequential repeat —
+    // not a proof of AC-09's two-actor scenario (design note §10, item 2) — but it does exercise
+    // the split D-03's amendment made: the row is now this caller's own already-cancelled
+    // booking, so it is 409, not the old undiscriminated 404.
+    const second = await cancelBooking(app, row.id);
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe('booking_already_cancelled');
+  });
+
+  it('refuses a past-dated Confirmed booking with 404, and the row is still confirmed afterwards (US-011/AC-02)', async () => {
+    const row = bookingRow({ booking_date: PAST });
+    const app = appWith({ availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) } });
+
+    const response = await cancelBooking(app, row.id);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('booking_not_found');
+    // The assertion that proves the REFUSAL, not just the status code (the story's own QA note).
+    expect(row.status).toBe('confirmed');
+    expect(row.cancelled_at).toBeNull();
+  });
+
+  it('the cross-endpoint consistency check: cancel succeeds on exactly the ids GET /api/bookings reports as confirmed (US-011/AC-02, design note §2.1)', async () => {
+    const rows = [
+      bookingRow({ id: '11111111-1111-4111-8111-111111111111', booking_date: TODAY }), // confirmed today
+      bookingRow({ id: '22222222-2222-4222-8222-222222222222', booking_date: '2026-09-20' }), // confirmed future
+      bookingRow({ id: '33333333-3333-4333-8333-333333333333', booking_date: PAST }), // past — reads as 'completed'
+      bookingRow({
+        id: '44444444-4444-4444-8444-444444444444',
+        booking_date: '2026-09-20',
+        status: 'cancelled',
+        cancelled_at: '2026-09-01T00:00:00.000Z',
+        cancelled_by: EMPLOYEE.id,
+        cancellation_source: 'owner',
+      }),
+    ];
     const app = appWith({
       availability: {
         ...emptyAvailabilityRepository,
-        async cancelOwnedBooking() {
-          if (cancelled) return undefined;
-          cancelled = true;
-          return { id: bookingId };
+        async listMyBookingsInWindow() {
+          return rows.map((r) => ({ id: r.id, booking_date: r.booking_date, status: r.status, desk_number: r.desk_number }));
+        },
+        async cancelOwnedBooking(userId, bookingId, cancelledAt, today) {
+          const row = rows.find((r) => r.id === bookingId);
+          if (!row || row.user_id !== userId || row.status !== 'confirmed' || row.booking_date < today) return undefined;
+          row.status = 'cancelled';
+          row.cancelled_at = cancelledAt.toISOString();
+          row.cancelled_by = userId;
+          row.cancellation_source = 'owner';
+          return { id: row.id };
+        },
+        async findMyBookingState(userId, bookingId) {
+          const row = rows.find((r) => r.id === bookingId);
+          if (!row || row.user_id !== userId) return undefined;
+          return { status: row.status, booking_date: row.booking_date };
         },
       },
     });
 
-    const first = await cancelBooking(app, bookingId);
-    expect(first.status).toBe(200);
-    expect(first.text).toBe('');
+    const listResponse = await myBookings(app);
+    const confirmedIds: string[] = listResponse.body.items
+      .filter((item: { status: string }) => item.status === 'confirmed')
+      .map((item: { id: string }) => item.id);
+    // Sanity on the fixture itself — only the today and future rows should read as confirmed.
+    expect(confirmedIds.sort()).toEqual(['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']);
 
-    const second = await cancelBooking(app, bookingId);
-    expect(second.status).toBe(404);
-    expect(second.body.code).toBe('booking_not_found');
+    for (const row of rows) {
+      const response = await cancelBooking(app, row.id);
+      const shouldSucceed = confirmedIds.includes(row.id);
+      expect(response.status === 200).toBe(shouldSucceed);
+    }
+  });
+
+  it('the two-actor test: an admin-style cancel wins first, then the owner\'s own cancel gets 409 with attribution unchanged (US-011/AC-09)', async () => {
+    const adminCancelledAt = '2026-09-15T09:00:00.000Z';
+    const row = bookingRow({
+      status: 'cancelled',
+      cancelled_at: adminCancelledAt,
+      cancelled_by: 'admin-user-id',
+      cancellation_source: 'admin',
+    });
+    const app = appWith({ availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) } });
+
+    const response = await cancelBooking(app, row.id);
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('booking_already_cancelled');
+    // AC-09's "no second cancellation" — the first actor's attribution must survive untouched.
+    expect(row.cancelled_at).toBe(adminCancelledAt);
+    expect(row.cancelled_by).toBe('admin-user-id');
+    expect(row.cancellation_source).toBe('admin');
   });
 
   it('400s a non-uuid id', async () => {

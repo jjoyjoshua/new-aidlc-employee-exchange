@@ -55,7 +55,10 @@ export const notFound = (code: string, message: string) => new HttpError(404, co
 
 /**
  * Something else got there first, or the value is taken (V-04, V-05, V-08, V-10).
- * The world changed, and retrying differently can succeed — two people racing for desk A-01.
+ * The world changed, and retrying differently can succeed, or the resource has already moved
+ * past the state the request asked for — two people racing for desk A-01, or a booking someone
+ * else already cancelled (US-011/AC-09, design note §1.3). Retryability is carried by the `code`,
+ * not by the status class: the screen decides what to offer.
  */
 export const conflict = (code: string, message: string) => new HttpError(409, code, message);
 

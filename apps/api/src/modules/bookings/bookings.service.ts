@@ -55,7 +55,14 @@ export type CreateBookingOutcome =
   | { kind: 'desk_conflict' }
   | { kind: 'user_conflict' };
 
-export type CancelBookingOutcome = { kind: 'ok' } | { kind: 'not_found' };
+export type CancelBookingOutcome =
+  | { kind: 'ok' }
+  /** US-011/AC-09. The row is the caller's own and is ALREADY cancelled — an admin (US-015), a
+   *  deactivation cascade (US-025), or a concurrent request of the caller's own won the race. */
+  | { kind: 'already_cancelled' }
+  /** No such booking, not the caller's, or the caller's own and past-dated (US-011/AC-02).
+   *  Deliberately merged — design note §1.2, §2.2; amends US-007/D-03. */
+  | { kind: 'not_found' };
 
 /** US-010. `GET /api/bookings`'s shape, pre-serialization — the router hands this straight to
  *  `myBookingsResponseSchema`. */
@@ -190,15 +197,29 @@ export function createBookingsService({ availability, nowMs, officeTimezone }: B
     },
 
     /**
-     * US-007/FR-06, AC-07, D-03. One outcome for "cancelled" and one for everything else — not
-     * found, not the caller's, not currently confirmed — deliberately undiscriminated (D-03,
-     * design note §3.3). `cancelledAt` is this call's own clock reading, read once here so the
-     * value written matches the instant this decision was made (same convention as
-     * `auth.repository.ts`'s `stampLastSeen`).
+     * US-007/FR-06, AC-07, D-03 as amended by US-011 (design note §1.4, §2, §3, §4.1).
+     *
+     * Write first, then explain: the `UPDATE` inside `cancelOwnedBooking` is the sole write and
+     * the sole arbiter of "confirmed → cancelled". The disambiguating read below runs ONLY when
+     * that write applied to nothing, and ONLY to classify the miss — reading first and writing
+     * second would reintroduce the read-then-write window `cancelOwnedBooking`'s own docblock
+     * exists to avoid, and would misclassify AC-09's own race (the read says confirmed, an
+     * admin's cancel commits, the write misses, and a stale read would report "not found" for a
+     * booking that was just cancelled).
+     *
+     * `now`/`today` are ONE clock reading shared by both `cancelledAt` and the past-date guard —
+     * two separate `nowMs()` calls would differ only across office midnight (design note §8.4).
      */
     async cancelBooking(userId: string, bookingId: string): Promise<CancelBookingOutcome> {
-      const cancelled = await availability.cancelOwnedBooking(userId, bookingId, new Date(nowMs()));
-      return cancelled ? { kind: 'ok' } : { kind: 'not_found' };
+      const now = nowMs();
+      const today = officeToday(now, officeTimezone);
+
+      const cancelled = await availability.cancelOwnedBooking(userId, bookingId, new Date(now), today);
+      if (cancelled) return { kind: 'ok' };
+
+      const existing = await availability.findMyBookingState(userId, bookingId);
+      if (existing?.status === 'cancelled') return { kind: 'already_cancelled' };
+      return { kind: 'not_found' };
     },
 
     /**

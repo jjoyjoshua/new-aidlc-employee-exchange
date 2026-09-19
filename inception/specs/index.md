@@ -14,6 +14,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-008 | See which desk I booked last | Complex | approved | [`US-008-see-my-last-booked-desk/`](US-008-see-my-last-booked-desk/) |
 | US-009 | Be offered the next free days when everything is taken | Complex | implemented | [`US-009-next-free-days-when-fully-booked/`](US-009-next-free-days-when-fully-booked/) |
 | US-010 | View my own bookings, past and upcoming | Complex | implemented | [`US-010-view-my-bookings/`](US-010-view-my-bookings/) |
+| US-011 | Cancel my own booking | Complex | implemented | [`US-011-cancel-my-own-booking/`](US-011-cancel-my-own-booking/) |
 
 ## How to update
 
