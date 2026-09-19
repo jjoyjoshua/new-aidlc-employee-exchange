@@ -251,3 +251,139 @@ describe('useMyBookings.markCancelled — US-011/AC-05, design note §5.3', () =
     });
   });
 });
+
+describe('useMyBookings.refreshQuietly — US-012/AC-01, AC-02, AC-03, AC-04 (FR-04, FR-05, FR-06, FR-09)', () => {
+  it('merges a fresh default page into items by id, updating status in place, without ever passing through loading (FR-04)', async () => {
+    const fetchMyBookings = vi
+      .fn()
+      .mockResolvedValueOnce(ok(PAGE_1))
+      .mockResolvedValueOnce(
+        ok({ ...PAGE_1, items: [{ id: 'a', deskNumber: 'A-01', date: '2026-09-20', status: 'cancelled' }] }),
+      );
+
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    const statuses: string[] = [];
+    await act(async () => {
+      result.current.refreshQuietly();
+      statuses.push(result.current.status);
+      await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
+    });
+
+    expect(statuses).not.toContain('loading');
+    await waitFor(() =>
+      expect(result.current).toMatchObject({
+        status: 'ready',
+        items: [{ id: 'a', status: 'cancelled' }],
+        nextBefore: PAGE_1.nextBefore,
+        quietRefreshFailed: false,
+      }),
+    );
+  });
+
+  it('prepends an item not previously seen, and leaves an already-loaded older page untouched (FR-05)', async () => {
+    const NEW_ITEM = { id: 'c', deskNumber: 'C-03', date: '2026-09-22', status: 'confirmed' as const };
+    const fetchMyBookings = vi
+      .fn()
+      .mockResolvedValueOnce(ok(PAGE_1)) // initial
+      .mockResolvedValueOnce(ok(PAGE_2)) // loadOlder
+      .mockResolvedValueOnce(ok({ ...PAGE_1, items: [NEW_ITEM, ...PAGE_1.items] })); // refreshQuietly
+
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    await act(async () => {
+      result.current.loadOlder();
+      await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
+    });
+    await waitFor(() => expect(result.current).toMatchObject({ items: [...PAGE_1.items, ...PAGE_2.items] }));
+
+    await act(async () => {
+      result.current.refreshQuietly();
+      await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(3));
+    });
+
+    await waitFor(() =>
+      expect(result.current).toMatchObject({
+        status: 'ready',
+        items: [NEW_ITEM, ...PAGE_1.items, ...PAGE_2.items],
+        nextBefore: PAGE_2.nextBefore, // untouched by the quiet refresh (US-012/D-03)
+      }),
+    );
+  });
+
+  it('a failed refresh sets quietRefreshFailed and leaves items/today/nextBefore unchanged (FR-06)', async () => {
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(PAGE_1)).mockResolvedValueOnce(failed);
+
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    await act(async () => {
+      result.current.refreshQuietly();
+      await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
+    });
+
+    await waitFor(() =>
+      expect(result.current).toMatchObject({
+        status: 'ready',
+        items: PAGE_1.items,
+        today: PAGE_1.today,
+        nextBefore: PAGE_1.nextBefore,
+        quietRefreshFailed: true,
+      }),
+    );
+  });
+
+  it('a successful refresh after a failed one clears quietRefreshFailed', async () => {
+    const fetchMyBookings = vi.fn().mockResolvedValueOnce(ok(PAGE_1)).mockResolvedValueOnce(failed).mockResolvedValueOnce(ok(PAGE_1));
+
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    await act(async () => {
+      result.current.refreshQuietly();
+      await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(2));
+    });
+    await waitFor(() => expect(result.current).toMatchObject({ quietRefreshFailed: true }));
+
+    await act(async () => {
+      result.current.refreshQuietly();
+      await waitFor(() => expect(fetchMyBookings).toHaveBeenCalledTimes(3));
+    });
+
+    await waitFor(() => expect(result.current).toMatchObject({ quietRefreshFailed: false }));
+  });
+
+  it('a second refreshQuietly() call while one is in flight is a no-op (FR-09)', async () => {
+    const fetchMyBookings = vi
+      .fn()
+      .mockResolvedValueOnce(ok(PAGE_1))
+      .mockImplementationOnce(() => new Promise(() => undefined)); // never resolves
+
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+    await waitFor(() => expect(result.current).toMatchObject({ status: 'ready' }));
+
+    act(() => {
+      result.current.refreshQuietly();
+    });
+    act(() => {
+      result.current.refreshQuietly();
+    });
+
+    expect(fetchMyBookings).toHaveBeenCalledTimes(2); // initial load + exactly one refresh
+  });
+
+  it('does nothing while not ready (still loading)', async () => {
+    const fetchMyBookings = vi.fn().mockImplementation(() => new Promise(() => undefined));
+    const { result } = renderHook(() => useMyBookings(fetchMyBookings));
+
+    expect(result.current.status).toBe('loading');
+
+    act(() => {
+      result.current.refreshQuietly();
+    });
+
+    expect(fetchMyBookings).toHaveBeenCalledTimes(1); // the initial load only
+  });
+});

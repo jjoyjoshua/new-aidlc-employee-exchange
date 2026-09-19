@@ -4,17 +4,18 @@ Every development spec package in this repo. **Check here before creating a new 
 
 | Story | Feature | Tier | Status | Folder |
 | ----- | ------- | ---- | ------ | ------ |
-| US-001 | Sign in with email and password | Complex | planned | [`US-001-sign-in/`](US-001-sign-in/) |
-| US-002 | Sign out | Complex | planned | [`US-002-sign-out/`](US-002-sign-out/) |
-| US-003 | Stay signed in for 30 days | Complex | planned | [`US-003-thirty-day-session/`](US-003-thirty-day-session/) |
-| US-004 | Replace an administrator-set password at first sign-in | Complex | planned | [`US-004-replace-administrator-set-password/`](US-004-replace-administrator-set-password/) |
-| US-005 | Choose a booking date inside the window | Complex | planned | [`US-005-choose-a-booking-date/`](US-005-choose-a-booking-date/) |
-| US-006 | See desk availability for the chosen date | Complex | approved | [`US-006-see-desk-availability/`](US-006-see-desk-availability/) |
+| US-001 | Sign in with email and password | Complex | implemented | [`US-001-sign-in/`](US-001-sign-in/) |
+| US-002 | Sign out | Complex | implemented | [`US-002-sign-out/`](US-002-sign-out/) |
+| US-003 | Stay signed in for 30 days | Complex | implemented | [`US-003-thirty-day-session/`](US-003-thirty-day-session/) |
+| US-004 | Replace an administrator-set password at first sign-in | Complex | implemented | [`US-004-replace-administrator-set-password/`](US-004-replace-administrator-set-password/) |
+| US-005 | Choose a booking date inside the window | Complex | implemented | [`US-005-choose-a-booking-date/`](US-005-choose-a-booking-date/) |
+| US-006 | See desk availability for the chosen date | Complex | implemented | [`US-006-see-desk-availability/`](US-006-see-desk-availability/) |
 | US-007 | Book an available desk | Complex | implemented | [`US-007-book-an-available-desk/`](US-007-book-an-available-desk/) |
-| US-008 | See which desk I booked last | Complex | approved | [`US-008-see-my-last-booked-desk/`](US-008-see-my-last-booked-desk/) |
+| US-008 | See which desk I booked last | Complex | implemented | [`US-008-see-my-last-booked-desk/`](US-008-see-my-last-booked-desk/) |
 | US-009 | Be offered the next free days when everything is taken | Complex | implemented | [`US-009-next-free-days-when-fully-booked/`](US-009-next-free-days-when-fully-booked/) |
 | US-010 | View my own bookings, past and upcoming | Complex | implemented | [`US-010-view-my-bookings/`](US-010-view-my-bookings/) |
 | US-011 | Cancel my own booking | Complex | implemented | [`US-011-cancel-my-own-booking/`](US-011-cancel-my-own-booking/) |
+| US-012 | Come back to a booking list that is still true | Complex | implemented (My bookings only — SCR-005 half deferred to US-013) | [`US-012-refresh-booking-list-on-focus/`](US-012-refresh-booking-list-on-focus/) |
 
 ## How to update
 

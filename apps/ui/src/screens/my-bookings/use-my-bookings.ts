@@ -27,6 +27,10 @@ export type MyBookingsState =
       /** AC-03's "load older" press is in flight. Distinct from `status: 'loading'` (AC-08 is
        *  about the INITIAL load's skeleton, which must not reappear here). */
       loadingOlder: boolean;
+      /** US-012/AC-04. A background `refreshQuietly()` failed; the previously loaded list stays
+       *  exactly as it was. Distinct from `status: 'error'`, which replaces the whole screen —
+       *  this never does (US-012/AC-03). */
+      quietRefreshFailed: boolean;
     }
   | { status: 'error' };
 
@@ -44,6 +48,12 @@ export type UseMyBookingsResult = MyBookingsState & {
    *  (design note §8.5). Sectioning (already built by US-010) moves the row into Past on its
    *  own, because it sections by `status`, not by a separate flag. */
   markCancelled: (bookingId: string) => void;
+  /** US-012/AC-01–AC-04. Re-fetches the default page and merges it into `items` by `id` —
+   *  updating fields of rows already on screen, prepending rows not seen before — without ever
+   *  setting `status: 'loading'` and without touching `nextBefore` or any page `loadOlder()` has
+   *  already appended (US-012/D-03). A no-op when not `ready` or when a previous call is still
+   *  in flight. */
+  refreshQuietly: () => void;
 };
 
 export function useMyBookings(fetchMyBookings: MyBookingsFetcher): UseMyBookingsResult {
@@ -66,7 +76,14 @@ export function useMyBookings(fetchMyBookings: MyBookingsFetcher): UseMyBookings
         if (controller.signal.aborted) return; // superseded by a retry() or unmount
         setState(
           outcome.kind === 'ok'
-            ? { status: 'ready', today: outcome.data.today, items: outcome.data.items, nextBefore: outcome.data.nextBefore, loadingOlder: false }
+            ? {
+                status: 'ready',
+                today: outcome.data.today,
+                items: outcome.data.items,
+                nextBefore: outcome.data.nextBefore,
+                loadingOlder: false,
+                quietRefreshFailed: false,
+              }
             : { status: 'error' },
         );
       },
@@ -117,5 +134,45 @@ export function useMyBookings(fetchMyBookings: MyBookingsFetcher): UseMyBookings
     });
   }, []);
 
-  return { ...state, retry: () => setAttempt((a) => a + 1), loadOlder, markCancelled };
+  // Synchronous, like `useCancelDialog`'s `inFlight` (US-011) — checked and set before any state
+  // read, so a second regain landing while a refresh is still in flight is refused regardless of
+  // whether React has re-rendered yet.
+  const quietRefreshInFlight = useRef(false);
+
+  const refreshQuietly = useCallback(() => {
+    if (state.status !== 'ready' || quietRefreshInFlight.current) return;
+    quietRefreshInFlight.current = true;
+    const generation = generationRef.current;
+    const controller = new AbortController();
+
+    fetchMyBookings(undefined, controller.signal).then(
+      (outcome) => {
+        quietRefreshInFlight.current = false;
+        if (controller.signal.aborted) return;
+        setState((current) => {
+          if (generation !== generationRef.current || current.status !== 'ready') return current; // superseded by retry()
+          if (outcome.kind !== 'ok') return { ...current, quietRefreshFailed: true };
+
+          // US-012/D-03: merge by id — update fields of rows already known, prepend rows not
+          // seen before, touch neither `nextBefore` nor any page `loadOlder()` already appended.
+          const freshById = new Map(outcome.data.items.map((item) => [item.id, item]));
+          const merged = current.items.map((item) => freshById.get(item.id) ?? item);
+          const knownIds = new Set(current.items.map((item) => item.id));
+          const newItems = outcome.data.items.filter((item) => !knownIds.has(item.id));
+
+          return { ...current, today: outcome.data.today, items: [...newItems, ...merged], quietRefreshFailed: false };
+        });
+      },
+      () => {
+        // A fetcher that rejects is a defect, not an outcome — guarded identically to the initial
+        // load above, so a superseded rejection cannot paint over fresh data.
+        quietRefreshInFlight.current = false;
+        if (!controller.signal.aborted) {
+          setState((current) => (current.status === 'ready' ? { ...current, quietRefreshFailed: true } : current));
+        }
+      },
+    );
+  }, [fetchMyBookings, state.status]);
+
+  return { ...state, retry: () => setAttempt((a) => a + 1), loadOlder, markCancelled, refreshQuietly };
 }
