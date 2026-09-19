@@ -566,12 +566,17 @@ describe('bookings.service.getAvailability — nextFreeDays (US-009/AC-01, AC-02
   });
 });
 
-describe('bookings.service.cancelBooking (US-007/AC-07, FR-06)', () => {
-  it('maps a successful cancel to ok', async () => {
+describe('bookings.service.cancelBooking (US-007/AC-07, FR-06, amended by US-011/AC-02, AC-09)', () => {
+  it('maps a successful UPDATE to ok, and issues no disambiguating read at all — exactly one write, the invariant US-011/AC-10\'s "no second email" rests on (design note §1.5, §4.1)', async () => {
+    let findMyBookingStateCalls = 0;
     const availability: AvailabilityRepository = {
       ...emptyAvailabilityRepository,
       async cancelOwnedBooking() {
         return { id: 'b1' };
+      },
+      async findMyBookingState() {
+        findMyBookingStateCalls += 1;
+        throw new Error('must not be called on the success path');
       },
     };
     const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
@@ -579,12 +584,50 @@ describe('bookings.service.cancelBooking (US-007/AC-07, FR-06)', () => {
     const outcome = await service.cancelBooking(CALLER_ID, 'b1');
 
     expect(outcome).toEqual({ kind: 'ok' });
+    expect(findMyBookingStateCalls).toBe(0);
   });
 
-  it('maps no matching row to not_found — not found, not owned, and not-currently-confirmed all land here alike (D-03)', async () => {
+  it('maps a miss whose row is already cancelled to already_cancelled (US-011/AC-09)', async () => {
     const availability: AvailabilityRepository = {
       ...emptyAvailabilityRepository,
       async cancelOwnedBooking() {
+        return undefined;
+      },
+      async findMyBookingState() {
+        return { status: 'cancelled', booking_date: '2026-09-10' };
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.cancelBooking(CALLER_ID, 'already-gone');
+
+    expect(outcome).toEqual({ kind: 'already_cancelled' });
+  });
+
+  it('maps a miss whose row is still confirmed (a past-dated booking, US-011/AC-02) to not_found', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async cancelOwnedBooking() {
+        return undefined;
+      },
+      async findMyBookingState() {
+        return { status: 'confirmed', booking_date: '2026-09-10' };
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    const outcome = await service.cancelBooking(CALLER_ID, 'past-booking');
+
+    expect(outcome).toEqual({ kind: 'not_found' });
+  });
+
+  it('maps a miss with no row at all (not found, or not owned) to not_found — D-03\'s anti-enumeration merge, unchanged', async () => {
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async cancelOwnedBooking() {
+        return undefined;
+      },
+      async findMyBookingState() {
         return undefined;
       },
     };
@@ -593,6 +636,25 @@ describe('bookings.service.cancelBooking (US-007/AC-07, FR-06)', () => {
     const outcome = await service.cancelBooking(CALLER_ID, 'not-mine-or-gone');
 
     expect(outcome).toEqual({ kind: 'not_found' });
+  });
+
+  it('reads cancelledAt and today from the SAME clock reading (US-011/AC-02, design note §2.1, §8.4)', async () => {
+    let capturedToday: string | undefined;
+    let capturedCancelledAt: Date | undefined;
+    const availability: AvailabilityRepository = {
+      ...emptyAvailabilityRepository,
+      async cancelOwnedBooking(_userId, _bookingId, cancelledAt, today) {
+        capturedCancelledAt = cancelledAt;
+        capturedToday = today;
+        return { id: 'b1' };
+      },
+    };
+    const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });
+
+    await service.cancelBooking(CALLER_ID, 'b1');
+
+    expect(capturedToday).toBe(TODAY);
+    expect(capturedCancelledAt?.getTime()).toBe(nowMsFor(TODAY)());
   });
 });
 

@@ -400,8 +400,8 @@ describe('availabilityRepository.insertConfirmedBooking — US-007/FR-02, D-01 (
   });
 });
 
-describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07', () => {
-  it('updates status, cancelled_at, cancelled_by and cancellation_source in one statement, scoped to id/user/confirmed', async () => {
+describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07, amended by US-011/AC-02', () => {
+  it('updates status, cancelled_at, cancelled_by and cancellation_source in one statement, scoped to id/user/confirmed/not-past', async () => {
     const cancelledAt = new Date('2026-09-16T10:00:00.000Z');
     const { calls, client } = fakeSupabase({
       bookings: { data: { id: 'b1' }, error: null },
@@ -409,7 +409,7 @@ describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07', ()
     setSupabaseForTesting(client);
 
     try {
-      const result = await availabilityRepository.cancelOwnedBooking('user-1', 'b1', cancelledAt);
+      const result = await availabilityRepository.cancelOwnedBooking('user-1', 'b1', cancelledAt, '2026-09-16');
 
       expect(result).toEqual({ id: 'b1' });
       expect(calls).toEqual([
@@ -427,6 +427,7 @@ describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07', ()
             ['user_id', 'user-1'],
             ['status', 'confirmed'],
           ],
+          gte: ['booking_date', '2026-09-16'],
           order: [],
           maybeSingle: true,
         },
@@ -441,7 +442,60 @@ describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07', ()
     setSupabaseForTesting(client);
 
     try {
-      const result = await availabilityRepository.cancelOwnedBooking('user-1', 'not-mine-or-gone', new Date());
+      const result = await availabilityRepository.cancelOwnedBooking('user-1', 'not-mine-or-gone', new Date(), '2026-09-16');
+      expect(result).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('issues .gte("booking_date", today) so a past-dated Confirmed booking is left unmatched at the database (US-011/AC-02)', async () => {
+    const { calls, client } = fakeSupabase({ bookings: { data: null, error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      await availabilityRepository.cancelOwnedBooking('user-1', 'past-booking', new Date(), '2026-09-19');
+      expect(calls[0]?.gte).toEqual(['booking_date', '2026-09-19']);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('availabilityRepository.findMyBookingState — US-011/AC-09', () => {
+  it('selects only status and booking_date, scoped to id and user_id, with no wider select (design note §1.2)', async () => {
+    const { calls, client } = fakeSupabase({
+      bookings: { data: { status: 'cancelled', booking_date: '2026-09-10' }, error: null },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.findMyBookingState('user-1', 'b1');
+
+      expect(result).toEqual({ status: 'cancelled', booking_date: '2026-09-10' });
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'status, booking_date',
+          eq: [
+            ['id', 'b1'],
+            ['user_id', 'user-1'],
+          ],
+          order: [],
+          maybeSingle: true,
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined for a booking that does not exist, or is not the caller\'s — indistinguishable, on purpose (design note §1.2)', async () => {
+    const { client } = fakeSupabase({ bookings: { data: null, error: null } });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await availabilityRepository.findMyBookingState('user-1', 'not-mine-or-gone');
       expect(result).toBeUndefined();
     } finally {
       setSupabaseForTesting(undefined);

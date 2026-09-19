@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ERROR_CODES } from '@desk-booking/contracts';
-import type { ApiClient } from '../../lib/api-client.js';
+import type { ApiClient } from './api-client.js';
 import { createCancelBooking } from './cancel-booking.js';
 
 function apiReturning(result: Awaited<ReturnType<ApiClient['requestNoContent']>>): ApiClient {
@@ -12,7 +12,7 @@ function apiReturning(result: Awaited<ReturnType<ApiClient['requestNoContent']>>
   };
 }
 
-describe('createCancelBooking — US-007/AC-07', () => {
+describe('createCancelBooking — US-007/AC-07, widened by US-011/AC-09 (design note §5.2)', () => {
   it('calls POST /api/bookings/:id/cancel and maps a 200 to ok', async () => {
     let calledPath: string | undefined;
     let calledInit: unknown;
@@ -34,15 +34,23 @@ describe('createCancelBooking — US-007/AC-07', () => {
     expect(outcome).toEqual({ kind: 'ok' });
   });
 
-  it('maps a 404 booking_not_found to ok too — already gone is the state that was asked for (design note §3.4, F-6)', async () => {
+  it('maps 409 booking_already_cancelled to already_cancelled — distinct from a generic failure (US-011/AC-09)', async () => {
+    const api = apiReturning({ kind: 'error', status: 409, code: ERROR_CODES.booking_already_cancelled, message: 'x' });
+
+    const outcome = await createCancelBooking(api)('booking-1');
+
+    expect(outcome).toEqual({ kind: 'already_cancelled' });
+  });
+
+  it('maps 404 booking_not_found to refused — a server-answered refusal, distinct from a transport failure (US-011 design note §2.3, §5.2)', async () => {
     const api = apiReturning({ kind: 'error', status: 404, code: ERROR_CODES.booking_not_found, message: 'x' });
 
     const outcome = await createCancelBooking(api)('booking-1');
 
-    expect(outcome).toEqual({ kind: 'ok' });
+    expect(outcome).toEqual({ kind: 'refused' });
   });
 
-  it('maps every other error to failed', async () => {
+  it('maps every other server-answered error to failed', async () => {
     const api = apiReturning({ kind: 'error', status: 500, code: 'internal_error', message: 'x' });
 
     const outcome = await createCancelBooking(api)('booking-1');

@@ -37,6 +37,13 @@ export type UseMyBookingsResult = MyBookingsState & {
   /** No-ops when not `ready`, when `nextBefore` is `null` (the control should not have been
    *  there), or when a previous `loadOlder()` is still in flight (double-press guard). */
   loadOlder: () => void;
+  /** US-011/AC-05, design note §5.3. Flips ONE item's `status` to `'cancelled'` in place — no
+   *  `retry()`, no `status: 'loading'` transition. The server already confirmed the outcome; a
+   *  refetch here would re-announce "Loading your bookings" over ST-10's own toast, flash
+   *  skeletons over a list the employee is reading, and drop every accumulated older page
+   *  (design note §8.5). Sectioning (already built by US-010) moves the row into Past on its
+   *  own, because it sections by `status`, not by a separate flag. */
+  markCancelled: (bookingId: string) => void;
 };
 
 export function useMyBookings(fetchMyBookings: MyBookingsFetcher): UseMyBookingsResult {
@@ -100,5 +107,15 @@ export function useMyBookings(fetchMyBookings: MyBookingsFetcher): UseMyBookings
     });
   }, [fetchMyBookings, state]);
 
-  return { ...state, retry: () => setAttempt((a) => a + 1), loadOlder };
+  const markCancelled = useCallback((bookingId: string) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+      return {
+        ...current,
+        items: current.items.map((item) => (item.id === bookingId ? { ...item, status: 'cancelled' } : item)),
+      };
+    });
+  }, []);
+
+  return { ...state, retry: () => setAttempt((a) => a + 1), loadOlder, markCancelled };
 }

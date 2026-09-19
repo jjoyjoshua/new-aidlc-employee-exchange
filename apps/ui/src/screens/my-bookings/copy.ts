@@ -55,3 +55,46 @@ export const PAST_BOOKINGS_HEADING = 'Past bookings';
 
 /** The Upcoming section heading (SCR-002 layout). */
 export const UPCOMING_HEADING = 'Upcoming';
+
+/**
+ * US-011, ST-07–ST-10 (design note §5.5). Verified verbatim against the live Figma frames —
+ * `HF / SCR-002 · My bookings / ST-07…ST-10` in file `xjFVgBbMrJUl7Ys3EX3Cbn` (node ids in this
+ * story's `traceability.md`) — not the written screen spec alone.
+ */
+
+/** ST-07's dialog title. */
+export const CANCEL_DIALOG_TITLE = 'Cancel your desk?';
+
+/** ST-07's dialog body. Built from the ROW's own desk number and date label — the SCR-002
+ *  designer handoff is explicit that the sentence is approved copy, but the desk and date are
+ *  data, and must name the row the dialog was opened from, never the frame's own example
+ *  ("B-02 · Wed 9 Sep"). `dateLabel` is `formatOfficeDateLabel`'s output, never a raw ISO date. */
+export function cancelDialogBody(deskNumber: string, dateLabel: string): string {
+  return `${deskNumber} · ${dateLabel}. The desk goes back into the pool and we'll email you a confirmation.`;
+}
+
+/** ST-07's confirming (destructive) action. */
+export const CANCEL_CONFIRM_LABEL = 'Cancel booking';
+
+/** ST-07's dismissing action — also `ConfirmDialog`'s own default `cancelLabel`, restated here so
+ *  a reader of this screen's copy does not have to go find it in the generic component. */
+export const CANCEL_KEEP_LABEL = 'Keep it';
+
+/** ST-09's retryable branch — a transport failure, or a genuine 5xx (US-011/AC-08). */
+export const CANCEL_FAILED_RETRYABLE = "We couldn't cancel that just now. Try again.";
+
+/** ST-09's non-retryable branch — the booking is already gone (US-011/AC-09). Distinct from
+ *  `CANCEL_FAILED_RETRYABLE` on purpose: retrying this one can never succeed. */
+export const CANCEL_ALREADY_CANCELLED = 'That booking has already been cancelled.';
+
+/** ST-09's non-retryable branch's single action (`ConfirmDialog`'s `singleAction`). Not drawn in
+ *  any Figma frame (SCR-002's own designer handoff says the frames only show the retryable
+ *  outcome) — taken verbatim from the approved written screen spec. */
+export const CANCEL_CLOSE_LABEL = 'Close';
+
+/** ST-10's toast. Names the channel and the address, not just the outcome (REQ-024, PRIN-5) —
+ *  the fact she can act on if the email never arrives. `email` comes from the caller's own
+ *  account (`useAuth().user.email`), never from the cancel response. */
+export function cancelledToast(deskNumber: string, dateLabel: string, email: string): string {
+  return `Desk ${deskNumber} released for ${dateLabel}. Cancellation emailed to ${email}.`;
+}

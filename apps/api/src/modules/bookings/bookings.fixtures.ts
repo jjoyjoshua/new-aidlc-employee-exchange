@@ -140,6 +140,9 @@ export const throwingAvailabilityRepository: AvailabilityRepository = {
   async cancelOwnedBooking() {
     throw new Error('must not be called for a refused date');
   },
+  async findMyBookingState() {
+    throw new Error('must not be called for a refused date');
+  },
   async findMyLastBookedDeskId() {
     throw new Error('must not be called for a refused date');
   },
@@ -178,6 +181,9 @@ export const emptyAvailabilityRepository: AvailabilityRepository = {
   },
   async cancelOwnedBooking() {
     throw new Error('cancelOwnedBooking is not stubbed for this test');
+  },
+  async findMyBookingState() {
+    throw new Error('findMyBookingState is not stubbed for this test');
   },
   async findMyLastBookedDeskId() {
     return undefined;

@@ -78,4 +78,27 @@ something a plain SQL view can take as a parameter. **ADR-007** records the supe
 before adding a second implementation of this rule (US-011, US-013 and US-014 all render a
 booking's status and must call `bookingDisplayStatus`, never re-derive it).
 
+**US-011** widens `POST /api/bookings/:id/cancel` — the deliberately narrow endpoint US-007 left
+for it (D-03) — into the full "cancel my own booking" feature: the My-bookings entry point
+(`BookingRow`'s Cancel control), the eligibility surface, and this module's half of the outcome.
+Two changes, both in `cancelOwnedBooking`'s own `UPDATE ... WHERE`:
+
+- **A past-dated Confirmed booking is now refused**, via `.gte('booking_date', today)` — `today`
+  passed in from the service's single `officeToday(nowMs(), officeTimezone)` reading, never a
+  second clock read. It still returns the same `404 booking_not_found` D-03 always did; BR-001.6's
+  cancellability rule is exactly `bookingDisplayStatus(...) === 'confirmed'` (ADR-007), expressed
+  here as the compound predicate.
+- **A caller's own booking that is ALREADY cancelled is now distinguishable**: a new repository
+  method, `findMyBookingState` (owner-scoped, read-only, `status`/`booking_date` only), runs ONLY
+  when the `UPDATE` above applies to nothing, to classify the miss. The router maps that to a new
+  `409 booking_already_cancelled` — the ONE case that peels off D-03's original single
+  undiscriminated 404 (US-011 design note §1, §3). "No such booking" and "not the caller's" remain
+  merged into `404`, deliberately, for the same anti-enumeration reason D-03 gave: the new code
+  discriminates only among the caller's OWN bookings, which `GET /api/bookings` (US-010) already
+  lets them enumerate, so no new information crosses the ownership boundary.
+
+No migration — every column, constraint and index this needed already existed. See
+`inception/specs/US-011-cancel-my-own-booking/design-note.md` for the full argument, including
+why the disambiguating read runs strictly *after* the write, never before (§1.4).
+
 See `../README.md` for what this module owns and the boundary it must respect.

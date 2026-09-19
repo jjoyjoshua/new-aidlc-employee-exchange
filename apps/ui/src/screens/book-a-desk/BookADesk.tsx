@@ -21,8 +21,8 @@ import { AvailabilityCount } from '../../components/availability-count/Availabil
 import { ZoneGroup } from '../../components/zone-group/ZoneGroup.js';
 import { ConfirmBookingBar } from '../../components/confirm-booking-bar/ConfirmBookingBar.js';
 import { ExistingBookingState } from '../../components/existing-booking-state/ExistingBookingState.js';
-import { createCancelBooking } from '../../components/existing-booking-state/cancel-booking.js';
-import type { CancelBookingFetcher } from '../../components/existing-booking-state/cancel-booking.js';
+import { createCancelBooking } from '../../lib/cancel-booking.js';
+import type { CancelBookingFetcher } from '../../lib/cancel-booking.js';
 import { SkeletonRow } from '../../components/skeleton-row/SkeletonRow.js';
 import { EmptyState } from '../../components/empty-state/EmptyState.js';
 import { useAvailability, type AvailabilityFetcher } from './use-availability.js';

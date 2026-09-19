@@ -72,10 +72,37 @@ export interface AvailabilityRepository {
    *  contract (Architect design note §1.2): only a recognised `23505` naming one of the two
    *  known indexes becomes an outcome; everything else throws. */
   insertConfirmedBooking(userId: string, deskId: string, date: OfficeDate): Promise<InsertBookingOutcome>;
-  /** US-007/FR-06, AC-07, D-03. One `UPDATE ... RETURNING`, scoped to id/owner/confirmed —
-   *  no read-then-write window (design note §3.2). `undefined` covers "no such booking", "not
-   *  the caller's" and "not currently confirmed" alike, deliberately undiscriminated (D-03). */
-  cancelOwnedBooking(userId: string, bookingId: string, cancelledAt: Date): Promise<{ id: string } | undefined>;
+  /** US-007/FR-06, AC-07, D-03 as amended by US-011 (design note §3). One
+   *  `UPDATE ... RETURNING`, scoped to id / owner / confirmed / **not past** — no read-then-write
+   *  window (design note §3.2).
+   *
+   *  `today` is the office's own calendar date, passed in from the service's single
+   *  `officeToday(nowMs(), officeTimezone)` reading — never read here (domain/ and repositories
+   *  take their clock as an argument). It is BR-001.6 / US-011/AC-02 expressed where the write
+   *  happens; the same rule in TypeScript is `bookingDisplayStatus(...) === 'confirmed'`
+   *  (ADR-007).
+   *
+   *  `undefined` means the write applied to nothing. It does NOT say why — classification of a
+   *  miss is the service's job, from `findMyBookingState` below (design note §1.4). */
+  cancelOwnedBooking(
+    userId: string,
+    bookingId: string,
+    cancelledAt: Date,
+    today: OfficeDate,
+  ): Promise<{ id: string } | undefined>;
+  /** US-011/AC-09. The caller's own booking's current state, or `undefined`. Read-only, and
+   *  issued ONLY after `cancelOwnedBooking` returns nothing, to classify the miss (design note
+   *  §1.4).
+   *
+   *  `.eq('user_id', userId)` is what keeps US-007/D-03's anti-enumeration guarantee structural:
+   *  a booking that is not the caller's is `undefined` here, indistinguishable from one that does
+   *  not exist, so the caller's own `booking_already_cancelled` can only ever describe a row the
+   *  caller already reads through `GET /api/bookings` (design note §1.2). Never widen the select
+   *  list beyond `status, booking_date` — the service needs nothing else. */
+  findMyBookingState(
+    userId: string,
+    bookingId: string,
+  ): Promise<{ status: BookingStatus; booking_date: OfficeDate } | undefined>;
   /** US-009/AC-02, AC-06. Confirmed bookings across a date RANGE, for the free-day scan. The
    *  select list is `booking_date, desk_id` — no `user_id`, exactly as `listConfirmedDeskIds`
    *  (US-006/AC-06). Reads `bookings`, the table this module owns; `desks` is not re-read (the
@@ -216,19 +243,26 @@ export const availabilityRepository: AvailabilityRepository = {
   },
 
   /**
-   * D-03, design note §3.2. One `UPDATE ... WHERE id = ? AND user_id = ? AND status = 'confirmed'
+   * D-03, design note §3.2, amended by US-011 (its own design note §2.1, §3, §4.2). One
+   * `UPDATE ... WHERE id = ? AND user_id = ? AND status = 'confirmed' AND booking_date >= ?
    * RETURNING id` — no read-then-write window, so two concurrent cancels of the same booking
    * produce exactly one returned row and one empty result, the database arbitrating exactly as
-   * the insert's unique indexes do. `cancelledAt` is the caller's clock reading, never this
-   * module's own (same convention as `auth.repository.ts`'s `stampLastSeen`) — the value
-   * compared upstream and the value written here must come from the same instant.
+   * the insert's unique indexes do. `cancelledAt` and `today` are the caller's OWN clock reading,
+   * from the SAME instant, never this module's own (same convention as `auth.repository.ts`'s
+   * `stampLastSeen`) — two separate `nowMs()` calls would differ across office midnight
+   * (US-011 design note §2.1, §8.4).
+   *
+   * The `.gte('booking_date', today)` predicate is BR-001.6 / US-011/AC-02 expressed where the
+   * write happens — a past-dated Confirmed booking is left unmatched, the same way "not the
+   * caller's" and "not currently confirmed" already are. `undefined` no longer says WHY (US-011
+   * design note §1.4): classification is `bookings.service.ts`'s job, via `findMyBookingState`.
    *
    * The schema requires `cancelled_at`/`cancellation_source` to be set in the SAME `UPDATE` as
    * `status = 'cancelled'` (`bookings_cancelled_at_matches_status`, `bookings_cancelled_has_source`).
    * If either were forgotten here, Postgres rejects the write with a `23514` — which propagates
    * as an unhandled error (a 500), never silently as `404 booking_not_found` (design note §1.2).
    */
-  async cancelOwnedBooking(userId, bookingId, cancelledAt) {
+  async cancelOwnedBooking(userId, bookingId, cancelledAt, today) {
     const { data, error } = await supabase()
       .from('bookings')
       .update({
@@ -240,11 +274,35 @@ export const availabilityRepository: AvailabilityRepository = {
       .eq('id', bookingId)
       .eq('user_id', userId)
       .eq('status', 'confirmed')
+      .gte('booking_date', today)
       .select('id')
       .maybeSingle();
 
     if (error) throw new Error(`booking cancel failed: ${error.message}`);
     return (data as { id: string } | null) ?? undefined;
+  },
+
+  /**
+   * US-011/AC-09, design note §1.4, §4.2. Read-only, issued ONLY when `cancelOwnedBooking` above
+   * returns nothing, and ONLY to classify that miss — never to decide whether to write. Select
+   * list is `status, booking_date` and nothing wider; no `desk_id`, no join.
+   *
+   * `.eq('user_id', userId)` is load-bearing for D-03's anti-enumeration guarantee: a booking
+   * that is not the caller's returns `undefined` here, byte-identical to one that does not exist
+   * at all — the new `409 booking_already_cancelled` this feeds can therefore only ever describe
+   * a booking the caller already owns and can already read via `GET /api/bookings` (design note
+   * §1.2). Do not drop this filter, and do not widen the select list.
+   */
+  async findMyBookingState(userId, bookingId) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('status, booking_date')
+      .eq('id', bookingId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw new Error(`bookings lookup failed: ${error.message}`);
+    return (data as { status: BookingStatus; booking_date: OfficeDate } | null) ?? undefined;
   },
 
   /**

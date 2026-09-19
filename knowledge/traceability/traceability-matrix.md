@@ -13,7 +13,7 @@
 | REQ-007 | US-006 | 10/10 | delivered |
 | REQ-008 | US-007 | 12/12 | delivered |
 | REQ-009 | US-010 | 10/10 | delivered |
-| REQ-010 | US-011 | 0/10 | planned |
+| REQ-010 | US-011 | 10/10 | delivered |
 | REQ-011 | US-013 | 0/11 | planned |
 | REQ-012 | US-014 | 0/10 | planned |
 | REQ-013 | US-014 | 0/10 | planned |

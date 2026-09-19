@@ -152,11 +152,15 @@ export function createBookingsRouter({ service }: BookingsRouterDeps): Router {
   });
 
   /**
-   * US-007/FR-06, AC-07, D-03. One `200` with an empty body on success — `api-client.ts`'s
-   * `requestNoContent` is the browser's matching half, the same seam `POST /sign-out` (US-002)
-   * already uses for a success that has nothing to say. `404 booking_not_found` covers "no such
-   * booking", "not the caller's" and "not currently confirmed" alike, deliberately
-   * undiscriminated (D-03, design note §3.3).
+   * US-007/FR-06, AC-07, D-03 as amended by US-011 (design note §3, §4.3). One `200` with an
+   * empty body on success, unchanged — `api-client.ts`'s `requestNoContent` is the browser's
+   * matching half, the same seam `POST /sign-out` (US-002) already uses.
+   *
+   * Two failure branches now, not one. `409 booking_already_cancelled` is the ONE case that
+   * peels off D-03's original single undiscriminated 404 — and only among the caller's OWN
+   * bookings (US-011/AC-09, design note §1.2). `404 booking_not_found` still covers "no such
+   * booking", "not the caller's", AND "the caller's own but past-dated" (US-011/AC-02) alike,
+   * deliberately undiscriminated for the same anti-enumeration reason D-03 gave.
    */
   router.post('/:id/cancel', async (req, res, next) => {
     try {
@@ -169,6 +173,11 @@ export function createBookingsRouter({ service }: BookingsRouterDeps): Router {
       const user = requireUser(req);
       const outcome = await service.cancelBooking(user.id, parsed.data.id);
 
+      if (outcome.kind === 'already_cancelled') {
+        // US-011/AC-09. SCR-002 ST-09's non-retryable branch. The browser renders its OWN copy
+        // keyed on the `code`; this message is for logs and non-browser consumers.
+        throw conflict(ERROR_CODES.booking_already_cancelled, 'That booking has already been cancelled.');
+      }
       if (outcome.kind === 'not_found') {
         throw notFound(ERROR_CODES.booking_not_found, 'That booking could not be found.');
       }
