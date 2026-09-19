@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allBookingsListItemSchema,
+  allBookingsQuerySchema,
+  allBookingsResponseSchema,
   bookingCreateSchema,
   bookingDisplayStatusSchema,
   bookingSchema,
   bookingStatusSchema,
   cancelBookingParamsSchema,
+  MAX_PAGE,
   myBookingListItemSchema,
   myBookingsQuerySchema,
   myBookingsResponseSchema,
@@ -128,6 +132,85 @@ describe('myBookingsResponseSchema (US-010/AC-01, AC-03)', () => {
       today: '2026-09-18',
       items: [],
       nextBefore: null,
+      futureField: 'ignored',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('allBookingsQuerySchema (US-013/AC-04)', () => {
+  it('accepts no query at all (page 1)', () => {
+    expect(allBookingsQuerySchema.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts a well-formed page number', () => {
+    const result = allBookingsQuerySchema.safeParse({ page: '2' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.page).toBe(2);
+  });
+
+  it('rejects page 0', () => {
+    expect(allBookingsQuerySchema.safeParse({ page: '0' }).success).toBe(false);
+  });
+
+  it('rejects a non-numeric page', () => {
+    expect(allBookingsQuerySchema.safeParse({ page: 'abc' }).success).toBe(false);
+  });
+
+  it('rejects a page beyond MAX_PAGE', () => {
+    expect(allBookingsQuerySchema.safeParse({ page: String(MAX_PAGE + 1) }).success).toBe(false);
+  });
+
+  it('rejects an unknown field', () => {
+    expect(allBookingsQuerySchema.safeParse({ page: '1', limit: '10' }).success).toBe(false);
+  });
+});
+
+describe('allBookingsListItemSchema (US-013/AC-03, AC-06)', () => {
+  const VALID = {
+    id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    date: '2026-09-16',
+    deskNumber: 'A-02',
+    employeeName: 'Priya Raman',
+    status: 'completed' as const,
+  };
+
+  it('parses a well-formed item, including a completed status', () => {
+    expect(allBookingsListItemSchema.safeParse(VALID).success).toBe(true);
+  });
+
+  it('rejects an empty employeeName', () => {
+    expect(allBookingsListItemSchema.safeParse({ ...VALID, employeeName: '' }).success).toBe(false);
+  });
+
+  it('rejects an empty deskNumber', () => {
+    expect(allBookingsListItemSchema.safeParse({ ...VALID, deskNumber: '' }).success).toBe(false);
+  });
+});
+
+describe('allBookingsResponseSchema (US-013/AC-04, AC-07)', () => {
+  it('parses a full envelope', () => {
+    const result = allBookingsResponseSchema.safeParse({
+      today: '2026-09-16',
+      total: 137,
+      items: [],
+      nextPage: 2,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults nextPage to null when the key is missing (additive-safe, ADR-002)', () => {
+    const result = allBookingsResponseSchema.safeParse({ today: '2026-09-16', total: 0, items: [] });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.nextPage).toBeNull();
+  });
+
+  it('tolerates an unexpected additive field (not .strict(), matching every other response)', () => {
+    const result = allBookingsResponseSchema.safeParse({
+      today: '2026-09-16',
+      total: 0,
+      items: [],
+      nextPage: null,
       futureField: 'ignored',
     });
     expect(result.success).toBe(true);

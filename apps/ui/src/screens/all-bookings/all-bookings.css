@@ -1,0 +1,191 @@
+/*
+ * SCR-005 — All bookings. US-013's slice: the header, the count line, and the list itself.
+ *
+ * AC-11's table/card switch is CSS-only (decisions.md D-05, design note §6.5): both trees render
+ * in the DOM always, and exactly one is shown, toggled at 1024px — matching this codebase's
+ * zero-`matchMedia` precedent (app-shell.css, booking-row.css). Below 1024px the card list itself
+ * has a second, internal breakpoint at 768px: one line (Figma "Card") down to 768px, stacked
+ * (Figma "Card compact") below it.
+ */
+
+.all-bookings__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-16);
+  margin-bottom: var(--s-24);
+}
+
+.all-bookings__timezone {
+  color: var(--c-text-muted);
+  font-size: var(--t-body-sm);
+}
+
+.all-bookings__count {
+  font-size: var(--t-body-lg);
+  line-height: var(--lh-body-lg);
+  color: var(--c-text);
+  margin-bottom: var(--s-16);
+}
+
+.all-bookings__count--skeleton {
+  display: inline-block;
+  width: 260px;
+  height: var(--lh-body-lg);
+  border-radius: var(--r-sm);
+  background: var(--c-fill-subtle);
+}
+
+.all-bookings__show-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--s-24);
+}
+
+/* ---- the table (>= 1024px) --------------------------------------------------------------- */
+
+.admin-bookings-table {
+  display: none;
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.admin-bookings-table thead {
+  background: var(--c-fill-subtle);
+}
+
+.admin-bookings-table th {
+  text-align: left;
+  padding: var(--s-12) var(--s-24);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-on-fill);
+}
+
+.admin-bookings-table__row {
+  height: 64px;
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.admin-bookings-table__row td {
+  padding: var(--s-8) var(--s-24);
+  font-size: var(--t-body);
+}
+
+.admin-bookings-table__employee {
+  font-weight: var(--fw-medium);
+}
+
+/* ---- the cards (< 1024px) ----------------------------------------------------------------- */
+
+.admin-bookings-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.admin-booking-card {
+  display: flex;
+  align-items: center;
+  gap: var(--s-16);
+  min-height: 80px;
+  padding: var(--s-16) var(--s-24);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.admin-booking-card:first-child {
+  border-top: none;
+}
+
+.admin-booking-card__meta {
+  color: var(--c-text-secondary);
+  font-size: var(--t-body);
+  white-space: nowrap;
+}
+
+.admin-booking-card__dot {
+  color: var(--c-text-muted);
+  margin: 0 var(--s-4);
+}
+
+.admin-booking-card__employee {
+  font-weight: var(--fw-medium);
+  flex: 1 0 auto;
+}
+
+/* Below 768px (Figma "Card compact"): stacked, in document order — date/desk, employee, status.
+ * `decisions.md` D-04: every real row here is the 160px, no-action shape. */
+@media (max-width: 767.98px) {
+  .admin-booking-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-8);
+    min-height: 160px;
+    justify-content: center;
+  }
+
+  .admin-booking-card__employee {
+    font-size: var(--t-body);
+  }
+}
+
+/* At and above 1024px: table takes over, cards hidden entirely. */
+@media (min-width: 1024px) {
+  .admin-bookings-table {
+    display: table;
+  }
+
+  .admin-bookings-cards {
+    display: none;
+  }
+}
+
+/* ---- skeletons — real row height, so nothing shifts when data lands ---------------------- */
+
+.admin-bookings-skeleton-row__bar {
+  display: block;
+  height: var(--icon-sm);
+  border-radius: var(--r-sm);
+  background: var(--c-fill-subtle);
+}
+
+.admin-bookings-skeleton-row--table {
+  height: 64px;
+}
+
+.admin-bookings-skeleton-row--table .admin-bookings-skeleton-row__bar {
+  width: 60%;
+}
+
+.admin-bookings-skeleton-row--card {
+  display: flex;
+  align-items: center;
+  min-height: 80px;
+  padding: var(--s-16) var(--s-24);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.admin-bookings-skeleton-row--card:first-child {
+  border-top: none;
+}
+
+.admin-bookings-skeleton-row--card .admin-bookings-skeleton-row__bar {
+  width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  .admin-bookings-skeleton-row--card {
+    min-height: 160px;
+  }
+}

@@ -4,7 +4,10 @@
 
 **Owns (may write):** `bookings`. **Reads:** `desks`, via an explicit column list
 (`bookings.repository.ts`'s `listActiveDesks`) — never writes it. Desk inventory writes stay
-exclusively in `modules/desks` once US-015/US-017 build it.
+exclusively in `modules/desks` once US-015/US-017 build it. **Also reads `user_profiles`** as of
+US-013 — `admin-bookings.repository.ts`'s `listBookingsFromDate` joins to it for the employee's
+name (`full_name`), disambiguated by column (`user_profiles!user_id(...)`) because `bookings` has
+two foreign keys into that table (`user_id`, `cancelled_by`). Never writes it.
 
 ## What's here
 
@@ -100,5 +103,17 @@ Two changes, both in `cancelOwnedBooking`'s own `UPDATE ... WHERE`:
 No migration — every column, constraint and index this needed already existed. See
 `inception/specs/US-011-cancel-my-own-booking/design-note.md` for the full argument, including
 why the disambiguating read runs strictly *after* the write, never before (§1.4).
+
+**US-013** adds `GET /api/admin/bookings` — the first cross-employee read in this codebase, and
+deliberately a **separate** object, `admin-bookings.repository.ts`'s `AdminBookingsRepository`,
+not a method on `AvailabilityRepository`. Every method on that object is desk-scoped or
+`user_id`-filtered; that invariant is what US-006/AC-06 and US-007/D-03 lean on, and an unscoped
+cross-employee read sitting next to those methods would be a copy-paste hazard on the exact
+surface US-013/AC-10 protects (design note §4.2). No migration —
+`bookings_booking_date_status_idx` (`0003_bookings.sql:78`) was already placed for this read.
+Paged with `?page`, not `?before` — a row-count page tolerates the offset this implies; see
+`ai/standards/api-standards.md`'s Pagination section for the criterion that separates this shape
+from US-010's date cursor, and `inception/specs/US-013-see-every-booking/design-note.md` §2.4 for
+the full argument.
 
 See `../README.md` for what this module owns and the boundary it must respect.

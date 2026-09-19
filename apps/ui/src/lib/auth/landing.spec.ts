@@ -28,4 +28,8 @@ describe('landingPathFor (US-004/AC-01, AC-03, AC-07)', () => {
   it('sends an admin with the mark clear to /admin/bookings (US-004/AC-07)', () => {
     expect(landingPathFor(admin)).toBe('/admin/bookings');
   });
+
+  it('lands a signing-in admin on All bookings, not a dashboard (US-013/AC-01)', () => {
+    expect(landingPathFor(admin)).toBe('/admin/bookings');
+  });
 });

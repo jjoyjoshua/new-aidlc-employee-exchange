@@ -12,7 +12,7 @@
 import type { Express } from 'express';
 import { createApp } from './http/app.js';
 import { requireSession, type SessionVerifier } from './http/middleware/require-session.js';
-import { adminRouter } from './modules/admin/admin.router.js';
+import { createAdminRouter } from './modules/admin/admin.router.js';
 import { supabaseAuthAdapter } from './modules/auth/auth.adapter.js';
 import { profileRepository, type ProfileRepository } from './modules/auth/auth.repository.js';
 import { createAuthRouter } from './modules/auth/auth.router.js';
@@ -20,6 +20,8 @@ import { createAuthService, type AuthAdapter } from './modules/auth/auth.service
 import { availabilityRepository, type AvailabilityRepository } from './modules/bookings/bookings.repository.js';
 import { createBookingsRouter } from './modules/bookings/bookings.router.js';
 import { createBookingsService } from './modules/bookings/bookings.service.js';
+import { adminBookingsRepository, type AdminBookingsRepository } from './modules/bookings/admin-bookings.repository.js';
+import { createAdminBookingsService } from './modules/bookings/admin-bookings.service.js';
 import { SIGN_IN_MIN_FAILURE_MS } from './domain/sign-in-failure-delay.js';
 import { supabase } from './infra/supabase/index.js';
 import { config } from './config/index.js';
@@ -54,6 +56,8 @@ export interface BuildAppOptions {
   officeTimezone?: string;
   /** US-006 test seam — overrides the real `desks`/`bookings` reads. */
   availability?: AvailabilityRepository;
+  /** US-013 test seam — overrides the real cross-employee `bookings`/`desks`/`user_profiles` read. */
+  adminBookings?: AdminBookingsRepository;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -91,6 +95,12 @@ export function buildApp(options: BuildAppOptions = {}): Express {
     officeTimezone,
   });
 
+  const adminBookingsService = createAdminBookingsService({
+    bookings: options.adminBookings ?? adminBookingsRepository,
+    nowMs,
+    officeTimezone,
+  });
+
   return createApp({
     authRouter: createAuthRouter({
       service,
@@ -98,7 +108,7 @@ export function buildApp(options: BuildAppOptions = {}): Express {
       requireSession: sessionForPasswordChange,
       officeTimezone,
     }),
-    adminRouter,
+    adminRouter: createAdminRouter({ bookings: adminBookingsService }),
     bookingsRouter: createBookingsRouter({ service: bookingsService }),
     requireSession: session,
   });

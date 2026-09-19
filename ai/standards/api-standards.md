@@ -99,8 +99,20 @@ scheduler retries.
 
 ## Pagination
 
-Unbounded collections take `?page&limit` with a documented maximum. "All bookings" (REQ-012)
-is the one that will grow.
+Two shapes, chosen by what defines a page — not a house style to pick freely (US-013 design
+note §2.4, `inception/specs/US-013-see-every-booking/`):
+
+- **A page defined by a row count** takes `?page`, server-fixed page size, never a client
+  `limit` — `GET /api/admin/bookings` (US-013). A total order over a non-unique sort key
+  tolerates the offset this implies, and the fixed size lets one query answer both the page and
+  a "how many match" count in the same round trip.
+- **A page defined by a date window** takes a date cursor (`?before=<date>`), never a row-count
+  parameter — `GET /api/bookings` (US-010). Fixing a row count here needs a composite cursor on
+  the wire (a date can hold more than one row), which is worse than the window shape it would
+  replace.
+
+**The page size is always the server's, never a client-supplied parameter**, on both shapes — a
+security rule as much as a consistency one for `/api/admin/*`, which returns cross-employee data.
 
 ## How the two sides share request/response types
 
