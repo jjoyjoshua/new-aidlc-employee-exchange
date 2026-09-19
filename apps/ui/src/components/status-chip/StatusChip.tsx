@@ -19,18 +19,30 @@
  * reach the three new variants. One component, not a sibling `BookingStatusChip`: the CSS, the
  * tokens, the pill geometry and the icon-and-word discipline are identical, and duplicating them
  * is exactly the kind of drift `modules/bookings/README.md` warns against for a second rule.
+ *
+ * **`kind: 'inventory'`, added by US-016/AC-02, AC-03** (design note §4). A THIRD family, not a
+ * reuse of `kind: 'desk'`'s `available`/`taken`: `LABEL.available` is the exported string
+ * `"Available"`, and AC-02 requires the word "Active" — a per-date occupancy fact (`DeskStatus`)
+ * and a lifecycle fact (`is_active`) that must be able to diverge again without one edit changing
+ * the other (`tokens.css`'s own stated reason for the inactive role). The Inactive variant binds
+ * `--c-state-inactive-*` (quiet neutral, never the danger family, AC-03); the Active variant
+ * binds `--c-state-available-*` — the same role the desk-availability chip uses, because the
+ * Figma component itself binds it there and no `--c-state-active-*` role exists or is needed.
  */
 import personMarkup from '../../assets/icon-person.svg?raw';
 import clockMarkup from '../../assets/icon-clock.svg?raw';
 import closeMarkup from '../../assets/icon-close.svg?raw';
+import blockMarkup from '../../assets/icon-block.svg?raw';
 import './status-chip.css';
 
 export type DeskStatus = 'available' | 'taken' | 'selected';
 export type BookingLifecycleStatus = 'confirmed' | 'completed' | 'cancelled';
+export type InventoryStatus = 'active' | 'inactive';
 
 export type StatusChipProps =
   | { kind?: 'desk'; status: DeskStatus }
-  | { kind: 'booking'; status: BookingLifecycleStatus };
+  | { kind: 'booking'; status: BookingLifecycleStatus }
+  | { kind: 'inventory'; status: InventoryStatus };
 
 /** Exported for `DeskRow` (US-008/FR-06): the composed `aria-label` needs the same word this chip
  *  renders, so the accessible name and the visible chip never say different things. */
@@ -42,6 +54,11 @@ export const BOOKING_LABEL: Record<BookingLifecycleStatus, string> = {
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
+
+/** Exported for `DeskInventoryRow` (US-016/AC-02), the same reason `LABEL` is exported above —
+ *  the word this constant carries is exactly what AC-02 requires, and `LABEL.available` would
+ *  say "Available" instead. */
+export const INVENTORY_LABEL: Record<InventoryStatus, string> = { active: 'Active', inactive: 'Inactive' };
 
 function CheckCircleIcon() {
   // Figma `Icon / check-circle` (node 11:5) — "the desk is free for the selected date". Same
@@ -71,10 +88,21 @@ function CloseIcon() {
   return <span className="status-chip__icon status-chip__icon--markup" dangerouslySetInnerHTML={{ __html: closeMarkup }} />;
 }
 
+function BlockIcon() {
+  // Figma `Icon / block` (node 11:43) — the Inactive inventory variant's second cue, alongside
+  // the quiet-neutral fill and the word (US-016/AC-02, AC-03).
+  return <span className="status-chip__icon status-chip__icon--markup" dangerouslySetInnerHTML={{ __html: blockMarkup }} />;
+}
+
 const BOOKING_ICON: Record<BookingLifecycleStatus, () => React.JSX.Element> = {
   confirmed: CheckCircleIcon,
   completed: ClockIcon,
   cancelled: CloseIcon,
+};
+
+const INVENTORY_ICON: Record<InventoryStatus, () => React.JSX.Element> = {
+  active: CheckCircleIcon,
+  inactive: BlockIcon,
 };
 
 export function StatusChip(props: StatusChipProps) {
@@ -84,6 +112,16 @@ export function StatusChip(props: StatusChipProps) {
       <span className={`status-chip status-chip--${props.status}`}>
         <Icon />
         <span>{BOOKING_LABEL[props.status]}</span>
+      </span>
+    );
+  }
+
+  if (props.kind === 'inventory') {
+    const Icon = INVENTORY_ICON[props.status];
+    return (
+      <span className={`status-chip status-chip--${props.status}`}>
+        <Icon />
+        <span>{INVENTORY_LABEL[props.status]}</span>
       </span>
     );
   }

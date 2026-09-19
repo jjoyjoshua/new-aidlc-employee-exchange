@@ -865,7 +865,7 @@
         "apps/api/src/modules/admin/admin.routes.spec.ts",
         "apps/ui/src/screens/all-bookings/filters.spec.ts",
         "apps/ui/src/screens/all-bookings/use-all-bookings.spec.ts",
-        "apps/ui/src/screens/all-bookings/use-desks.spec.ts",
+        "apps/ui/src/lib/use-desks.spec.ts",
         "apps/ui/src/screens/all-bookings/Select.spec.tsx",
         "apps/ui/src/screens/all-bookings/DateField.spec.tsx",
         "apps/ui/src/screens/all-bookings/FilterBar.spec.tsx",
@@ -932,9 +932,23 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/desks.spec.ts",
+        "apps/api/src/modules/desks/desks.repository.spec.ts",
+        "apps/api/src/modules/desks/desks.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/ui/src/components/status-chip/StatusChip.spec.tsx",
+        "apps/ui/src/screens/desks/copy.spec.ts",
+        "apps/ui/src/screens/desks/DeskInventoryRow.spec.tsx",
+        "apps/ui/src/screens/desks/Desks.spec.tsx"
+      ],
       "screens": [
         "SCR-006"
+      ],
+      "decisions": [
+        "ADR-002",
+        "ADR-004",
+        "ADR-007"
       ]
     },
     "US-017": {

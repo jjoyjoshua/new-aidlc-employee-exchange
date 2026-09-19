@@ -5,6 +5,7 @@ const VALID_DESK = {
   id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
   deskNumber: 'A-01',
   isActive: true,
+  bookedAhead: 0,
 };
 
 describe('adminDeskSchema (US-014/AC-03, edge case — inactive desks stay findable)', () => {
@@ -23,6 +24,29 @@ describe('adminDeskSchema (US-014/AC-03, edge case — inactive desks stay finda
   it('rejects a missing isActive', () => {
     const { isActive: _isActive, ...withoutActive } = VALID_DESK;
     expect(adminDeskSchema.safeParse(withoutActive).success).toBe(false);
+  });
+});
+
+describe('adminDeskSchema.bookedAhead (US-016/AC-04, AC-05 — required, zero is not absence)', () => {
+  it('parses a positive count', () => {
+    expect(adminDeskSchema.safeParse({ ...VALID_DESK, bookedAhead: 3 }).success).toBe(true);
+  });
+
+  it('parses zero — the "none" case, not blank', () => {
+    expect(adminDeskSchema.safeParse({ ...VALID_DESK, bookedAhead: 0 }).success).toBe(true);
+  });
+
+  it('rejects a missing bookedAhead — AC-05 requires the field, never its absence', () => {
+    const { bookedAhead: _bookedAhead, ...withoutCount } = VALID_DESK;
+    expect(adminDeskSchema.safeParse(withoutCount).success).toBe(false);
+  });
+
+  it('rejects a negative count', () => {
+    expect(adminDeskSchema.safeParse({ ...VALID_DESK, bookedAhead: -1 }).success).toBe(false);
+  });
+
+  it('rejects a non-integer count', () => {
+    expect(adminDeskSchema.safeParse({ ...VALID_DESK, bookedAhead: 1.5 }).success).toBe(false);
   });
 });
 

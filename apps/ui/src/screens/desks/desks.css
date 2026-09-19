@@ -1,0 +1,190 @@
+/*
+ * SCR-006 — Desks (US-016). Table at 1024px and above, cards below it — SCR-006's own measure
+ * ("this table needs 672px; at 768 it has 648"), not the 768px boundary `all-bookings/` uses
+ * (US-016 design note §7.1). Zero `matchMedia`: both trees render, CSS shows one, matching
+ * `all-bookings.css`'s own worked example.
+ */
+
+.desks__summary {
+  color: var(--c-text);
+  font-size: var(--t-body-lg);
+  line-height: var(--lh-body-lg);
+}
+
+.desks__summary--skeleton {
+  display: inline-block;
+  width: 260px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  background: var(--c-fill-muted);
+}
+
+/* ---- the table (1024px and above) --------------------------------------------------------- */
+
+.desk-inventory-table {
+  display: none;
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.desk-inventory-table thead {
+  background: var(--c-fill-subtle);
+}
+
+.desk-inventory-table th {
+  text-align: left;
+  padding: var(--s-12) var(--s-24);
+  font-size: var(--t-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-on-fill);
+}
+
+.desk-inventory-table__row {
+  height: 64px;
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.desk-inventory-table__row td {
+  padding: var(--s-8) var(--s-24);
+}
+
+.desk-inventory-table__actions {
+  display: flex;
+  gap: var(--s-8);
+  justify-content: flex-end;
+}
+
+/* ---- the card list (below 1024px) --------------------------------------------------------- */
+
+.desks-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+/* 768px–1023px (Figma "Card"): one line, 80px. */
+.desk-inventory-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-16);
+  min-height: 80px;
+  padding: var(--s-16) var(--s-24);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.desk-inventory-card:first-child {
+  border-top: none;
+}
+
+.desk-inventory-card__number {
+  font-weight: var(--fw-medium);
+  margin: 0;
+}
+
+.desk-inventory-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  color: var(--c-text-secondary);
+}
+
+.desk-inventory-card__actions {
+  display: flex;
+  gap: var(--s-8);
+  margin-left: auto;
+}
+
+/* Below 768px (Figma "Card compact"): stacked, 156px, actions as equal halves — never
+ * full-width stacked buttons (SCR-006's accessibility section). */
+@media (max-width: 767.98px) {
+  .desk-inventory-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-12);
+    min-height: 156px;
+    justify-content: center;
+  }
+
+  .desk-inventory-card__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .desk-inventory-card__actions > * {
+    flex: 1 0 0;
+  }
+}
+
+/* At and above 1024px: table takes over, cards hidden entirely. */
+@media (min-width: 1024px) {
+  .desk-inventory-table {
+    display: table;
+  }
+
+  .desks-cards {
+    display: none;
+  }
+}
+
+/* ---- skeleton rows (ST-02) — DeskInventorySkeletonRow, this table's own grid --------------- */
+
+.desk-inventory-skeleton-row__bar {
+  display: block;
+  height: 20px;
+  border-radius: var(--r-sm);
+  background: var(--c-fill-muted);
+}
+
+.desk-inventory-skeleton-row--table {
+  height: 64px;
+}
+
+.desk-inventory-skeleton-row--table td {
+  padding: var(--s-8) var(--s-24);
+}
+
+.desk-inventory-skeleton-row--card {
+  display: flex;
+  align-items: center;
+  min-height: 80px;
+  padding: var(--s-16) var(--s-24);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.desk-inventory-skeleton-row--card:first-child {
+  border-top: none;
+}
+
+@media (max-width: 767.98px) {
+  .desk-inventory-skeleton-row--card {
+    min-height: 156px;
+  }
+}
+
+/* ---- accessibility utility (US-016/AC-05, AC-06, AC-08) ------------------------------------
+ *
+ * No global visually-hidden utility exists in this codebase (`all-bookings.css` states the same
+ * reasoning) — this screen's own, per that convention.
+ */
+.desks__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

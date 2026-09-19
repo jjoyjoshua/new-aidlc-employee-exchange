@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="presentation" aria-hidden="true">
+  <!--
+    Icon / plus — Figma node 192:40 (file xjFVgBbMrJUl7Ys3EX3Cbn). "Leading icon for the Add desk
+    / Add person actions (SCR-006, SCR-008). Geometry only; colour comes from the stroke token"
+    per its own documentation.
+
+    Geometry ONLY, same convention as icon-close.svg: stroke is `currentColor`, so an Add desk
+    button set on a primary surface inherits `--c-action-label` for free (US-016 design note
+    §4.3) — no icon prop was added to `Button` for this.
+  -->
+  <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

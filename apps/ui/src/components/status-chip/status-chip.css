@@ -60,6 +60,24 @@
   color: var(--c-state-cancelled-ink);
 }
 
+/* US-016/AC-02, AC-03, design note §4.2. Inventory variants, keyed on `status` alone (not on
+ * `kind`) — a future `kind: 'account'` chip (SCR-008) sharing these `status` values is expected
+ * to land on the same classes, correctly, since it wants the same treatment. `--active` reuses
+ * the availability role rather than a new one — the Figma component binds it there and no
+ * `--c-state-active-*` role exists (open item 4, naming only). `--inactive` is already defined
+ * by the desk-availability chip's sibling and used by no code until this story. */
+.status-chip--active {
+  background: var(--c-state-available-fill);
+  border-color: var(--c-state-available-border);
+  color: var(--c-state-available-ink);
+}
+
+.status-chip--inactive {
+  background: var(--c-state-inactive-fill);
+  border-color: var(--c-state-inactive-border);
+  color: var(--c-state-inactive-ink);
+}
+
 .status-chip__icon {
   flex: none;
   width: var(--icon-sm);
