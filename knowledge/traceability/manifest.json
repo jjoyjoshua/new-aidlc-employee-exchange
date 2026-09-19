@@ -1043,9 +1043,29 @@
         "AC-11",
         "AC-12"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/error.spec.ts",
+        "libs/contracts/src/desks.spec.ts",
+        "apps/api/src/http/errors.spec.ts",
+        "apps/api/src/modules/desks/desks.repository.spec.ts",
+        "apps/api/src/modules/desks/desks.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/bookings/bookings.routes.spec.ts",
+        "apps/ui/src/components/dialog/Dialog.spec.tsx",
+        "apps/ui/src/lib/api-client.spec.ts",
+        "apps/ui/src/lib/deactivate-desk.spec.ts",
+        "apps/ui/src/lib/activate-desk.spec.ts",
+        "apps/ui/src/lib/use-desks.spec.ts",
+        "apps/ui/src/screens/desks/copy.spec.ts",
+        "apps/ui/src/screens/desks/DeskDeactivateDialog.spec.tsx",
+        "apps/ui/src/screens/desks/DeskInventoryRow.spec.tsx",
+        "apps/ui/src/screens/desks/Desks.spec.tsx"
+      ],
       "screens": [
         "SCR-006"
+      ],
+      "decisions": [
+        "ADR-009"
       ]
     },
     "US-020": {

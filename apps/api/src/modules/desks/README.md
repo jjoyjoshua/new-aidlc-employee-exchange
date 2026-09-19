@@ -2,10 +2,10 @@
 
 ## Ownership (ADR-004 — read across, write within)
 
-**Owns (may write):** `desks`. US-017 (add) was this module's first write; US-018 (edit) has
-landed too; US-019 (activate/deactivate) is its remaining one. Before US-017, `desks` existed
-(created by US-006's `0002_desks.sql`) and no code wrote it — rows arrived via a manual dev seed
-(`supabase/seed/desks.dev.sql`).
+**Owns (may write):** `desks`. US-017 (add) was this module's first write; US-018 (edit) and
+US-019 (activate/deactivate) have both landed too — this module's writes are now complete. Before
+US-017, `desks` existed (created by US-006's `0002_desks.sql`) and no code wrote it — rows arrived
+via a manual dev seed (`supabase/seed/desks.dev.sql`).
 
 **`insertDesk(deskNumber)` (US-017/AC-01, AC-04, AC-05).** No pre-check `SELECT` precedes the
 insert — `desks_desk_number_key` (`0002_desks.sql`) is the sole arbiter of a duplicate, the same
@@ -47,8 +47,41 @@ which would turn "no row" into a thrown Postgres error) — desks are never dele
 reachable from the screen today, but a write that matches nothing must still answer something
 other than a 500.
 
-**Holds a read-only repository as of US-014, extended by US-016** — `desks.repository.ts`'s
-`DesksRepository`, behind `GET /api/admin/desks`.
+**`countUpcomingConfirmedForDesk(deskId, status, from)` (US-019/AC-04, AC-07, AC-08 — BR-001.9,
+V-09).** Reads `bookings`, a table this module does NOT own — the same ADR-004 justification
+`listUpcomingConfirmedDeskIds` states, applied to a count rather than a list. Deliberately a NEW
+method rather than a reuse of `listUpcomingConfirmedDeskIds(...).filter(...)`: that method returns
+every upcoming booking id in the OFFICE (~3,100 uuids at BR-001.4's ceiling) to answer a question
+about ONE desk, on the hot path of a write (`decisions.md` D-04). `{ count: 'exact', head: true }`
+— the count is the whole answer and no row is transferred. `status` and `from` arrive from the
+SERVICE's `displayStatusPredicate('confirmed', today)` reading, exactly as
+`listUpcomingConfirmedDeskIds` requires of itself — **this is the call this file's own earlier
+warning was written for**, and it now exists.
+
+**`setDeskActive(id, isActive)` (US-019/AC-01, AC-09 — REQ-017, BR-001.7).** This module's third
+write, and its last. ONE method for both transitions — the SQL is the same `UPDATE` with a
+different value; the RULES differ, and they live in the service (`deactivateDesk` counts first,
+`activateDesk` does not). **`updated_at` is deliberately NOT set** (`decisions.md` D-02) —
+`0002_desks.sql`'s column is scoped in writing to REQ-016, "when the desk was last renamed", and
+`updateDeskNumber` is its first and only writer. This story is REQ-017; widening the column's
+meaning here would make it unreliable for the one thing it does claim. No `23505` mapping: this
+write never touches `desk_number`, so `desks_desk_number_key` cannot fire.
+
+**The AC-08 race window — accepted, not closed (`decisions.md` D-01).** There is no database
+transaction in this codebase — every repository call is its own PostgREST round trip. Between
+`countUpcomingConfirmedForDesk` returning `0` and `setDeskActive` committing, a booking insert can
+land, producing a Confirmed booking on an inactive desk. This is symmetric with the booking path's
+own read-then-write gap (`bookings.service.ts:181`) and is accepted as a cost rather than closed
+by a migration: nothing is cancelled and nothing is deleted (the booking still exists, the desk can
+be reactivated by the same control), and it is self-revealing — the next load of `GET
+/api/admin/desks` shows an `Inactive` desk with a non-zero `bookedAhead`, a visibly contradictory
+row. The only atomic fix is a Postgres function doing a conditional `UPDATE`, which is a migration
+in a protected path and out of scope for this story.
+
+**Holds a read-only repository as of US-014, extended by US-016, and a write repository as of
+US-017 through US-019** — `desks.repository.ts`'s `DesksRepository`, behind `GET
+/api/admin/desks`, `POST /api/admin/desks`, `PATCH /api/admin/desks/:id`, `POST
+/api/admin/desks/:id/deactivate` and `.../activate`.
 
 - `listAllDesks()` selects `id, desk_number, is_active` with **no** `is_active` filter, the
   deliberate opposite of `modules/bookings`'s `listActiveDesks`: this read serves the admin
@@ -56,8 +89,7 @@ other than a 500.
   where an inactive desk must still appear so its historic bookings stay findable. Placed here
   rather than as a sibling method on `modules/bookings`'s `AvailabilityRepository`, per ADR-004
   follow-up 2 and US-013 design note §4.1's own rule applied symmetrically: *put the read where
-  the write will have to live* — US-017 was the first desk write to land here, proving the rule
-  out; US-018 has landed too; US-019 is its remaining one.
+  the write will have to live* — US-017, US-018 and US-019 each proved the rule out in turn.
 - `listUpcomingConfirmedDeskIds(status, from)` reads **`bookings`, a table this module does NOT
   own** (US-016/AC-04, AC-05, BR-001.9). ADR-004's own Context names this exact read as one of the
   cases the rule was written to settle: *"BR-001.9's blocking count is a `bookings` aggregate read
@@ -65,16 +97,13 @@ other than a 500.
   `user_id`, no `*` — the same discipline `modules/bookings`'s own `listConfirmedDeskIds` states
   for this table: the occupant is never read, not merely never sent. `status` and the `>= from`
   bound arrive from the SERVICE's `displayStatusPredicate('confirmed', today)` call
-  (`domain/booking-history.ts`) — neither is written literally in this module. **US-019's
-  deactivation block must call the same `displayStatusPredicate('confirmed', today)` function**,
-  not re-implement the rule by hand, or its block and this count can drift apart (US-016 design
-  note §2.4). **Warning for US-019 (US-018 design note §4):** US-018's `renameDesk` reads the
-  `bookedAhead` count already on the browser's loaded list — no fresh call to this method —
-  because nothing in a rename is gated on that count (AC-03 permits the rename regardless).
-  **US-019 must NOT copy that shortcut**: its deactivation block IS gated on the count (BR-001.9
-  refuses the deactivation when it is non-zero), so a stale, browser-held number there could show
-  a success path the server then blocks. US-019 needs a genuine server-side call to this method
-  at the moment of deactivation, not the list's last-known value.
+  (`domain/booking-history.ts`) — neither is written literally in this module. US-019's
+  deactivation block calls the same `displayStatusPredicate('confirmed', today)` function via its
+  OWN dedicated count method (above), not this one — this method stays US-016's own, serving
+  `listAllDesks`'s per-list tally, and never reused for the deactivation block (US-018's own
+  shortcut of reading the browser's held count is likewise not reused here — US-019's block is
+  gated on the count in a way a rename never was, so it needs a genuine server-side call at the
+  moment of deactivation).
 
 **Read by:** `modules/bookings` (`bookings.repository.ts`'s `listActiveDesks`, US-006), via an
 explicit column list, `is_active = true` only. That module may never write this table. The two
@@ -82,5 +111,5 @@ reads (this module's unfiltered one, and `modules/bookings`'s active-only one) s
 invariants and are not the same method with different callers — see US-006/AC-04, which depends
 absolutely on `listActiveDesks`'s filter never being dropped.
 
-US-019 is its remaining write. See `../README.md` for what this module owns and the boundary it
-must respect.
+This module's writes are complete as of US-019. See `../README.md` for what this module owns and
+the boundary it must respect.

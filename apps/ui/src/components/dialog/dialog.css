@@ -39,6 +39,18 @@
   gap: var(--s-16);
 }
 
+/* SCR-006 ST-06 (US-019/AC-04) — the header's non-colour warning signal. Caller-owned SVG; this
+ * rule only sizes and colours the slot, matching `.dialog__close-icon`'s own 24px box. */
+.dialog__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--c-warning-ink);
+}
+
 .dialog__title {
   flex: 1 0 0;
   margin: 0;

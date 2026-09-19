@@ -24,6 +24,11 @@ export interface DialogProps {
   /** `alertdialog` for a confirmation (`ConfirmDialog`'s own use, asserted by its own spec);
    *  `dialog` for a form (SCR-007). Defaults to `dialog` — the safer default for a new caller. */
   role?: 'dialog' | 'alertdialog';
+  /** SCR-006 ST-06 (US-019/AC-04) — rendered before the title in the header, `aria-hidden`.
+   *  NFR-008's non-colour signal for a dialog that carries a refusal rather than a question.
+   *  Caller-owned, exactly as `footer` is: a `tone` prop would start this shell growing a second
+   *  component's vocabulary. Omitted renders exactly as before this prop existed. */
+  icon?: ReactNode;
   children: ReactNode;
   /** The footer's contents, right-aligned above the border rule. Each caller owns its own
    *  buttons — the labels, variants and order are caller-specific, and a `confirmLabel` prop is
@@ -36,7 +41,7 @@ export interface DialogProps {
   onDismiss: () => void;
 }
 
-export function Dialog({ title, role = 'dialog', children, footer, busy = false, initialFocusRef, onDismiss }: DialogProps) {
+export function Dialog({ title, role = 'dialog', icon, children, footer, busy = false, initialFocusRef, onDismiss }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   // The element that had focus before this dialog opened — captured once, on mount, before focus
@@ -87,6 +92,11 @@ export function Dialog({ title, role = 'dialog', children, footer, busy = false,
     <div className="dialog__overlay">
       <div ref={dialogRef} className="dialog" role={role} aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <div className="dialog__header">
+          {icon ? (
+            <span className="dialog__icon" aria-hidden="true">
+              {icon}
+            </span>
+          ) : null}
           <h2 id={titleId} className="dialog__title">
             {title}
           </h2>

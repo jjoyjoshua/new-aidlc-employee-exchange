@@ -158,6 +158,31 @@ describe('Dialog — the shared shell (US-017 design note §5.2)', () => {
     expect(desktopOverride).toMatch(/align-items:\s*center/);
   });
 
+  it('renders a caller-supplied icon in the header, before the title, aria-hidden (US-019/AC-04)', () => {
+    render(
+      <Dialog title="Blocked" icon={<svg data-testid="warning-icon" />} footer={null} onDismiss={() => undefined}>
+        body
+      </Dialog>,
+    );
+
+    const icon = screen.getByTestId('warning-icon');
+    expect(icon).toBeInTheDocument();
+    expect(icon.closest('[aria-hidden="true"]')).toBeTruthy();
+    const header = screen.getByRole('heading', { name: 'Blocked' }).closest('.dialog__header');
+    expect(header?.contains(icon)).toBe(true);
+  });
+
+  it('omitting icon renders exactly as today — no icon wrapper in the header (US-019/AC-04)', () => {
+    render(
+      <Dialog title="Add desk" footer={null} onDismiss={() => undefined}>
+        body
+      </Dialog>,
+    );
+
+    const header = screen.getByRole('heading', { name: 'Add desk' }).closest('.dialog__header');
+    expect(header?.querySelector('.dialog__icon')).toBeNull();
+  });
+
   it('restores focus to the element that had it before the dialog opened, on unmount', () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Add desk';

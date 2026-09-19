@@ -46,6 +46,18 @@ One shape from every route, no exceptions:
 show a user. **Nothing else crosses the boundary** — no stack traces, no Postgres messages,
 no constraint names.
 
+**One additive exception: an optional, code-scoped `details` object (ADR-009).** A refusal may
+need to carry a fact the browser must *render*, not merely switch on — US-019's blocked
+deactivation is the first: SCR-006 interpolates the blocking count into both a sentence and a
+button label, and a count recovered by parsing `message` would be prose used as a wire format.
+`errorBodySchema` gains `details: z.record(z.unknown()).optional()`, emitted only where a
+refusal actually carries one, so every other error body stays byte-identical. The **typed**
+reading of a `details` object lives beside the endpoint that sends it (e.g.
+`deskBlockedDetailsSchema` in `libs/contracts/src/desks.ts`), never in `error.ts` — that file
+must not learn any one rule's vocabulary. This does not relax "nothing else crosses the
+boundary": `details` is still declared, still namespaced per `code`, and still absent from
+every refusal that has no fact to report.
+
 | Status | Used for                                                                      |
 | ------ | ----------------------------------------------------------------------------- |
 | `200`  | Read succeeded                                                                |

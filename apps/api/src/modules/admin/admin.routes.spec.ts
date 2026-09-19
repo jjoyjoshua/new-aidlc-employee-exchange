@@ -11,7 +11,13 @@ import { buildApp } from '../../composition.js';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 import type { SessionVerifier } from '../../http/middleware/require-session.js';
 import type { AdminBookingRow, AdminBookingsFilter, AdminBookingsRepository } from '../bookings/admin-bookings.repository.js';
-import type { DeskRow, DesksRepository, InsertDeskOutcome, UpdateDeskOutcome } from '../desks/desks.repository.js';
+import type {
+  DeskRow,
+  DesksRepository,
+  InsertDeskOutcome,
+  SetDeskActiveOutcome,
+  UpdateDeskOutcome,
+} from '../desks/desks.repository.js';
 
 interface Row {
   id: string;
@@ -88,6 +94,12 @@ const noDesks: DesksRepository = {
   },
   async updateDeskNumber() {
     throw new Error('updateDeskNumber not stubbed — this test only exercises GET /desks');
+  },
+  async countUpcomingConfirmedForDesk() {
+    throw new Error('countUpcomingConfirmedForDesk not stubbed — this test only exercises GET /desks');
+  },
+  async setDeskActive() {
+    throw new Error('setDeskActive not stubbed — this test only exercises GET /desks');
   },
 };
 
@@ -766,6 +778,211 @@ describe('PATCH /api/admin/desks/:id (US-018/AC-01, AC-02, AC-07, AC-09)', () =>
   it('refuses a request with no token at all', async () => {
     const app = appWith({ desks: noDesks });
     const response = await request(app).patch(`/api/admin/desks/${DESK_ID}`).send({ deskNumber: 'A-01' });
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/desks/:id/deactivate (US-019/AC-01, AC-04, AC-07, AC-08, AC-12)', () => {
+  const DESK_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  function deactivatingDesksRepository(
+    outcomes: Array<{ count: number } | { setActive: SetDeskActiveOutcome }>,
+  ) {
+    const countCalls: Array<{ deskId: string; status: string; from: string }> = [];
+    const setActiveCalls: Array<{ id: string; isActive: boolean }> = [];
+    let i = 0;
+    const repository: DesksRepository = {
+      ...noDesks,
+      async countUpcomingConfirmedForDesk(deskId, status, from) {
+        countCalls.push({ deskId, status, from });
+        const outcome = outcomes[i];
+        i += 1;
+        if (!outcome || !('count' in outcome)) throw new Error('no count stubbed');
+        return outcome.count;
+      },
+      async setDeskActive(id, isActive) {
+        setActiveCalls.push({ id, isActive });
+        const outcome = outcomes[i];
+        i += 1;
+        if (!outcome || !('setActive' in outcome)) throw new Error('no setActive outcome stubbed');
+        return outcome.setActive;
+      },
+    };
+    return { repository, countCalls, setActiveCalls };
+  }
+
+  it('deactivates a desk with no upcoming bookings: 200 with id/deskNumber/isActive, no bookedAhead (US-019/AC-01)', async () => {
+    const { repository } = deactivatingDesksRepository([
+      { count: 0 },
+      { setActive: { kind: 'ok', desk: { id: DESK_ID, desk_number: 'A-02', is_active: false } } },
+    ]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: DESK_ID, deskNumber: 'A-02', isActive: false });
+    expect(response.body.bookedAhead).toBeUndefined();
+  });
+
+  it('a desk with 3 upcoming bookings is refused 422 desk_has_upcoming_bookings, the count in details.upcomingBookings on the raw body (US-019/AC-04)', async () => {
+    const { repository, setActiveCalls } = deactivatingDesksRepository([{ count: 3 }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('desk_has_upcoming_bookings');
+    expect(response.body.details).toEqual({ upcomingBookings: 3 });
+    // AC-05/AC-08: nothing in the request named a count, and nothing is written on the blocked path.
+    expect(setActiveCalls).toHaveLength(0);
+  });
+
+  it('the server refuses even though nothing in the request body or params mentions a count — the server is the rule, not a prediction (US-019/AC-08)', async () => {
+    const { repository } = deactivatingDesksRepository([{ count: 3 }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({});
+
+    expect(response.status).toBe(422);
+  });
+
+  it('deactivation succeeds once a previously blocking count clears — nothing cached between requests (US-019/AC-07)', async () => {
+    const { repository } = deactivatingDesksRepository([
+      { count: 0 },
+      { setActive: { kind: 'ok', desk: { id: DESK_ID, desk_number: 'A-02', is_active: false } } },
+    ]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+  });
+
+  it('a desk id matching no row gets 404 desk_not_found', async () => {
+    const { repository } = deactivatingDesksRepository([{ count: 0 }, { setActive: { kind: 'not_found' } }]);
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('desk_not_found');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .post('/api/admin/desks/not-a-uuid/deactivate')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('refuses an Employee session with 403 admin_only, reaching the real mount (US-019/AC-12)', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/deactivate`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+  });
+
+  it('refuses a request with no token at all (US-019/AC-12)', async () => {
+    const app = appWith({ desks: noDesks });
+    const response = await request(app).post(`/api/admin/desks/${DESK_ID}/deactivate`);
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/desks/:id/activate (US-019/AC-01, AC-09, AC-12)', () => {
+  const DESK_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  function activatingDesksRepository(outcome: SetDeskActiveOutcome) {
+    const setActiveCalls: Array<{ id: string; isActive: boolean }> = [];
+    const countCalls: unknown[] = [];
+    const repository: DesksRepository = {
+      ...noDesks,
+      async countUpcomingConfirmedForDesk() {
+        countCalls.push(true);
+        throw new Error('countUpcomingConfirmedForDesk must not be called by activate (US-019/AC-09)');
+      },
+      async setDeskActive(id, isActive) {
+        setActiveCalls.push({ id, isActive });
+        return outcome;
+      },
+    };
+    return { repository, setActiveCalls, countCalls };
+  }
+
+  it('activates a desk with no dialog, no count, and no rule to satisfy: 200 with id/deskNumber/isActive (US-019/AC-01, AC-09)', async () => {
+    const { repository, setActiveCalls, countCalls } = activatingDesksRepository({
+      kind: 'ok',
+      desk: { id: DESK_ID, desk_number: 'C-05', is_active: true },
+    });
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/activate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: DESK_ID, deskNumber: 'C-05', isActive: true });
+    expect(setActiveCalls).toEqual([{ id: DESK_ID, isActive: true }]);
+    expect(countCalls).toHaveLength(0);
+  });
+
+  it('a desk id matching no row gets 404 desk_not_found', async () => {
+    const { repository } = activatingDesksRepository({ kind: 'not_found' });
+    const app = appWith({ desks: repository });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/activate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('desk_not_found');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .post('/api/admin/desks/not-a-uuid/activate')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('refuses an Employee session with 403 admin_only, reaching the real mount (US-019/AC-12)', async () => {
+    const app = appWith({ desks: noDesks });
+
+    const response = await request(app)
+      .post(`/api/admin/desks/${DESK_ID}/activate`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+  });
+
+  it('refuses a request with no token at all (US-019/AC-12)', async () => {
+    const app = appWith({ desks: noDesks });
+    const response = await request(app).post(`/api/admin/desks/${DESK_ID}/activate`);
     expect(response.status).toBe(401);
   });
 });

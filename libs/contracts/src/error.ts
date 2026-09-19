@@ -63,6 +63,13 @@ export const errorCodeSchema = z.enum([
   // (US-017 edge cases). Distinct from `desk_already_booked`, which is a BOOKING race on a desk
   // that exists — one character apart in a switch, which is why both are constants.
   'desk_number_taken',
+  // US-019/AC-04 — BR-001.9, V-09. The desk holds one or more CONFIRMED bookings dated the
+  // office's today or later, so it cannot be deactivated and NOTHING is cancelled (AC-05).
+  // 422, not 409: the request is well formed and the rule refuses it — retrying the same
+  // request unchanged will fail identically until the bookings are cleared
+  // (`api-standards.md`'s 409/422 split, which uses THIS refusal as its own worked example).
+  // Distinct from `desk_inactive`, which is the mirror rule on the BOOKING path.
+  'desk_has_upcoming_bookings',
   'route_not_found',
   'service_unavailable',
   'internal_error',
@@ -84,5 +91,19 @@ export const errorBodySchema = z.object({
   statusCode: z.number().int(),
   code: z.string().min(1),
   message: z.string(),
+  /**
+   * OPTIONAL, machine-readable detail scoped to the `code` that carries it (US-019/AC-04, ADR-009).
+   *
+   * Parsed LOOSELY here, for the reason `code: z.string()` above is loose: a tab loaded before a
+   * deploy must not fail to PARSE a body carrying a key it has never heard of. The TYPED reading
+   * lives beside the endpoint that sends it — see `deskBlockedDetailsSchema` in `desks.ts` — so
+   * this file never learns any one rule's vocabulary.
+   *
+   * Present only where a refusal carries a fact the browser must RENDER rather than merely
+   * switch on. US-019 is the first: SCR-006 ST-06 interpolates the blocking count into both its
+   * body sentence and its primary button label, and a count recovered by parsing `message` would
+   * be prose used as a wire format. Absent from every other error body in the system.
+   */
+  details: z.record(z.unknown()).optional(),
 });
 export type ErrorBody = z.infer<typeof errorBodySchema>;

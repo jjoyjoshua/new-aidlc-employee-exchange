@@ -3,8 +3,10 @@ import {
   DESK_NUMBER_PATTERN,
   adminDeskSchema,
   adminDesksResponseSchema,
+  deskBlockedDetailsSchema,
   deskCreateSchema,
   deskIdParamsSchema,
+  deskStateResponseSchema,
   deskUpdateResponseSchema,
   deskUpdateSchema,
   normalizeDeskNumber,
@@ -223,6 +225,46 @@ describe('deskUpdateResponseSchema (US-018/AC-01 — PATCH /api/admin/desks/:id 
   it('rejects a missing deskNumber', () => {
     const { deskNumber: _deskNumber, bookedAhead: _bookedAhead, ...rest } = VALID_DESK;
     expect(deskUpdateResponseSchema.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe('deskBlockedDetailsSchema (US-019/AC-04 — 422 desk_has_upcoming_bookings detail, ADR-009)', () => {
+  it('parses a positive count', () => {
+    const result = deskBlockedDetailsSchema.safeParse({ upcomingBookings: 3 });
+    expect(result.success).toBe(true);
+    expect(result.data?.upcomingBookings).toBe(3);
+  });
+
+  it('rejects zero — a blocked refusal reporting none would contradict itself (US-019/AC-04)', () => {
+    expect(deskBlockedDetailsSchema.safeParse({ upcomingBookings: 0 }).success).toBe(false);
+  });
+
+  it('rejects a negative count', () => {
+    expect(deskBlockedDetailsSchema.safeParse({ upcomingBookings: -1 }).success).toBe(false);
+  });
+
+  it('rejects a non-integer count', () => {
+    expect(deskBlockedDetailsSchema.safeParse({ upcomingBookings: 1.5 }).success).toBe(false);
+  });
+
+  it('rejects a missing count', () => {
+    expect(deskBlockedDetailsSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('deskStateResponseSchema (US-019/AC-01, AC-09 — POST /desks/:id/deactivate, .../activate 200 body)', () => {
+  it('parses the desk without bookedAhead', () => {
+    const { bookedAhead: _bookedAhead, ...withoutCount } = VALID_DESK;
+    expect(deskStateResponseSchema.safeParse(withoutCount).success).toBe(true);
+  });
+
+  it('tolerates bookedAhead present (an .omit()-derived schema strips extras, it does not refuse them)', () => {
+    expect(deskStateResponseSchema.safeParse(VALID_DESK).success).toBe(true);
+  });
+
+  it('rejects a missing isActive', () => {
+    const { isActive: _isActive, bookedAhead: _bookedAhead, ...rest } = VALID_DESK;
+    expect(deskStateResponseSchema.safeParse(rest).success).toBe(false);
   });
 });
 

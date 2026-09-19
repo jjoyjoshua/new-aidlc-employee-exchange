@@ -31,13 +31,26 @@ export class HttpError extends Error {
     readonly statusCode: number,
     readonly code: string,
     message: string,
+    /**
+     * OPTIONAL, code-scoped detail (US-019/AC-04, ADR-009). Undefined for every helper except
+     * `unprocessable` when a caller passes one — every other call site is unaffected by this
+     * parameter's existence.
+     */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'HttpError';
   }
 
   toBody(): ErrorBody {
-    return { statusCode: this.statusCode, code: this.code, message: this.message };
+    return {
+      statusCode: this.statusCode,
+      code: this.code,
+      message: this.message,
+      // The load-bearing line (ADR-009): every error body in the system today stays
+      // byte-identical unless a caller passed `details` — no key, not `null`, not `{}`.
+      ...(this.details === undefined ? {} : { details: this.details }),
+    };
   }
 }
 
@@ -65,8 +78,13 @@ export const conflict = (code: string, message: string) => new HttpError(409, co
 /**
  * The request is well-formed but the rule refuses it (V-06, V-09, V-11).
  * Not a race: the rule says no — "this desk has 3 upcoming bookings, so it can't be retired".
+ *
+ * `details` (US-019/AC-04, ADR-009) is for the rarer case where the refusal carries a fact the
+ * browser must RENDER, not merely switch on — this docblock's own worked example is that case.
+ * Omitted by every caller that has nothing to report.
  */
-export const unprocessable = (code: string, message: string) => new HttpError(422, code, message);
+export const unprocessable = (code: string, message: string, details?: Record<string, unknown>) =>
+  new HttpError(422, code, message, details);
 
 /**
  * The forced password change (REQ-029, BR-001.17).

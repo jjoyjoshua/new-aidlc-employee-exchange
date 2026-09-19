@@ -1,27 +1,34 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AdminDesk } from '@desk-booking/contracts';
 import { DeskInventoryRow } from './DeskInventoryRow.js';
-import { UNAVAILABLE_CONTROL_REASON } from './copy.js';
 
 const ACTIVE_DESK: AdminDesk = { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 3 };
 const INACTIVE_DESK: AdminDesk = { id: 'b', deskNumber: 'C-05', isActive: false, bookedAhead: 0 };
 
-function renderTableRow(desk: AdminDesk, onEdit: (desk: AdminDesk) => void = vi.fn()) {
+function renderTableRow(
+  desk: AdminDesk,
+  onEdit: (desk: AdminDesk) => void = vi.fn(),
+  onToggleActive: (desk: AdminDesk) => void = vi.fn(),
+) {
   return render(
     <table>
       <tbody>
-        <DeskInventoryRow desk={desk} layout="table" onEdit={onEdit} />
+        <DeskInventoryRow desk={desk} layout="table" onEdit={onEdit} onToggleActive={onToggleActive} />
       </tbody>
     </table>,
   );
 }
 
-function renderCardRow(desk: AdminDesk, onEdit: (desk: AdminDesk) => void = vi.fn()) {
+function renderCardRow(
+  desk: AdminDesk,
+  onEdit: (desk: AdminDesk) => void = vi.fn(),
+  onToggleActive: (desk: AdminDesk) => void = vi.fn(),
+) {
   return render(
     <ul>
-      <DeskInventoryRow desk={desk} layout="card" onEdit={onEdit} />
+      <DeskInventoryRow desk={desk} layout="card" onEdit={onEdit} onToggleActive={onToggleActive} />
     </ul>,
   );
 }
@@ -76,12 +83,31 @@ describe.each([
     expect(screen.queryByRole('button', { name: /more|options|⋯/i })).not.toBeInTheDocument();
   });
 
-  it('the activate/deactivate control is disabled with an accessible reason (US-016/AC-06, AC-08 — removed once its own story ships)', () => {
+  it('the activate/deactivate control is present and labelled at every width — the still-true half of US-016/AC-08 (US-016/AC-08)', () => {
     renderRow(ACTIVE_DESK);
-    const deactivate = screen.getByRole('button', { name: /^Deactivate/ });
+    expect(screen.getByRole('button', { name: /^Deactivate/ })).toBeInTheDocument();
+  });
 
-    expect(deactivate).toBeDisabled();
-    expect(within(deactivate).getByText(UNAVAILABLE_CONTROL_REASON)).toBeInTheDocument();
+  it('the toggle is enabled and calls onToggleActive with the desk, for an active desk (US-019/AC-01)', async () => {
+    const onToggleActive = vi.fn();
+    renderRow(ACTIVE_DESK, vi.fn(), onToggleActive);
+    const toggle = screen.getByRole('button', { name: 'Deactivate' });
+
+    expect(toggle).toBeEnabled();
+
+    await userEvent.click(toggle);
+    expect(onToggleActive).toHaveBeenCalledWith(ACTIVE_DESK);
+  });
+
+  it('the toggle is enabled and calls onToggleActive with the desk, for an inactive desk (US-019/AC-01, AC-09)', async () => {
+    const onToggleActive = vi.fn();
+    renderRow(INACTIVE_DESK, vi.fn(), onToggleActive);
+    const toggle = screen.getByRole('button', { name: 'Activate' });
+
+    expect(toggle).toBeEnabled();
+
+    await userEvent.click(toggle);
+    expect(onToggleActive).toHaveBeenCalledWith(INACTIVE_DESK);
   });
 
   it('Edit is enabled and calls onEdit with the desk (US-018/AC-01)', async () => {
@@ -90,7 +116,6 @@ describe.each([
     const edit = screen.getByRole('button', { name: 'Edit' });
 
     expect(edit).toBeEnabled();
-    expect(within(edit).queryByText(UNAVAILABLE_CONTROL_REASON)).not.toBeInTheDocument();
 
     await userEvent.click(edit);
     expect(onEdit).toHaveBeenCalledWith(ACTIVE_DESK);

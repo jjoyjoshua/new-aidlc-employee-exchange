@@ -11,6 +11,8 @@ import type { AdminDesk, AuthenticatedUser, Office } from '@desk-booking/contrac
 import type { DesksFetcher, DesksOutcome } from '../../lib/use-desks.js';
 import type { AddDeskFetcher, AddDeskOutcome } from '../../lib/add-desk.js';
 import type { RenameDeskFetcher, RenameDeskOutcome } from '../../lib/rename-desk.js';
+import type { DeactivateDeskFetcher, DeactivateDeskOutcome } from '../../lib/deactivate-desk.js';
+import type { ActivateDeskFetcher, ActivateDeskOutcome } from '../../lib/activate-desk.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -29,12 +31,16 @@ function SignedIn({
   fetchDesks,
   addDesk,
   renameDesk,
+  deactivateDesk,
+  activateDesk,
   user = ADMIN,
   guarded = false,
 }: {
   fetchDesks: DesksFetcher;
   addDesk?: AddDeskFetcher;
   renameDesk?: RenameDeskFetcher;
+  deactivateDesk?: DeactivateDeskFetcher;
+  activateDesk?: ActivateDeskFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -46,7 +52,15 @@ function SignedIn({
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screen = <Desks fetchDesks={fetchDesks} addDesk={addDesk} renameDesk={renameDesk} />;
+  const screen = (
+    <Desks
+      fetchDesks={fetchDesks}
+      addDesk={addDesk}
+      renameDesk={renameDesk}
+      deactivateDesk={deactivateDesk}
+      activateDesk={activateDesk}
+    />
+  );
 
   return (
     <MemoryRouter initialEntries={['/admin/desks']}>
@@ -55,6 +69,7 @@ function SignedIn({
           <Routes>
             <Route path="/bookings" element={<p>My bookings</p>} />
             <Route path="/admin/desks" element={guarded ? <RequireRole role="admin">{screen}</RequireRole> : screen} />
+            <Route path="/admin/bookings" element={<p>All bookings</p>} />
           </Routes>
         </Primer>
       </AuthProvider>
@@ -96,7 +111,7 @@ describe('Desks — the ready view (US-016/AC-01, AC-02, AC-04, AC-05)', () => {
 });
 
 describe('Desks — empty inventory (US-016/AC-06)', () => {
-  it('renders the empty state with no table and an enabled Add desk action (US-017 deletes US-016\'s disabled treatment)', async () => {
+  it('renders the empty state with no table and an enabled Add desk action (US-016/AC-06 — US-017 deletes US-016\'s disabled treatment)', async () => {
     render(<SignedIn fetchDesks={async () => okDesks([])} />);
 
     expect(await screen.findByText('No desks yet. Nobody can book until you add one.')).toBeInTheDocument();
@@ -335,6 +350,235 @@ describe('Desks — edit a desk (US-018/AC-01, AC-02, AC-04, AC-08)', () => {
     expect(calls).toBe(1);
     resolveRename({ kind: 'ok', desk: { id: ACTIVE.id, deskNumber: 'B-05', isActive: true } });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+});
+
+describe('Desks — activate a desk (US-019/AC-01, AC-09, AC-10)', () => {
+  it('clicking Activate issues the request with NO dialog rendered at any point (US-019/AC-09)', async () => {
+    const activateDesk: ActivateDeskFetcher = async () => ({
+      kind: 'ok',
+      desk: { id: INACTIVE.id, deskNumber: INACTIVE.deskNumber, isActive: true },
+    });
+    render(<SignedIn fetchDesks={async () => okDesks([INACTIVE])} activateDesk={activateDesk} />);
+    await screen.findAllByText('C-05');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    const [toggle] = screen.getAllByRole('button', { name: 'Activate' });
+    await userEvent.click(toggle!);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('updates the row in place, no refetch, and shows the toast (US-019/AC-01, AC-10)', async () => {
+    let fetchCount = 0;
+    const fetchDesks: DesksFetcher = async () => {
+      fetchCount += 1;
+      return okDesks([ACTIVE, INACTIVE]);
+    };
+    const activateDesk: ActivateDeskFetcher = async () => ({
+      kind: 'ok',
+      desk: { id: INACTIVE.id, deskNumber: INACTIVE.deskNumber, isActive: true },
+    });
+    render(<SignedIn fetchDesks={fetchDesks} activateDesk={activateDesk} />);
+    await screen.findAllByText('C-05');
+
+    const [toggle] = screen.getAllByRole('button', { name: 'Activate' });
+    await userEvent.click(toggle!);
+
+    expect(await screen.findByText('C-05 is active. People can book it from today.')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Deactivate/ }).length).toBeGreaterThan(0);
+    expect(fetchCount).toBe(1);
+  });
+
+  it('a second click while the first activation is in flight issues exactly one request', async () => {
+    let resolveActivate!: (outcome: ActivateDeskOutcome) => void;
+    let calls = 0;
+    const activateDesk: ActivateDeskFetcher = () => {
+      calls += 1;
+      return new Promise((resolve) => (resolveActivate = resolve));
+    };
+    render(<SignedIn fetchDesks={async () => okDesks([INACTIVE])} activateDesk={activateDesk} />);
+    await screen.findAllByText('C-05');
+
+    const [toggle] = screen.getAllByRole('button', { name: 'Activate' });
+    await userEvent.click(toggle!);
+    await userEvent.click(toggle!);
+
+    expect(calls).toBe(1);
+    resolveActivate({ kind: 'ok', desk: { id: INACTIVE.id, deskNumber: INACTIVE.deskNumber, isActive: true } });
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Deactivate/ }).length).toBeGreaterThan(0));
+  });
+
+  it('a failed activation shows a page-level alert with the row unchanged (design note §8.4)', async () => {
+    const activateDesk: ActivateDeskFetcher = async () => ({ kind: 'failed' });
+    render(<SignedIn fetchDesks={async () => okDesks([INACTIVE])} activateDesk={activateDesk} />);
+    await screen.findAllByText('C-05');
+
+    const [toggle] = screen.getAllByRole('button', { name: 'Activate' });
+    await userEvent.click(toggle!);
+
+    expect(await screen.findByText("We couldn’t activate C-05 just now. Try again.")).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Activate' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Desks — deactivate a desk (US-019/AC-01, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-10, AC-11)', () => {
+  it('clicking Deactivate on an eligible desk opens ST-05 with the confirmation (US-019/AC-03)', async () => {
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+
+    expect(screen.getByRole('alertdialog', { name: 'Deactivate A-01?' })).toBeInTheDocument();
+    expect(
+      screen.getByText('It disappears from everyone’s booking options straight away. Past bookings on it are kept.'),
+    ).toBeInTheDocument();
+  });
+
+  it('confirming issues the request and on success updates the row in place, no refetch, and shows the toast (US-019/AC-01, AC-10)', async () => {
+    let fetchCount = 0;
+    const fetchDesks: DesksFetcher = async () => {
+      fetchCount += 1;
+      return okDesks([ACTIVE, INACTIVE]);
+    };
+    const deactivateDesk: DeactivateDeskFetcher = async () => ({
+      kind: 'ok',
+      desk: { id: ACTIVE.id, deskNumber: ACTIVE.deskNumber, isActive: false },
+    });
+    render(<SignedIn fetchDesks={fetchDesks} deactivateDesk={deactivateDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(await screen.findByText('A-01 is inactive. It’s no longer bookable.')).toBeInTheDocument();
+    expect(fetchCount).toBe(1);
+  });
+
+  it('the row keeps its position among the desk rows after deactivation (US-019/AC-10)', async () => {
+    const deactivateDesk: DeactivateDeskFetcher = async () => ({
+      kind: 'ok',
+      desk: { id: ACTIVE.id, deskNumber: ACTIVE.deskNumber, isActive: false },
+    });
+    const { container } = render(
+      <SignedIn fetchDesks={async () => okDesks([ACTIVE, INACTIVE])} deactivateDesk={deactivateDesk} />,
+    );
+    await screen.findAllByText('A-01');
+
+    const rowsBefore = [...container.querySelectorAll('.desk-inventory-table [data-desk-row]')].map((el) =>
+      el.getAttribute('data-desk-row'),
+    );
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+
+    const rowsAfter = [...container.querySelectorAll('.desk-inventory-table [data-desk-row]')].map((el) =>
+      el.getAttribute('data-desk-row'),
+    );
+    expect(rowsAfter).toEqual(rowsBefore);
+  });
+
+  it('Keep it active closes the dialog without deactivating anything', async () => {
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    await userEvent.click(screen.getByRole('button', { name: 'Keep it active' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getAllByText('A-01').length).toBeGreaterThan(0);
+  });
+
+  it('a blocked response switches the SAME mounted dialog to ST-06 with the server’s count, not the row’s own — provably 0 on this path (US-019/AC-04, AC-08)', async () => {
+    const deactivateDesk: DeactivateDeskFetcher = async () => ({ kind: 'blocked', upcomingBookings: 3 });
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} deactivateDesk={deactivateDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    expect(screen.getByRole('alertdialog', { name: 'Deactivate A-01?' })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }));
+
+    const blocked = await screen.findByRole('alertdialog', { name: 'A-01 can’t be deactivated yet.' });
+    expect(blocked).toBeInTheDocument();
+    expect(
+      screen.getByText('3 people have it booked from today onwards. Cancel those bookings first — the desk stays bookable until you do.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See those 3 bookings' })).toBeInTheDocument();
+  });
+
+  it('a row whose held bookedAhead is stale-high still shows ST-06 correctly with the SERVER count (US-019/AC-08)', async () => {
+    const staleHigh = { ...ACTIVE, bookedAhead: 99 };
+    const deactivateDesk: DeactivateDeskFetcher = async () => ({ kind: 'blocked', upcomingBookings: 3 });
+    render(<SignedIn fetchDesks={async () => okDesks([staleHigh])} deactivateDesk={deactivateDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }));
+
+    expect(await screen.findByText(/^3 people have it booked/)).toBeInTheDocument();
+    expect(screen.queryByText(/^99 people/)).not.toBeInTheDocument();
+  });
+
+  it('the primary action in the blocked dialog navigates to All bookings (US-019/AC-06)', async () => {
+    const deactivateDesk: DeactivateDeskFetcher = async () => ({ kind: 'blocked', upcomingBookings: 3 });
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} deactivateDesk={deactivateDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'See those 3 bookings' }));
+
+    expect(await screen.findByText('All bookings')).toBeInTheDocument();
+  });
+
+  it('a failure that is not the block keeps the dialog open, shows the danger alert, and the desk is unchanged (US-019/AC-11)', async () => {
+    const deactivateDesk: DeactivateDeskFetcher = async () => ({ kind: 'failed' });
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} deactivateDesk={deactivateDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }));
+
+    expect(await screen.findByText("We couldn’t deactivate A-01 just now. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    // Nothing changed — the toggle everywhere else still reads Deactivate for this desk.
+    expect(screen.getAllByRole('button', { name: /^Deactivate/ }).length).toBeGreaterThan(0);
+  });
+
+  it('a second confirm click while the first save is in flight issues exactly one request (US-019/AC-03)', async () => {
+    let resolveDeactivate!: (outcome: DeactivateDeskOutcome) => void;
+    let calls = 0;
+    const deactivateDesk: DeactivateDeskFetcher = () => {
+      calls += 1;
+      return new Promise((resolve) => (resolveDeactivate = resolve));
+    };
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} deactivateDesk={deactivateDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [toggle] = screen.getAllByRole('button', { name: /^Deactivate/ });
+    await userEvent.click(toggle!);
+    const confirm = within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Deactivate' });
+    await userEvent.click(confirm);
+    await userEvent.click(confirm);
+
+    expect(calls).toBe(1);
+    resolveDeactivate({ kind: 'ok', desk: { id: ACTIVE.id, deskNumber: ACTIVE.deskNumber, isActive: false } });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 });
 

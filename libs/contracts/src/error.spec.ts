@@ -90,4 +90,42 @@ describe('ERROR_CODES', () => {
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });
+
+  it('carries desk_has_upcoming_bookings, distinct from desk_inactive (US-019/AC-04)', () => {
+    expect(ERROR_CODES.desk_has_upcoming_bookings).toBe('desk_has_upcoming_bookings');
+    expect(ERROR_CODES.desk_has_upcoming_bookings).not.toBe(ERROR_CODES.desk_inactive);
+    expect(errorCodeSchema.parse('desk_has_upcoming_bookings')).toBe('desk_has_upcoming_bookings');
+  });
+});
+
+describe('errorBodySchema.details (US-019/AC-04, ADR-009)', () => {
+  it('parses a body with no details exactly as before — no key present (US-019/AC-04)', () => {
+    const result = errorBodySchema.safeParse({ statusCode: 404, code: 'desk_not_found', message: 'x' });
+
+    expect(result.success).toBe(true);
+    expect(result.data && 'details' in result.data).toBe(false);
+  });
+
+  it('parses a body carrying an untyped details record (US-019/AC-04)', () => {
+    const result = errorBodySchema.safeParse({
+      statusCode: 422,
+      code: 'desk_has_upcoming_bookings',
+      message: 'x',
+      details: { upcomingBookings: 3 },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.details).toEqual({ upcomingBookings: 3 });
+  });
+
+  it('tolerates a details value it has never heard of — a tab loaded before a deploy must still parse (US-019/AC-04)', () => {
+    const result = errorBodySchema.safeParse({
+      statusCode: 422,
+      code: 'some_future_code',
+      message: 'x',
+      details: { somethingNew: true, nested: { a: 1 } },
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

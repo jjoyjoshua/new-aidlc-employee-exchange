@@ -371,6 +371,24 @@ describe('POST /api/bookings — the desk guard (US-007/AC-12)', () => {
     expect(response.status).toBe(422);
     expect(response.body.code).toBe('desk_inactive');
   });
+
+  it('422s desk_inactive for a booking request naming a desk that was just deactivated — AC-02 is already built, this is its own test (US-019/AC-02)', async () => {
+    // US-019 design note §2.4: `bookings.service.ts:181`'s `if (!desk.is_active)` check and
+    // `bookings.router.ts`'s `422 desk_inactive` mapping already answer this rule from the
+    // booking side. This test names the desk "however constructed" per the story's own wording
+    // (AC-02) — a desk deactivated moments ago, however that happened, is still just
+    // `is_active: false` to this endpoint. No production code in `modules/bookings` changes for
+    // this test to pass.
+    const deactivated = inactiveDeskRow();
+    const app = appWith({
+      availability: { ...emptyAvailabilityRepository, async getDeskById() { return deactivated; } },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: deactivated.id });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('desk_inactive');
+  });
 });
 
 describe('POST /api/bookings — the two conflict outcomes (US-007/AC-05, AC-08)', () => {

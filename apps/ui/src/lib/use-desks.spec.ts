@@ -121,3 +121,67 @@ describe('useDesks.markRenamed (US-018/AC-01, AC-06 — rename in place, re-sort
     expect(result.current.status).toBe('loading');
   });
 });
+
+describe('useDesks.markStateChanged (US-019/AC-10 — in place, no re-sort, never refetched)', () => {
+  it('flips isActive to false and sets bookedAhead to 0 on deactivation, even when the held count was stale-high (US-019/AC-10)', async () => {
+    const A01 = { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 3 };
+    let calls = 0;
+    const fetchDesks: DesksFetcher = async () => {
+      calls += 1;
+      return { kind: 'ok', desks: [A01] };
+    };
+    const { result } = renderHook(() => useDesks(fetchDesks));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    act(() => result.current.markStateChanged('a', false));
+
+    expect(result.current.status === 'ready' && result.current.desks).toEqual([
+      { ...A01, isActive: false, bookedAhead: 0 },
+    ]);
+    expect(calls).toBe(1); // no refetch
+  });
+
+  it('flips isActive to true on activation and leaves bookedAhead untouched — the server never read it (US-019/AC-10)', async () => {
+    const B03 = { id: 'b', deskNumber: 'B-03', isActive: false, bookedAhead: 0 };
+    const fetchDesks: DesksFetcher = async () => ({ kind: 'ok', desks: [B03] });
+    const { result } = renderHook(() => useDesks(fetchDesks));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    act(() => result.current.markStateChanged('b', true));
+
+    expect(result.current.status === 'ready' && result.current.desks).toEqual([{ ...B03, isActive: true }]);
+  });
+
+  it('does NOT re-sort — the row stays at its index, since desk_number is untouched (US-019/AC-10)', async () => {
+    const A01 = { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 0 };
+    const B03 = { id: 'b', deskNumber: 'B-03', isActive: true, bookedAhead: 0 };
+    const fetchDesks: DesksFetcher = async () => ({ kind: 'ok', desks: [B03, A01] }); // deliberately out of number order
+    const { result } = renderHook(() => useDesks(fetchDesks));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    act(() => result.current.markStateChanged('a', false));
+
+    expect(result.current.status === 'ready' && result.current.desks.map((d) => d.id)).toEqual(['b', 'a']);
+  });
+
+  it('leaves every other desk untouched', async () => {
+    const A01 = { id: 'a', deskNumber: 'A-01', isActive: true, bookedAhead: 2 };
+    const B03 = { id: 'b', deskNumber: 'B-03', isActive: true, bookedAhead: 1 };
+    const fetchDesks: DesksFetcher = async () => ({ kind: 'ok', desks: [A01, B03] });
+    const { result } = renderHook(() => useDesks(fetchDesks));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    act(() => result.current.markStateChanged('a', false));
+
+    expect(result.current.status === 'ready' && result.current.desks[1]).toEqual(B03);
+  });
+
+  it('is a no-op when not yet ready', async () => {
+    const fetchDesks: DesksFetcher = () => new Promise(() => {});
+    const { result } = renderHook(() => useDesks(fetchDesks));
+
+    expect(result.current.status).toBe('loading');
+    act(() => result.current.markStateChanged('a', false));
+    expect(result.current.status).toBe('loading');
+  });
+});
