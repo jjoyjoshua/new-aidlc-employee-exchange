@@ -10,15 +10,29 @@ The HTTP contract between the React app and the Express server. Details and reas
   (`/api/internal/reminders/run`)
 - Admin-only surfaces live under `/api/admin/*` and carry the `requireAdmin` middleware
 - Versioning: none for this release; a breaking change needs an ADR
+- **`PATCH /api/admin/<resource>/:id` modifies an attribute of an existing resource. A
+  refusable state TRANSITION — one a business rule can reject with its own error, like
+  cancelling a booking or deactivating a desk — is a verb sub-resource instead:
+  `POST /api/admin/<resource>/:id/<verb>` (e.g. `/bookings/:id/cancel`). The two shapes read
+  differently on purpose: a `PATCH` that fails does so on validation or a conflict over the
+  new value itself (a duplicate desk number); a transition can fail on a rule about the
+  resource's current state (an active booking count) that the request body never mentions
+  (US-018 design note §3.1, open item 5 — set here rather than as an ADR because the
+  decision is one sentence, but it binds every update-in-place endpoint after it)
 
 ## Validation
 
 - **Every** request body, query string and path parameter is parsed by a Zod schema at the
   route edge. Unknown fields are **rejected**, not stripped and not ignored
 - A handler receives a typed, validated value or is never reached
-- Requirement-level rules — the 30-day window, the weekday rule, the desk-number format —
-  are **not** edge concerns. They live in `domain/` and are called by the service. They are
-  business rules that happen to be checkable early, which is not the same thing
+- Requirement-level rules — the 30-day window, the weekday rule — are **not** edge concerns.
+  They live in `domain/` and are called by the service. They are business rules that happen
+  to be checkable early, which is not the same thing. The desk-number format is the
+  exception that proves it: it is shared, wire-facing validation with no service-side caller
+  of its own, so it lives in `libs/contracts` instead (`DESK_NUMBER_PATTERN`,
+  `normalizeDeskNumber`, `deskNumberSchema` — `libs/contracts/src/desks.ts`), evaluated
+  identically by both the browser and the route edge (US-017 design note §5; corrected here
+  in US-018, which reuses that same schema at a second route edge)
 
 ## Errors
 

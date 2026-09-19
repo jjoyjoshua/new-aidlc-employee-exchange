@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDesksService } from './desks.service.js';
-import type { DesksRepository, InsertDeskOutcome } from './desks.repository.js';
+import type { DesksRepository, InsertDeskOutcome, UpdateDeskOutcome } from './desks.repository.js';
 
 const TODAY = '2026-09-19';
 const NOW_MS = Date.parse(`${TODAY}T12:00:00Z`);
@@ -11,18 +11,24 @@ interface StubOptions {
    *  own one-row-per-booking shape (US-016 design note §2.2). */
   upcomingDeskIds?: string[];
   insertResult?: InsertDeskOutcome;
+  updateResult?: UpdateDeskOutcome;
 }
 
-function stubRepository({ rows, upcomingDeskIds = [], insertResult }: StubOptions): {
+function stubRepository({ rows, upcomingDeskIds = [], insertResult, updateResult }: StubOptions): {
   repository: DesksRepository;
   calls: Array<{ status: string; from: string }>;
   insertCalls: string[];
+  updateCalls: Array<{ id: string; deskNumber: string; updatedAt: Date }>;
+  upcomingCallCount: () => number;
 } {
   const calls: Array<{ status: string; from: string }> = [];
   const insertCalls: string[] = [];
+  const updateCalls: Array<{ id: string; deskNumber: string; updatedAt: Date }> = [];
   return {
     calls,
     insertCalls,
+    updateCalls,
+    upcomingCallCount: () => calls.length,
     repository: {
       async listAllDesks() {
         return rows;
@@ -34,6 +40,10 @@ function stubRepository({ rows, upcomingDeskIds = [], insertResult }: StubOption
       async insertDesk(deskNumber) {
         insertCalls.push(deskNumber);
         return insertResult ?? { kind: 'ok', desk: { id: 'new', desk_number: deskNumber, is_active: true } };
+      },
+      async updateDeskNumber(id, deskNumber, updatedAt) {
+        updateCalls.push({ id, deskNumber, updatedAt });
+        return updateResult ?? { kind: 'ok', desk: { id, desk_number: deskNumber, is_active: true } };
       },
     },
   };
@@ -165,5 +175,73 @@ describe('createDesksService.createDesk (US-017/AC-01, AC-04)', () => {
     const result = await service(repository).createDesk('A-01');
 
     expect(result).toEqual({ kind: 'duplicate' });
+  });
+});
+
+describe('createDesksService.renameDesk (US-018/AC-01, AC-02, AC-03, AC-05, AC-07)', () => {
+  it('maps a successful rename to a desk WITHOUT bookedAhead (US-018/AC-01)', async () => {
+    const { repository } = stubRepository({
+      rows: [],
+      updateResult: { kind: 'ok', desk: { id: 'a', desk_number: 'B-05', is_active: true } },
+    });
+
+    const result = await service(repository).renameDesk('a', 'B-05');
+
+    expect(result).toEqual({ kind: 'ok', desk: { id: 'a', deskNumber: 'B-05', isActive: true } });
+    expect(result.kind === 'ok' && 'bookedAhead' in result.desk).toBe(false);
+  });
+
+  it('passes the desk number through to the repository unchanged, and the injected clock as updatedAt (US-018/AC-02)', async () => {
+    const { repository, updateCalls } = stubRepository({ rows: [] });
+
+    await service(repository).renameDesk('a', 'B-05');
+
+    expect(updateCalls).toEqual([{ id: 'a', deskNumber: 'B-05', updatedAt: new Date(NOW_MS) }]);
+  });
+
+  it('renames a desk with upcoming bookings with NO call to listUpcomingConfirmedDeskIds — nothing gates it (US-018/AC-03)', async () => {
+    const { repository, upcomingCallCount } = stubRepository({ rows: [] });
+
+    const result = await service(repository).renameDesk('a', 'B-05');
+
+    expect(result.kind).toBe('ok');
+    expect(upcomingCallCount()).toBe(0);
+  });
+
+  it('reports a duplicate outcome without mapping a desk (US-018/AC-02)', async () => {
+    const { repository } = stubRepository({ rows: [], updateResult: { kind: 'duplicate' } });
+
+    const result = await service(repository).renameDesk('a', 'A-01');
+
+    expect(result).toEqual({ kind: 'duplicate' });
+  });
+
+  it('reports a not_found outcome without mapping a desk', async () => {
+    const { repository } = stubRepository({ rows: [], updateResult: { kind: 'not_found' } });
+
+    const result = await service(repository).renameDesk('missing', 'A-01');
+
+    expect(result).toEqual({ kind: 'not_found' });
+  });
+
+  it('renaming to the current value succeeds — it is not treated as a duplicate (US-018/AC-07)', async () => {
+    const { repository } = stubRepository({
+      rows: [],
+      updateResult: { kind: 'ok', desk: { id: 'a', desk_number: 'A-01', is_active: true } },
+    });
+
+    const result = await service(repository).renameDesk('a', 'A-01');
+
+    expect(result.kind).toBe('ok');
+  });
+
+  it('produces exactly one repository interaction and nothing else — the structural half of AC-05, nothing here can send a notification (US-018/AC-05)', async () => {
+    const { repository, insertCalls, updateCalls, upcomingCallCount } = stubRepository({ rows: [] });
+
+    await service(repository).renameDesk('a', 'B-05');
+
+    expect(updateCalls).toHaveLength(1);
+    expect(insertCalls).toHaveLength(0);
+    expect(upcomingCallCount()).toBe(0);
   });
 });

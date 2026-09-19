@@ -16,7 +16,13 @@
  * the placeholder.
  */
 import { Router } from 'express';
-import { allBookingsQuerySchema, cancelBookingParamsSchema, deskCreateSchema } from '@desk-booking/contracts';
+import {
+  allBookingsQuerySchema,
+  cancelBookingParamsSchema,
+  deskCreateSchema,
+  deskIdParamsSchema,
+  deskUpdateSchema,
+} from '@desk-booking/contracts';
 import { ERROR_CODES, badRequest, conflict, notFound, unauthorized } from '../../http/errors.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
@@ -126,6 +132,44 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
       }
 
       res.status(201).json(outcome.desk);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-018/AC-01, AC-02, AC-07, AC-09. Modifies an attribute of an existing resource, which is
+   * why this is `PATCH` at the resource's own address rather than a verb sub-resource like
+   * `/bookings/:id/cancel` above — that shape is for a refusable TRANSITION (US-019's
+   * activate/deactivate will be the next one), not a plain field update
+   * (`ai/standards/api-standards.md`, US-018 design note §3.1).
+   *
+   * `deskUpdateSchema` reuses the SAME `deskNumberSchema` `deskCreateSchema` does — AC-02's "same
+   * rules as create" is true because it is the same object. No pre-check precedes the update:
+   * `desks_desk_number_key` is the sole arbiter, exactly as the create path states, and that
+   * absence is also what makes AC-07's self-rename a non-error (design note §2.3).
+   */
+  router.patch('/desks/:id', async (req, res, next) => {
+    try {
+      const parsedParams = deskIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+      const parsedBody = deskUpdateSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await desks.renameDesk(parsedParams.data.id, parsedBody.data.deskNumber);
+
+      if (outcome.kind === 'duplicate') {
+        throw conflict(ERROR_CODES.desk_number_taken, 'That desk number is already in use.');
+      }
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.desk_not_found, 'That desk could not be found.');
+      }
+
+      res.status(200).json(outcome.desk);
     } catch (error) {
       next(error);
     }

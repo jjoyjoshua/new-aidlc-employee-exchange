@@ -10,6 +10,7 @@ import type { ApiClient } from '../../lib/api-client.js';
 import type { AdminDesk, AuthenticatedUser, Office } from '@desk-booking/contracts';
 import type { DesksFetcher, DesksOutcome } from '../../lib/use-desks.js';
 import type { AddDeskFetcher, AddDeskOutcome } from '../../lib/add-desk.js';
+import type { RenameDeskFetcher, RenameDeskOutcome } from '../../lib/rename-desk.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -27,11 +28,13 @@ const OFFICE: Office = { timezone: 'Asia/Kolkata', today: '2026-09-19' };
 function SignedIn({
   fetchDesks,
   addDesk,
+  renameDesk,
   user = ADMIN,
   guarded = false,
 }: {
   fetchDesks: DesksFetcher;
   addDesk?: AddDeskFetcher;
+  renameDesk?: RenameDeskFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -43,7 +46,7 @@ function SignedIn({
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screen = <Desks fetchDesks={fetchDesks} addDesk={addDesk} />;
+  const screen = <Desks fetchDesks={fetchDesks} addDesk={addDesk} renameDesk={renameDesk} />;
 
   return (
     <MemoryRouter initialEntries={['/admin/desks']}>
@@ -225,6 +228,112 @@ describe('Desks — add a desk (US-017/AC-01, AC-04, AC-06)', () => {
 
     expect(calls).toBe(1);
     resolveAdd({ kind: 'ok', desk: { id: 'new', deskNumber: 'B-03', isActive: true, bookedAhead: 0 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+});
+
+describe('Desks — edit a desk (US-018/AC-01, AC-02, AC-04, AC-08)', () => {
+  it('clicking Edit on a row with upcoming bookings opens the dialog showing the warning', async () => {
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
+    await screen.findAllByText('A-01');
+
+    const [edit] = screen.getAllByRole('button', { name: 'Edit' });
+    await userEvent.click(edit!);
+
+    const dialog = screen.getByRole('dialog', { name: 'Edit desk A-01' });
+    expect(within(dialog).getByLabelText('Desk number')).toHaveValue('A-01');
+    expect(
+      within(dialog).getByText("3 people have this desk booked. Renaming it changes what they see — they won't be told."),
+    ).toBeInTheDocument();
+  });
+
+  it('clicking Edit on a row with no upcoming bookings opens the dialog with NO warning', async () => {
+    render(<SignedIn fetchDesks={async () => okDesks([INACTIVE])} />);
+    await screen.findAllByText('C-05');
+
+    const [edit] = screen.getAllByRole('button', { name: 'Edit' });
+    await userEvent.click(edit!);
+
+    expect(screen.getByRole('dialog', { name: 'Edit desk C-05' })).toBeInTheDocument();
+    expect(screen.queryByText(/have this desk booked/)).not.toBeInTheDocument();
+  });
+
+  it('saving a new number re-sorts the row into position, refetches nothing, and shows the saved toast (US-018/AC-01)', async () => {
+    let fetchCount = 0;
+    const fetchDesks: DesksFetcher = async () => {
+      fetchCount += 1;
+      return okDesks([ACTIVE, INACTIVE]); // A-01, C-05
+    };
+    const renameDesk: RenameDeskFetcher = async () => ({
+      kind: 'ok',
+      desk: { id: ACTIVE.id, deskNumber: 'B-05', isActive: true },
+    });
+
+    render(<SignedIn fetchDesks={fetchDesks} renameDesk={renameDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [edit] = screen.getAllByRole('button', { name: 'Edit' });
+    await userEvent.click(edit!);
+    const dialog = screen.getByRole('dialog', { name: 'Edit desk A-01' });
+    await userEvent.clear(within(dialog).getByLabelText('Desk number'));
+    await userEvent.type(within(dialog).getByLabelText('Desk number'), 'b-05');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(fetchCount).toBe(1); // no refetch — updated in place
+    expect(await screen.findByText('Desk number updated to B-05.')).toBeInTheDocument();
+    expect(screen.getAllByText('B-05').length).toBeGreaterThan(0);
+  });
+
+  it('a duplicate desk number keeps the edit dialog open with the collision named (US-018/AC-02)', async () => {
+    const renameDesk: RenameDeskFetcher = async () => ({ kind: 'duplicate' });
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE, INACTIVE])} renameDesk={renameDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [edit] = screen.getAllByRole('button', { name: 'Edit' });
+    await userEvent.click(edit!);
+    const dialog = screen.getByRole('dialog', { name: 'Edit desk A-01' });
+    await userEvent.clear(within(dialog).getByLabelText('Desk number'));
+    await userEvent.type(within(dialog).getByLabelText('Desk number'), 'C-05');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('C-05 is already taken by another desk.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Edit desk A-01' })).toBeInTheDocument();
+  });
+
+  it('Cancel closes the edit dialog without renaming anything', async () => {
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
+    await screen.findAllByText('A-01');
+
+    const [edit] = screen.getAllByRole('button', { name: 'Edit' });
+    await userEvent.click(edit!);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getAllByText('A-01').length).toBeGreaterThan(0);
+  });
+
+  it('a second activation while the first save is in flight issues exactly one request (US-018/AC-08)', async () => {
+    let resolveRename!: (outcome: RenameDeskOutcome) => void;
+    let calls = 0;
+    const renameDesk: RenameDeskFetcher = () => {
+      calls += 1;
+      return new Promise((resolve) => (resolveRename = resolve));
+    };
+    render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} renameDesk={renameDesk} />);
+    await screen.findAllByText('A-01');
+
+    const [edit] = screen.getAllByRole('button', { name: 'Edit' });
+    await userEvent.click(edit!);
+    const dialog = screen.getByRole('dialog', { name: 'Edit desk A-01' });
+    await userEvent.clear(within(dialog).getByLabelText('Desk number'));
+    await userEvent.type(within(dialog).getByLabelText('Desk number'), 'B-05');
+    const confirm = within(dialog).getByRole('button', { name: 'Save changes' });
+    await userEvent.click(confirm);
+    await userEvent.click(confirm);
+
+    expect(calls).toBe(1);
+    resolveRename({ kind: 'ok', desk: { id: ACTIVE.id, deskNumber: 'B-05', isActive: true } });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

@@ -36,14 +36,26 @@ export interface TextFieldProps
   helper?: ReactNode;
   /** Supplied by a parent that needs to move focus here (US-001/AC-05, AC-04). */
   inputRef?: React.Ref<HTMLInputElement>;
+  /**
+   * The id of an element outside this component that should ALSO be read as part of the
+   * field's description — SCR-007 ST-02's upcoming-bookings note (US-018/NFR-01), which must be
+   * associated with the field rather than merely rendered nearby. Composed into the same
+   * `aria-describedby` list as `error` and `helper`, never replacing it — closing the hazard a
+   * caller-supplied `aria-describedby` in `rest` would otherwise create (this prop is the
+   * intended path; `rest`'s own `aria-describedby`, if a caller reaches for it directly, is
+   * still spread last and would still win — callers should use this prop instead).
+   */
+  describedBy?: string | undefined;
 }
 
-export function TextField({ label, error, invalid, trailing, helper, inputRef, readOnly, ...rest }: TextFieldProps) {
+export function TextField({ label, error, invalid, trailing, helper, inputRef, describedBy: externalDescribedBy, readOnly, ...rest }: TextFieldProps) {
   const id = useId();
   const messageId = `${id}-message`;
   const helperId = `${id}-helper`;
   const isInvalid = Boolean(error) || Boolean(invalid);
-  const describedBy = [error ? messageId : undefined, helper ? helperId : undefined].filter(Boolean).join(' ') || undefined;
+  const describedBy = [error ? messageId : undefined, helper ? helperId : undefined, externalDescribedBy]
+    .filter(Boolean)
+    .join(' ') || undefined;
 
   const classes = [
     'field',

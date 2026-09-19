@@ -1,15 +1,20 @@
 /**
  * US-014's slice — `GET /api/admin/desks` — extended by US-016/AC-04, AC-05 to also tally each
- * desk's `bookedAhead` count, and by US-017/AC-01, AC-04 to add `createDesk`, the write side.
- * No longer "a pure mapping, no clock read": one `officeToday` reading per call, threaded to the
- * borrowed predicate and nowhere else (US-016 design note §2.3).
+ * desk's `bookedAhead` count, by US-017/AC-01, AC-04 to add `createDesk`, and by US-018/AC-01,
+ * AC-02, AC-03, AC-07 to add `renameDesk`, the update side. No longer "a pure mapping, no clock
+ * read": one `officeToday`/`nowMs` reading per call, threaded to the borrowed predicate or the
+ * rename and nowhere else (US-016 design note §2.3; US-018 design note §2.2).
  */
-import type { AdminDesk } from '@desk-booking/contracts';
+import type { DeskUpdateResponse, AdminDesk } from '@desk-booking/contracts';
 import { officeToday } from '../../domain/booking-window.js';
 import { displayStatusPredicate } from '../../domain/booking-history.js';
 import type { DesksRepository } from './desks.repository.js';
 
 export type CreateDeskOutcome = { kind: 'ok'; desk: AdminDesk } | { kind: 'duplicate' };
+export type RenameDeskOutcome =
+  | { kind: 'ok'; desk: DeskUpdateResponse }
+  | { kind: 'duplicate' }
+  | { kind: 'not_found' };
 
 export interface DesksServiceDeps {
   desks: DesksRepository;
@@ -75,6 +80,39 @@ export function createDesksService({ desks, nowMs, officeTimezone }: DesksServic
           deskNumber: result.desk.desk_number,
           isActive: result.desk.is_active,
           bookedAhead: 0,
+        },
+      };
+    },
+
+    /**
+     * US-018/AC-01, AC-02, AC-03, AC-05, AC-07. `deskNumber` arrives already normalised
+     * (`deskUpdateSchema` at the route edge) — this method does not normalise. No `bookedAhead`
+     * in the mapped result: the rename cannot change it (bookings reference `desks.id`, never
+     * the number — AC-06) and this method never reads it (design note §3.3, §4).
+     *
+     * NO call to `listUpcomingConfirmedDeskIds` precedes the update — AC-03 requires the rename
+     * to proceed regardless of how many upcoming bookings the desk holds, so nothing here may
+     * gate on that count. This is the exact inverse of what US-019's deactivation block will
+     * need, and that asymmetry must not be collapsed by a future refactor (design note §4).
+     *
+     * The single `nowMs()` reading is this method's only clock read, passed to the repository as
+     * `updated_at` — never a second reading, and never `now()` in SQL.
+     *
+     * AC-05 (nobody is notified): this method's only dependency is `desks` (see
+     * `DesksServiceDeps`, above) — it has no notification dependency and cannot acquire one
+     * without a visible change to that shape. A future author wiring a rename notification
+     * (e.g. alongside US-029) must add that dependency here, not bolt it on silently.
+     */
+    async renameDesk(id: string, deskNumber: string): Promise<RenameDeskOutcome> {
+      const result = await desks.updateDeskNumber(id, deskNumber, new Date(nowMs()));
+      if (result.kind !== 'ok') return result;
+
+      return {
+        kind: 'ok',
+        desk: {
+          id: result.desk.id,
+          deskNumber: result.desk.desk_number,
+          isActive: result.desk.is_active,
         },
       };
     },

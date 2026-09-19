@@ -4,8 +4,11 @@ import {
   bookedAheadAccessibleText,
   deskAddedToast,
   deskNumberFormatError,
+  deskRenamedToast,
   duplicateDeskTitle,
+  editDeskDialogTitle,
   summaryLine,
+  upcomingHoldersWarning,
 } from './copy.js';
 
 describe('bookedAheadLabel (US-016/AC-05 — zero is a dash, not blank)', () => {
@@ -71,5 +74,31 @@ describe('deskNumberFormatError (US-017/AC-02 — two messages, empty vs bad sha
   it('restates the rule when the shape is wrong', () => {
     expect(deskNumberFormatError('A-1')).toBe('Use one letter, a dash and two digits — like A-01.');
     expect(deskNumberFormatError('Window seat 3')).toBe('Use one letter, a dash and two digits — like A-01.');
+  });
+});
+
+describe('editDeskDialogTitle (US-018/AC-01, SCR-007 ST-02 — frame-verified: "Edit desk A-01")', () => {
+  it('names the desk being edited', () => {
+    expect(editDeskDialogTitle('A-01')).toBe('Edit desk A-01');
+  });
+});
+
+describe('upcomingHoldersWarning (US-018/AC-04, RISK-012 — frame-verified for 3; singular derived)', () => {
+  it('states the exact count and the consequence, matching the verified frame verbatim for 3', () => {
+    expect(upcomingHoldersWarning(3)).toBe(
+      "3 people have this desk booked. Renaming it changes what they see — they won't be told.",
+    );
+  });
+
+  it('uses the singular for exactly one holder', () => {
+    expect(upcomingHoldersWarning(1)).toBe(
+      "1 person has this desk booked. Renaming it changes what they see — they won't be told.",
+    );
+  });
+});
+
+describe('deskRenamedToast (US-018/AC-01, SCR-007 ST-06 — spec-sourced, no edit-mode frame drawn)', () => {
+  it('names the new number', () => {
+    expect(deskRenamedToast('A-12')).toBe('Desk number updated to A-12.');
   });
 });

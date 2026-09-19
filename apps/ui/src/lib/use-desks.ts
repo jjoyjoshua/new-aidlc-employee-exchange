@@ -7,10 +7,19 @@
  *
  * US-017 adds `markAdded` (design note §6.5), the same "update in place, never refetch" shape
  * `useMyBookings`'s `markCancelled` already established: the server already confirmed the
- * outcome, so a refetch here would flash skeletons over a list `Desks` is reading.
+ * outcome, so a refetch here would flash skeletons over a list `Desks` is reading. US-018 adds
+ * `markRenamed` on the same principle (design note §6.3) — it takes `(id, deskNumber)`, not a
+ * whole `AdminDesk`, so a rename can never clobber the `bookedAhead` count the response doesn't
+ * carry (US-018 design note §3.3).
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminDesk } from '@desk-booking/contracts';
+
+/** Fixed-width desk numbers (`A-01`) sort correctly as plain strings — the total order US-017's
+ *  `markAdded` and US-018's `markRenamed` both need, extracted so the two cannot diverge. */
+function byDeskNumber(a: AdminDesk, b: AdminDesk): number {
+  return a.deskNumber < b.deskNumber ? -1 : a.deskNumber > b.deskNumber ? 1 : 0;
+}
 
 export type DesksOutcome =
   | { kind: 'ok'; desks: AdminDesk[] }
@@ -33,6 +42,12 @@ export type UseDesksResult = DesksState & {
    *  (`A-01`), so lexicographic order IS the intended total order (`bookings.repository.ts`'s
    *  own reasoning for the same property). A no-op when not `ready`. */
   markAdded: (desk: AdminDesk) => void;
+  /** US-018/AC-01, AC-06 (design note §6.3). Replaces the named desk's number in place and
+   *  re-sorts — mandatory, not defensive: a rename across a zone letter (`A-01` -> `B-05`, the
+   *  story's own edge case) must move the row. Takes `(id, deskNumber)`, never a whole
+   *  `AdminDesk`, so the desk's `bookedAhead` (which the rename response does not carry) is
+   *  preserved rather than replaced. A no-op when not `ready`. */
+  markRenamed: (id: string, deskNumber: string) => void;
 };
 
 export function useDesks(fetchDesks: DesksFetcher): UseDesksResult {
@@ -58,10 +73,20 @@ export function useDesks(fetchDesks: DesksFetcher): UseDesksResult {
   const markAdded = useCallback((desk: AdminDesk) => {
     setState((current) => {
       if (current.status !== 'ready') return current;
-      const desks = [...current.desks, desk].sort((a, b) => (a.deskNumber < b.deskNumber ? -1 : a.deskNumber > b.deskNumber ? 1 : 0));
+      const desks = [...current.desks, desk].sort(byDeskNumber);
       return { ...current, desks };
     });
   }, []);
 
-  return { ...state, markAdded };
+  const markRenamed = useCallback((id: string, deskNumber: string) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+      const desks = current.desks
+        .map((desk) => (desk.id === id ? { ...desk, deskNumber } : desk))
+        .sort(byDeskNumber);
+      return { ...current, desks };
+    });
+  }, []);
+
+  return { ...state, markAdded, markRenamed };
 }

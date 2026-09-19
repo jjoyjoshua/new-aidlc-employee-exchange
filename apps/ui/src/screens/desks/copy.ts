@@ -99,3 +99,35 @@ export const RETRY_LABEL = 'Try again';
 export function deskAddedToast(deskNumber: string): string {
   return `Desk ${deskNumber} added. People can book it from today.`;
 }
+
+/**
+ * SCR-007 ST-02 (US-018 — the edit-desk dialog). Verified against the real hi-fi frame
+ * (`HF / SCR-007 · Desk form / ST-02 Edit — default · 1280`, node `225:369`): "Edit desk A-01".
+ * Binds to the desk as LOADED, never the live input value — a title that tracked the field would
+ * rename itself mid-keystroke (US-018 design note §6.1).
+ */
+export function editDeskDialogTitle(deskNumber: string): string {
+  return `Edit desk ${deskNumber}`;
+}
+
+/** SCR-007 ST-02 — US-018/AC-01. Frame-verified (node `225:369`). */
+export const SAVE_CHANGES_LABEL = 'Save changes';
+
+/**
+ * ST-02's persistent note — US-018/AC-04 (BR-001.19, RISK-012). Verbatim against the real hi-fi
+ * frame for a count of 3; the singular is derived (no approved frame or spec draws it) following
+ * this file's existing inline-pluralisation pattern (`summaryLine`, above). Names the CONSEQUENCE
+ * and the silence, in that order: the count alone would be a statistic, and AC-04 requires both
+ * halves before the save. Rendered only when the count is non-zero (the story's QA note: it must
+ * NOT appear on a desk with no upcoming bookings).
+ */
+export function upcomingHoldersWarning(count: number): string {
+  const holders = count === 1 ? '1 person has' : `${count} people have`;
+  return `${holders} this desk booked. Renaming it changes what they see — they won't be told.`;
+}
+
+/** ST-06, edit variant — US-018/AC-01. Spec-sourced (`SCR-007:89`), not frame-verified: no
+ *  edit-mode ST-06 frame is drawn (ST-06 is drawn as SCR-006-plus-toast for the add case only). */
+export function deskRenamedToast(deskNumber: string): string {
+  return `Desk number updated to ${deskNumber}.`;
+}
