@@ -140,8 +140,8 @@ describe('Desks — no overflow menu at any width (US-016/AC-08)', () => {
   });
 });
 
-describe('Desks — unbuilt controls ship visible and disabled (US-016/AC-06, AC-08 — deleted by US-017/US-018/US-019)', () => {
-  it('US-017 deletes this: the header Add desk is disabled with a reason', async () => {
+describe('Desks — unbuilt controls ship visible and disabled (US-016/AC-06, AC-08 — removed once their own stories ship)', () => {
+  it('the add-desk story deletes this: the header Add desk is disabled with a reason', async () => {
     render(<SignedIn fetchDesks={async () => okDesks([ACTIVE])} />);
     const addDesk = await screen.findByRole('button', { name: /^Add desk/ });
     expect(addDesk).toBeDisabled();

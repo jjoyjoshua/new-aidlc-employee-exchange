@@ -75,7 +75,7 @@ describe.each([
     expect(screen.queryByRole('button', { name: /more|options|⋯/i })).not.toBeInTheDocument();
   });
 
-  it('Edit and the activate/deactivate control are both disabled with an accessible reason (US-016/AC-06, AC-08 — US-017/018/019 remove this)', () => {
+  it('Edit and the activate/deactivate control are both disabled with an accessible reason (US-016/AC-06, AC-08 — removed once their own stories ship)', () => {
     renderRow(ACTIVE_DESK);
     const edit = screen.getByRole('button', { name: /^Edit/ });
     const deactivate = screen.getByRole('button', { name: /^Deactivate/ });
