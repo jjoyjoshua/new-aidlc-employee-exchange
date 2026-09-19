@@ -111,3 +111,65 @@ export const myBookingsResponseSchema = z.object({
   nextBefore: officeDateSchema.nullable().default(null),
 });
 export type MyBookingsResponse = z.infer<typeof myBookingsResponseSchema>;
+
+/**
+ * US-013's slice — `GET /api/admin/bookings`. Architect design note §2 (this story's folder in
+ * `inception/specs/`). A different resource from `GET /api/bookings` above: cross-employee, behind
+ * `requireAdmin`, page-based rather than a date cursor — design note §2.4 gives the criterion that
+ * separates the two, not an inconsistency.
+ */
+
+/** The arithmetic bound `allBookingsQuerySchema.page` accepts — keeps `(page - 1) * PAGE_SIZE`
+ *  inside the safe-integer range for a pathological value. Not a performance guard: a large
+ *  offset costs the same as a small one here (design note §2.2, §3.4). */
+export const MAX_PAGE = 1_000_000;
+
+/**
+ * `GET /api/admin/bookings`. `.strict()`, matching every other request schema in this package.
+ * Deliberately no `limit`: the page size is the server's, never a client parameter (design note
+ * §2.4) — this is the one route that returns everybody's whereabouts. US-014 adds `from`, `to`,
+ * `status` and `deskId` here; this story adds nothing else.
+ */
+export const allBookingsQuerySchema = z
+  .object({ page: z.coerce.number().int().min(1).max(MAX_PAGE).optional() })
+  .strict();
+export type AllBookingsQuery = z.infer<typeof allBookingsQuerySchema>;
+
+/** One row of `GET /api/admin/bookings`'s `items` (US-013/AC-03, AC-06). Four fields, and the
+ *  absences are deliberate (design note §2.3): no `employeeId`/`employeeEmail` — AC-10's "no
+ *  other employee's booking data is returned" is a constraint on this payload, not only on who
+ *  may call it; no `deskId` — that is US-014's filter parameter, not this story's. */
+export const allBookingsListItemSchema = z.object({
+  id: z.string().uuid(),
+  date: officeDateSchema,
+  /** Read through the `desks` embed, so a desk renamed since (BR-001.19, US-018) shows its
+   *  CURRENT number — the same accepted consequence `myBookingListItemSchema` records. */
+  deskNumber: z.string().min(1),
+  /** AC-03's "the employee who holds it" — `user_profiles.full_name`, read through the
+   *  disambiguated embed (design note §3.1). */
+  employeeName: z.string().min(1),
+  /** DERIVED — `bookingDisplayStatusSchema`, never the stored two-value enum (ADR-007). */
+  status: bookingDisplayStatusSchema,
+});
+export type AllBookingsListItem = z.infer<typeof allBookingsListItemSchema>;
+
+/**
+ * `GET /api/admin/bookings`'s `200` body. Not `.strict()` — every response in this package is
+ * additive-safe (`auth.ts`'s stated rule).
+ */
+export const allBookingsResponseSchema = z.object({
+  /** The office's today the server used to derive every `status` in `items` (design note §2.3) —
+   *  also AC-07's "from {date}", since the default view starts at today. */
+  today: officeDateSchema,
+  /** AC-07. The count of bookings MATCHING THE VIEW, not the number on this page (design note
+   *  §2.5) — stays true after `Show more`. */
+  total: z.number().int().nonnegative(),
+  /** Ordered `date` ASC, then `created_at` ASC, then `id` ASC — a TOTAL order; the third key is
+   *  load-bearing for offset paging's stability (design note §3.2), not belt-and-braces. */
+  items: z.array(allBookingsListItemSchema),
+  /** AC-04. The value to send back as `?page=`, or `null` when this is the last page. ONE field
+   *  answering "is there more" — the shape `nextBefore` established in US-010, one page number
+   *  instead of one date. */
+  nextPage: z.number().int().min(2).nullable().default(null),
+});
+export type AllBookingsResponse = z.infer<typeof allBookingsResponseSchema>;

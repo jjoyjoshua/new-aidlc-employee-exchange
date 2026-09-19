@@ -815,9 +815,24 @@
         "AC-10",
         "AC-11"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/bookings.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/ui/src/screens/all-bookings/AdminBookingRow.spec.tsx",
+        "apps/ui/src/screens/all-bookings/use-all-bookings.spec.ts",
+        "apps/ui/src/screens/all-bookings/copy.spec.ts",
+        "apps/ui/src/screens/all-bookings/AllBookings.spec.tsx",
+        "apps/ui/src/lib/auth/landing.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.concurrency.spec.ts"
+      ],
       "screens": [
         "SCR-005"
+      ],
+      "decisions": [
+        "ADR-004",
+        "ADR-007"
       ]
     },
     "US-014": {

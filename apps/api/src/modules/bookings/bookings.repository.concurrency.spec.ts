@@ -38,6 +38,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { supabase } from '../../infra/supabase/index.js';
 import { availabilityRepository } from './bookings.repository.js';
+import { adminBookingsRepository } from './admin-bookings.repository.js';
 
 // `no-restricted-properties` normally forbids `process.env` in `apps/api/src/**` outside
 // `config/`, because application configuration is read and validated exactly once there (see
@@ -75,7 +76,7 @@ async function cleanUp(cleanup: Cleanup): Promise<void> {
 /** A real `auth.users` row plus its `user_profiles` row — the FK `user_profiles.id references
  *  auth.users (id)` (`0001_user_profiles.sql:28`) means a booking's `user_id` cannot be a bare
  *  uuid the way a fake-client test gets away with. */
-async function createEmployee(cleanup: Cleanup): Promise<string> {
+async function createEmployee(cleanup: Cleanup, fullName = 'Concurrency Fixture'): Promise<string> {
   const email = `us007-concurrency-${randomUUID()}@example.test`;
   const { data, error } = await supabase().auth.admin.createUser({
     email,
@@ -87,7 +88,7 @@ async function createEmployee(cleanup: Cleanup): Promise<string> {
 
   const { error: profileError } = await supabase()
     .from('user_profiles')
-    .insert({ id: data.user.id, email, full_name: 'Concurrency Fixture', role: 'employee' });
+    .insert({ id: data.user.id, email, full_name: fullName, role: 'employee' });
   if (profileError) throw new Error(`fixture user_profiles row could not be created: ${profileError.message}`);
 
   return data.user.id;
@@ -168,5 +169,55 @@ describe.runIf(RUN)('availabilityRepository.insertConfirmedBooking — real Post
     } finally {
       await cleanUp(cleanup);
     }
+  });
+});
+
+/**
+ * US-013 design note §3.1, §3.4 (`inception/specs/US-013-see-every-booking/design-note.md`) —
+ * two runtime-only assumptions the recording-fake test (`admin-bookings.repository.spec.ts`)
+ * cannot prove: that `user_profiles!user_id(full_name)` actually disambiguates against real
+ * PostgREST (`bookings` has two FKs into `user_profiles`), and that a page past the last row
+ * comes back as an empty `200` rather than a `416`.
+ */
+describe.runIf(RUN)('adminBookingsRepository.listBookingsFromDate — real Postgres (US-013/AC-03, AC-04)', () => {
+  it('the user_profiles embed resolves via user_id, never cancelled_by — the HOLDER\'s name, not the canceller\'s (US-013/AC-03, design note §3.1)', async () => {
+    const cleanup = newCleanup();
+    try {
+      const holder = await createEmployee(cleanup, 'US013 Holder');
+      const canceller = await createEmployee(cleanup, 'US013 Canceller');
+      const deskId = await createDesk(cleanup, 'Z-05');
+
+      const { data, error } = await supabase()
+        .from('bookings')
+        .insert({
+          user_id: holder,
+          desk_id: deskId,
+          booking_date: DATE,
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: canceller,
+          cancellation_source: 'admin',
+        })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`fixture booking could not be created: ${error?.message}`);
+      cleanup.bookingIds.push((data as { id: string }).id);
+
+      const page = await adminBookingsRepository.listBookingsFromDate(DATE, 0, 50);
+      const row = page.rows.find((r) => r.id === (data as { id: string }).id);
+
+      expect(row?.employee_name).toBe('US013 Holder');
+      expect(row?.employee_name).not.toBe('US013 Canceller');
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+
+  it('a page far beyond the last row resolves to an empty page, never a thrown error (US-013/AC-04, design note §3.4)', async () => {
+    // No fixture data needed: an offset far beyond anything this disposable project holds for
+    // this DATE is enough to exercise PostgREST's out-of-range Range behaviour.
+    const page = await adminBookingsRepository.listBookingsFromDate(DATE, 1_000_000, 50);
+
+    expect(page.rows).toEqual([]);
   });
 });
