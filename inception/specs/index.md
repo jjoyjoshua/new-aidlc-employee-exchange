@@ -21,7 +21,8 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-015 | Cancel an employee's booking on their behalf | Complex | implemented | [`US-015-cancel-a-booking-on-behalf/`](US-015-cancel-a-booking-on-behalf/) |
 | US-016 | See the desk inventory and how many people hold each desk | Complex | implemented | [`US-016-see-the-desk-inventory/`](US-016-see-the-desk-inventory/) |
 | US-017 | Add a desk | Complex | implemented | [`US-017-add-a-desk/`](US-017-add-a-desk/) |
-| US-018 | Correct a desk number | Complex | ready for review (PR not yet opened) | [`US-018-correct-a-desk-number/`](US-018-correct-a-desk-number/) |
+| US-018 | Correct a desk number | Complex | implemented | [`US-018-correct-a-desk-number/`](US-018-correct-a-desk-number/) |
+| US-019 | Take a desk out of service, and put it back | Complex | implemented | [`US-019-take-a-desk-out-of-service/`](US-019-take-a-desk-out-of-service/) |
 
 ## How to update
 

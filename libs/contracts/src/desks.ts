@@ -159,3 +159,25 @@ export type DeskUpdateRequest = z.input<typeof deskUpdateSchema>;
  */
 export const deskUpdateResponseSchema = adminDeskSchema.omit({ bookedAhead: true });
 export type DeskUpdateResponse = z.infer<typeof deskUpdateResponseSchema>;
+
+/** `POST /api/admin/desks/:id/deactivate`'s `422 desk_has_upcoming_bookings` detail (US-019/AC-04,
+ *  BR-001.9, V-09, ADR-009). `.positive()`, not `.nonnegative()`: a zero here would be a refusal
+ *  contradicting itself, and it must fail to parse rather than render "0 people" (design note §4.4). */
+export const deskBlockedDetailsSchema = z.object({ upcomingBookings: z.number().int().positive() });
+export type DeskBlockedDetails = z.infer<typeof deskBlockedDetailsSchema>;
+
+/**
+ * `POST /api/admin/desks/:id/deactivate`'s and `.../activate`'s `200` body (US-019/AC-01, AC-09).
+ *
+ * DERIVED from `adminDeskSchema` with `.omit`, never re-declared — so it cannot drift from the
+ * shape `GET /api/admin/desks` returns. A separate name from `deskUpdateResponseSchema`, although
+ * structurally identical today: that schema's docblock is written about a rename, and these two
+ * endpoints are transitions, not field updates (design note §3.3).
+ *
+ * `bookedAhead` is omitted for a DIFFERENT reason than the rename's: a successful deactivate has
+ * just measured the count (it is zero, or the block would have fired) and activate never reads it.
+ * Rather than ship two shapes for two sibling endpoints, both return the narrow one and the browser
+ * corrects its own held count in `markStateChanged` (design note §3.3, §8.6).
+ */
+export const deskStateResponseSchema = adminDeskSchema.omit({ bookedAhead: true });
+export type DeskStateResponse = z.infer<typeof deskStateResponseSchema>;

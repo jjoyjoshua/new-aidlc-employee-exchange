@@ -17,12 +17,6 @@ export const EDIT_LABEL = 'Edit';
 export const DEACTIVATE_LABEL = 'Deactivate';
 export const ACTIVATE_LABEL = 'Activate';
 
-/** US-016/D-02. The reason each unbuilt control (Add desk, Edit, Deactivate, Activate) carries —
- *  as both a mouse `title` and a visually-hidden span, the pattern `AdminBookingRow` already uses
- *  for its own non-cancellable action. Commits to no story name or release date (design note §6.2
- *  open item 8; `decisions.md` D-02). */
-export const UNAVAILABLE_CONTROL_REASON = 'Not available yet — coming in a later release.';
-
 /** ST-03 — US-016/AC-06. Verbatim against the real hi-fi frame (node `211:1021`/`211:1141`). */
 export const EMPTY_TITLE = 'No desks yet. Nobody can book until you add one.';
 export const EMPTY_BODY = 'Employees see an empty booking screen until the first desk exists.';
@@ -130,4 +124,86 @@ export function upcomingHoldersWarning(count: number): string {
  *  edit-mode ST-06 frame is drawn (ST-06 is drawn as SCR-006-plus-toast for the add case only). */
 export function deskRenamedToast(deskNumber: string): string {
   return `Desk number updated to ${deskNumber}.`;
+}
+
+/**
+ * SCR-006 ST-05 — US-019/AC-03. Frame-verified against the real hi-fi frame (node `213:1092`) for
+ * desk A-02. The desk number is interpolated INTO the title, not appended — the frame draws one
+ * run-on question, "Deactivate A-02?".
+ */
+export function deactivateDialogTitle(deskNumber: string): string {
+  return `Deactivate ${deskNumber}?`;
+}
+
+/** ST-05's body — US-019/AC-03. Frame-verified (node `213:1092`). States the consequence AND
+ *  that history survives, in that order — "deactivate" reads as "delete" without the second
+ *  sentence (story `:37`). Constant, not a function: nothing in it varies by desk. */
+export const DEACTIVATE_DIALOG_BODY =
+  'It disappears from everyone’s booking options straight away. Past bookings on it are kept.';
+export function deactivateDialogBody(): string {
+  return DEACTIVATE_DIALOG_BODY;
+}
+
+/** ST-05/ST-07's dismissal — US-019/AC-03. Frame-verified (node `213:1092`). Changes to
+ *  `CLOSE_LABEL` after a failure (ST-06, ST-08) — verified on `214:2724` and `214:1685`. */
+export const KEEP_IT_ACTIVE_LABEL = 'Keep it active';
+
+/** ST-06/ST-08's dismissal after a failure — US-019/AC-04, AC-11. Verified on `214:2724` and
+ *  `214:1685`. Screen-private, matching `all-bookings/copy.ts`'s own `CANCEL_CLOSE_LABEL`
+ *  precedent rather than importing across screens for one string. */
+export const CLOSE_LABEL = 'Close';
+
+/**
+ * SCR-006 ST-06 — US-019/AC-04 (BR-001.9, V-09, PRIN-3). Verbatim against the real hi-fi frame
+ * (node `214:1685`) for a count of 3. The desk number is IN the title (SCR-006:116 writes it as
+ * one run-on sentence; the frame splits it) — never in the body alone.
+ */
+export function blockedDialogTitle(deskNumber: string): string {
+  return `${deskNumber} can’t be deactivated yet.`;
+}
+
+/**
+ * ST-06's body — US-019/AC-04. Frame-verified for a count of 3 (node `214:1685`); the singular is
+ * derived, following this file's existing inline-pluralisation pattern (`upcomingHoldersWarning`),
+ * because no approved frame draws a count of 1 (design note §8.4, open item 5(a)). The count is
+ * the SERVER's, from the refusing response (design note §4) — never the row's own `bookedAhead`,
+ * which is provably 0 on the one path that reaches here (§4.5, option E).
+ */
+export function blockedDialogBody(count: number): string {
+  const holders = count === 1 ? '1 person has' : `${count} people have`;
+  return `${holders} it booked from today onwards. Cancel those bookings first — the desk stays bookable until you do.`;
+}
+
+/** ST-06's primary action label — US-019/AC-04, AC-06. Interpolated INDEPENDENTLY of the body
+ *  (design note §4.2 — this is the whole reason the count travels as a typed `details` field
+ *  rather than inside `message`). Frame-verified for 3 (node `214:1685`); singular derived,
+ *  matching `blockedDialogBody`'s own pattern. */
+export function seeBookingsLabel(count: number): string {
+  return count === 1 ? 'See that 1 booking' : `See those ${count} bookings`;
+}
+
+/** ST-08's error — US-019/AC-11. Frame-verified (node `214:2724`). */
+export function deactivateFailedAlert(deskNumber: string): string {
+  return `We couldn’t deactivate ${deskNumber} just now. Try again.`;
+}
+
+/** ST-09's toast — US-019/AC-10. Frame-verified (node `215:2908`). Names the effect on
+ *  bookability, not just the state — the same reasoning `deskAddedToast` states. */
+export function deskDeactivatedToast(deskNumber: string): string {
+  return `${deskNumber} is inactive. It’s no longer bookable.`;
+}
+
+/** ST-10's toast — US-019/AC-10. Frame-verified (node `215:3413`). */
+export function deskActivatedToast(deskNumber: string): string {
+  return `${deskNumber} is active. People can book it from today.`;
+}
+
+/**
+ * The activation-failure banner — US-019, not frame-verified as approved copy (design note §8.4,
+ * open item 5(b); `decisions.md` D-07). SCR-006:140 draws the behaviour but AC-11 covers
+ * deactivation failure only, so this string is drafted rather than claimed as AC proof — mirrors
+ * ST-08's wording, the nearest approved sibling.
+ */
+export function activateFailedAlert(deskNumber: string): string {
+  return `We couldn’t activate ${deskNumber} just now. Try again.`;
 }

@@ -48,6 +48,18 @@ export type UseDesksResult = DesksState & {
    *  `AdminDesk`, so the desk's `bookedAhead` (which the rename response does not carry) is
    *  preserved rather than replaced. A no-op when not `ready`. */
   markRenamed: (id: string, deskNumber: string) => void;
+  /**
+   * US-019/AC-10 (design note §8.6). Flips the named desk's `isActive` in place — no re-sort,
+   * unlike `markRenamed`: the order is `desk_number` ASC and a state change never touches the
+   * number, so calling `byDeskNumber` here would be harmless but misleading.
+   *
+   * On DEACTIVATION only, also sets `bookedAhead: 0` — the correction the ST-09 frame draws (an
+   * em dash), and the browser is entitled to it: a successful deactivation only ever happens when
+   * the live count was zero, so this is reading the meaning of a success already given, not
+   * re-evaluating BR-001.9 (decisions.md D-03). Activation sets no count — the server never read
+   * it, so the browser's existing value is the best available. A no-op when not `ready`.
+   */
+  markStateChanged: (id: string, isActive: boolean) => void;
 };
 
 export function useDesks(fetchDesks: DesksFetcher): UseDesksResult {
@@ -88,5 +100,17 @@ export function useDesks(fetchDesks: DesksFetcher): UseDesksResult {
     });
   }, []);
 
-  return { ...state, markAdded, markRenamed };
+  const markStateChanged = useCallback((id: string, isActive: boolean) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+      return {
+        ...current,
+        desks: current.desks.map((desk) =>
+          desk.id === id ? { ...desk, isActive, ...(isActive ? {} : { bookedAhead: 0 }) } : desk,
+        ),
+      };
+    });
+  }, []);
+
+  return { ...state, markAdded, markRenamed, markStateChanged };
 }

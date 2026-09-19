@@ -23,7 +23,7 @@ import {
   deskIdParamsSchema,
   deskUpdateSchema,
 } from '@desk-booking/contracts';
-import { ERROR_CODES, badRequest, conflict, notFound, unauthorized } from '../../http/errors.js';
+import { ERROR_CODES, badRequest, conflict, notFound, unauthorized, unprocessable } from '../../http/errors.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
 import '../../http/request-user.js';
@@ -148,6 +148,8 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
    * rules as create" is true because it is the same object. No pre-check precedes the update:
    * `desks_desk_number_key` is the sole arbiter, exactly as the create path states, and that
    * absence is also what makes AC-07's self-rename a non-error (design note §2.3).
+   *
+   * US-019's activate/deactivate (below) landed as the verb sub-resources this comment predicted.
    */
   router.patch('/desks/:id', async (req, res, next) => {
     try {
@@ -165,6 +167,66 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
       if (outcome.kind === 'duplicate') {
         throw conflict(ERROR_CODES.desk_number_taken, 'That desk number is already in use.');
       }
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.desk_not_found, 'That desk could not be found.');
+      }
+
+      res.status(200).json(outcome.desk);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-019/AC-01, AC-04, AC-05, AC-07, AC-08, AC-12. A refusable state TRANSITION, hence the verb
+   * sub-resource — `ai/standards/api-standards.md`, which names this exact endpoint as its own
+   * example. `deskIdParamsSchema` is reused verbatim; there is no body — the verb is in the
+   * address, and a body would be a second place for the same fact (design note §3.2).
+   *
+   * `outcome.kind === 'blocked'` is BR-001.9's hard block: `422 desk_has_upcoming_bookings`
+   * carrying the count in `details` (ADR-009), never in the message string (design note §4). No
+   * role check here — the mount already decided who may reach this handler (§3.6).
+   */
+  router.post('/desks/:id/deactivate', async (req, res, next) => {
+    try {
+      const parsed = deskIdParamsSchema.safeParse(req.params);
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await desks.deactivateDesk(parsed.data.id);
+
+      if (outcome.kind === 'blocked') {
+        throw unprocessable(
+          ERROR_CODES.desk_has_upcoming_bookings,
+          'That desk has upcoming bookings, so it cannot be deactivated.',
+          { upcomingBookings: outcome.upcomingBookings },
+        );
+      }
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.desk_not_found, 'That desk could not be found.');
+      }
+
+      res.status(200).json(outcome.desk);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-019/AC-01, AC-09, AC-12. No rule to satisfy — SCR-006's structural decision that activating
+   * harms nobody and needs no confirmation. Same shape as deactivate otherwise: a verb sub-resource,
+   * `deskIdParamsSchema` reused, no body.
+   */
+  router.post('/desks/:id/activate', async (req, res, next) => {
+    try {
+      const parsed = deskIdParamsSchema.safeParse(req.params);
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await desks.activateDesk(parsed.data.id);
+
       if (outcome.kind === 'not_found') {
         throw notFound(ERROR_CODES.desk_not_found, 'That desk could not be found.');
       }

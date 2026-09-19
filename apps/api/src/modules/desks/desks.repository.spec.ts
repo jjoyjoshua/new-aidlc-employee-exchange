@@ -21,9 +21,11 @@ interface RecordedCall {
   update?: Record<string, unknown>;
   single?: boolean;
   maybeSingle?: true;
+  head?: true;
+  count?: string;
 }
 
-type FakeResponse = { data: unknown; error: { code?: string; message: string } | null };
+type FakeResponse = { data: unknown; error: { code?: string; message: string } | null; count?: number | null };
 
 function fakeSupabase(response: FakeResponse) {
   const calls: RecordedCall[] = [];
@@ -31,8 +33,10 @@ function fakeSupabase(response: FakeResponse) {
   function from(table: string) {
     const call: RecordedCall = { table, eq: [], order: [] };
     const builder = {
-      select(columns: string) {
+      select(columns: string, opts?: { count?: string; head?: boolean }) {
         call.select = columns;
+        if (opts?.count) call.count = opts.count;
+        if (opts?.head) call.head = true;
         return builder;
       },
       eq(column: string, value: unknown) {
@@ -389,6 +393,148 @@ describe('desksRepository.updateDeskNumber (US-018/AC-01, AC-02, AC-03, AC-07)',
 
     try {
       await expect(desksRepository.updateDeskNumber('some-id', 'A-01', UPDATED_AT)).rejects.toThrow(/desk update failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('desksRepository.countUpcomingConfirmedForDesk (US-019/AC-04, AC-06, AC-08 — BR-001.9)', () => {
+  it('issues a head-only exact count against bookings, filtered to desk_id/status/booking_date >= from, and returns a number (US-019/AC-04)', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null, count: 3 });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.countUpcomingConfirmedForDesk('desk-1', 'confirmed', '2026-09-19');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'id',
+          count: 'exact',
+          head: true,
+          eq: [
+            ['desk_id', 'desk-1'],
+            ['status', 'confirmed'],
+          ],
+          gte: ['booking_date', '2026-09-19'],
+          order: [],
+        },
+      ]);
+      expect(result).toBe(3);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns 0 rather than null when nothing matches (US-019/AC-04, AC-07)', async () => {
+    const { client } = fakeSupabase({ data: null, error: null, count: 0 });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.countUpcomingConfirmedForDesk('desk-1', 'confirmed', '2026-09-19');
+      expect(result).toBe(0);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns 0 when the driver answers a null count rather than throwing', async () => {
+    const { client } = fakeSupabase({ data: null, error: null, count: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.countUpcomingConfirmedForDesk('desk-1', 'confirmed', '2026-09-19');
+      expect(result).toBe(0);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('never selects the occupant — no user_id, no * (US-019/AC-04, the same discipline listUpcomingConfirmedDeskIds states)', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null, count: 0 });
+    setSupabaseForTesting(client);
+
+    try {
+      await desksRepository.countUpcomingConfirmedForDesk('desk-1', 'confirmed', '2026-09-19');
+      expect(calls[0]?.select).toBe('id');
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        desksRepository.countUpcomingConfirmedForDesk('desk-1', 'confirmed', '2026-09-19'),
+      ).rejects.toThrow(/bookings count failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('desksRepository.setDeskActive (US-019/AC-01, AC-09 — REQ-017, BR-001.7)', () => {
+  it('updates is_active ONLY, keyed on id, with NO updated_at and returns the row (US-019/AC-01)', async () => {
+    const row = { id: '5f2504e0-4f89-41d3-9a0c-0305e82c3303', desk_number: 'A-02', is_active: false };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.setDeskActive(row.id, false);
+
+      expect(calls).toEqual([
+        {
+          table: 'desks',
+          select: 'id, desk_number, is_active',
+          eq: [['id', row.id]],
+          order: [],
+          update: { is_active: false },
+          maybeSingle: true,
+        },
+      ]);
+      expect(calls[0]?.update).not.toHaveProperty('updated_at');
+      expect(result).toEqual({ kind: 'ok', desk: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('activates a desk the same way, with isActive: true (US-019/AC-09)', async () => {
+    const row = { id: '5f2504e0-4f89-41d3-9a0c-0305e82c3303', desk_number: 'C-05', is_active: true };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.setDeskActive(row.id, true);
+      expect(calls[0]?.update).toEqual({ is_active: true });
+      expect(result).toEqual({ kind: 'ok', desk: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when no row matches the id — zero rows, not an error', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await desksRepository.setDeskActive('missing-id', false);
+      expect(result).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error rather than reporting a false not_found', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(desksRepository.setDeskActive('some-id', false)).rejects.toThrow(/desk state update failed/);
     } finally {
       setSupabaseForTesting(undefined);
     }

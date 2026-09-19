@@ -86,6 +86,31 @@ describe('apiClient — the server rejected us (US-001/AC-04)', () => {
     expect(result.kind).toBe('error');
     expect(result.kind === 'error' && result.code).toBe('rate_limited');
   });
+
+  it('passes an optional details object through untyped (US-019/AC-04, ADR-009)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(422, {
+        statusCode: 422,
+        code: 'desk_has_upcoming_bookings',
+        message: 'x',
+        details: { upcomingBookings: 3 },
+      }),
+    );
+
+    const result = await client().request('/api/thing', schema);
+
+    expect(result.kind === 'error' && result.details).toEqual({ upcomingBookings: 3 });
+  });
+
+  it('leaves details undefined when the body carries none — every other error body is unaffected (US-019/AC-04, ADR-009)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { statusCode: 401, code: 'invalid_credentials', message: 'no' }),
+    );
+
+    const result = await client().request('/api/thing', schema);
+
+    expect(result.kind === 'error' && result.details).toBeUndefined();
+  });
 });
 
 describe('apiClient — the service is unavailable (US-001/AC-07)', () => {

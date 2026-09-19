@@ -13,16 +13,15 @@
  * Both row actions were originally always rendered and always `disabled` (US-016 design note
  * §6.2): their destinations (US-017, US-018, US-019) did not exist yet, and AC-06/AC-08 made the
  * controls themselves the story's subject, so omitting them would have failed those ACs rather
- * than merely under-delivered them. **US-018 is the first to change that**: `Edit` is now live,
- * the exact inverse of US-017 design note §9.1's "this story must not touch this file". The
- * activate/deactivate toggle stays `disabled`, carrying `UNAVAILABLE_CONTROL_REASON` as a mouse
- * `title` and a visually-hidden span (the pattern `AdminBookingRow` uses for its own
- * non-cancellable action), until US-019 wires it.
+ * than merely under-delivered them. **US-018 made `Edit` live**, the exact inverse of US-017
+ * design note §9.1's "this story must not touch this file". **US-019 is the last**: the
+ * activate/deactivate toggle now calls `onToggleActive` — the last unbuilt control this row ever
+ * carried, and `UNAVAILABLE_CONTROL_REASON` is deleted from `copy.ts` with it.
  */
 import type { AdminDesk } from '@desk-booking/contracts';
 import { Button } from '../../components/button/Button.js';
 import { StatusChip } from '../../components/status-chip/StatusChip.js';
-import { bookedAheadLabel, bookedAheadAccessibleText, EDIT_LABEL, DEACTIVATE_LABEL, ACTIVATE_LABEL, UNAVAILABLE_CONTROL_REASON } from './copy.js';
+import { bookedAheadLabel, bookedAheadAccessibleText, EDIT_LABEL, DEACTIVATE_LABEL, ACTIVATE_LABEL } from './copy.js';
 import './desks.css';
 
 /** Real `<th>`s, so a screen reader announces the column per cell — SCR-006's own accessibility
@@ -50,18 +49,29 @@ export interface DeskInventoryRowProps {
   layout: DeskInventoryRowLayout;
   /** US-018/AC-01. Opens SCR-007's edit dialog for this desk. */
   onEdit: (desk: AdminDesk) => void;
+  /** US-019/AC-01, AC-09. Deactivate opens `DeskDeactivateDialog`'s ST-05 confirmation; Activate
+   *  is called directly, with no dialog at all (AC-09's structural asymmetry) — the caller
+   *  (`Desks.tsx`) decides which, this row only reports which desk and its current state. */
+  onToggleActive: (desk: AdminDesk) => void;
 }
 
-function ActionButtons({ desk, onEdit }: { desk: AdminDesk; onEdit: (desk: AdminDesk) => void }) {
+function ActionButtons({
+  desk,
+  onEdit,
+  onToggleActive,
+}: {
+  desk: AdminDesk;
+  onEdit: (desk: AdminDesk) => void;
+  onToggleActive: (desk: AdminDesk) => void;
+}) {
   const toggleLabel = desk.isActive ? DEACTIVATE_LABEL : ACTIVATE_LABEL;
   return (
     <>
       <Button variant="secondary" onClick={() => onEdit(desk)}>
         {EDIT_LABEL}
       </Button>
-      <Button variant="secondary" disabled title={UNAVAILABLE_CONTROL_REASON}>
+      <Button variant="secondary" onClick={() => onToggleActive(desk)}>
         {toggleLabel}
-        <span className="desks__visually-hidden"> {UNAVAILABLE_CONTROL_REASON}</span>
       </Button>
     </>
   );
@@ -82,7 +92,7 @@ function BookedAheadCell({ count }: { count: number }) {
   return <span>{bookedAheadLabel(count)}</span>;
 }
 
-export function DeskInventoryRow({ desk, layout, onEdit }: DeskInventoryRowProps) {
+export function DeskInventoryRow({ desk, layout, onEdit, onToggleActive }: DeskInventoryRowProps) {
   const status = desk.isActive ? 'active' : 'inactive';
 
   if (layout === 'table') {
@@ -96,7 +106,7 @@ export function DeskInventoryRow({ desk, layout, onEdit }: DeskInventoryRowProps
           <BookedAheadCell count={desk.bookedAhead} />
         </td>
         <td className="desk-inventory-table__actions">
-          <ActionButtons desk={desk} onEdit={onEdit} />
+          <ActionButtons desk={desk} onEdit={onEdit} onToggleActive={onToggleActive} />
         </td>
       </tr>
     );
@@ -110,7 +120,7 @@ export function DeskInventoryRow({ desk, layout, onEdit }: DeskInventoryRowProps
         <BookedAheadCell count={desk.bookedAhead} />
       </div>
       <div className="desk-inventory-card__actions">
-        <ActionButtons desk={desk} onEdit={onEdit} />
+        <ActionButtons desk={desk} onEdit={onEdit} onToggleActive={onToggleActive} />
       </div>
     </li>
   );

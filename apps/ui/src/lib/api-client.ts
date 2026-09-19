@@ -13,8 +13,15 @@ import { errorBodySchema, type ZodType } from '@desk-booking/contracts';
 
 export type ApiResult<T> =
   | { kind: 'ok'; data: T }
-  /** The server answered with our error body. Switch on `code`, with a default branch. */
-  | { kind: 'error'; status: number; code: string; message: string }
+  /**
+   * The server answered with our error body. Switch on `code`, with a default branch.
+   *
+   * `details` (US-019/AC-04, ADR-009) is present only where a specific refusal carries a fact the
+   * caller must render — undefined for every other error in the system. Passed through UNTYPED;
+   * the typed reading lives beside the endpoint that expects it (e.g. `deskBlockedDetailsSchema`),
+   * never here — this layer must not learn any one rule's vocabulary.
+   */
+  | { kind: 'error'; status: number; code: string; message: string; details?: Record<string, unknown> }
   /**
    * The server could not be reached, took too long, answered 5xx, or answered something this
    * build cannot parse. One outcome for all four, on purpose — see `request`.
@@ -83,7 +90,13 @@ export function createApiClient({ baseUrl, getAccessToken, timeoutMs }: ApiClien
     // as one would put an unexplained code in front of a user.
     if (!error.success) return { kind: 'unavailable' };
 
-    return { kind: 'error', status: response.status, code: error.data.code, message: error.data.message };
+    return {
+      kind: 'error',
+      status: response.status,
+      code: error.data.code,
+      message: error.data.message,
+      ...(error.data.details === undefined ? {} : { details: error.data.details }),
+    };
   }
 
   async function request<T>(

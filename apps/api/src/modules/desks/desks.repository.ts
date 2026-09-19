@@ -1,8 +1,8 @@
 /**
- * The desk inventory read AND write (US-014, US-016, US-017, US-018; REQ-031, REQ-015, REQ-016).
- * Placed here rather than inside `modules/bookings` per ADR-004's own precedent (US-013 §4.1:
- * "put the read where the write will have to live") — desk writes landed with US-017 (add a
- * desk) and US-018 (rename); US-019 (activate/deactivate) is this module's remaining write path.
+ * The desk inventory read AND write (US-014, US-016, US-017, US-018, US-019; REQ-031, REQ-015,
+ * REQ-016, REQ-017). Placed here rather than inside `modules/bookings` per ADR-004's own
+ * precedent (US-013 §4.1: "put the read where the write will have to live") — desk writes landed
+ * with US-017 (add), US-018 (rename) and US-019 (activate/deactivate), this module's last one.
  *
  * Deliberately NOT `modules/bookings`'s `listActiveDesks` (`bookings.repository.ts`): that method
  * filters `is_active = true` for US-006/AC-04's availability grid, an invariant that method must
@@ -92,6 +92,54 @@ export interface DesksRepository {
    * leaves it unmapped: reaching it means the normaliser or the schema failed, and it must
    * surface as a 500 rather than as a false "already taken". */
   updateDeskNumber(id: string, deskNumber: string, updatedAt: Date): Promise<UpdateDeskOutcome>;
+  /**
+   * US-019/AC-04, AC-07, AC-08 (BR-001.9, V-09). How many CONFIRMED bookings the named desk holds
+   * dated `from` or later — the exact quantity BR-001.9's hard block tests, counted at the moment
+   * of the deactivation and never cached.
+   *
+   * Reads `bookings`, a table `modules/desks` does NOT own (ADR-004: read across, write within) —
+   * the read ADR-004's own Context names: "BR-001.9's blocking count is a `bookings` aggregate read
+   * from inside the `desks` module's deactivation check."
+   *
+   * `status` and `from` arrive from the SERVICE's `displayStatusPredicate('confirmed', today)`
+   * reading, never written literally here — the same discipline `listUpcomingConfirmedDeskIds`
+   * states, and the whole of why this block and SCR-006's "Booked ahead" column cannot drift apart
+   * (`README.md`; US-016 design note §2.4).
+   *
+   * `{ count: 'exact', head: true }` — the COUNT is the whole answer and no row is transferred.
+   * Deliberately NOT `listUpcomingConfirmedDeskIds(...).filter(...)`: that method returns ids for
+   * the WHOLE table (~3,100 uuids at BR-001.4's ceiling, per its own stated bound) to answer a
+   * question about one desk, on the hot path of a write.
+   *
+   * Served by `bookings_desk_id_booking_date_idx` (`0003_bookings.sql`), whose own comment names
+   * this rule: `-- REQ-031, BR-001.9`. No index is added by this story.
+   *
+   * The occupant is never read — no `user_id`, no `*` — the same "not merely never sent" discipline
+   * `listUpcomingConfirmedDeskIds` states for this table.
+   */
+  countUpcomingConfirmedForDesk(deskId: string, status: BookingStatus, from: OfficeDate): Promise<number>;
+  /**
+   * US-019/AC-01, AC-09 (REQ-017, BR-001.7). Flips one desk's `is_active` and returns the updated
+   * row, or reports that no row matched. This module's third write.
+   *
+   * ONE method for both transitions because the SQL genuinely is the same statement with a
+   * different value — the RULES differ, and they live in the service (`deactivateDesk` counts
+   * first, `activateDesk` does not). Splitting the write would put two identical `UPDATE`s in one
+   * file; splitting the service would not.
+   *
+   * `updated_at` is deliberately NOT set. `0002_desks.sql` scopes that column in writing to
+   * "REQ-016 — when the desk was last renamed", and `updateDeskNumber` is its first and only
+   * writer. This story is REQ-017. Widening the column's meaning here would make it unreliable for
+   * the one thing it does claim (design note §5.3, decisions.md D-02).
+   *
+   * No `23505` mapping, and its ABSENCE is deliberate: this write does not touch `desk_number`, so
+   * `desks_desk_number_key` cannot fire. Copying `updateDeskNumber`'s duplicate branch would add an
+   * unreachable outcome that a reader would then have to disprove.
+   *
+   * `.maybeSingle()`, never `.single()`, for the reason `updateDeskNumber` states: `.single()`
+   * turns "zero rows" into a thrown Postgres error and loses the 404.
+   */
+  setDeskActive(id: string, isActive: boolean): Promise<SetDeskActiveOutcome>;
 }
 
 export type InsertDeskOutcome = { kind: 'ok'; desk: DeskRow } | { kind: 'duplicate' };
@@ -102,6 +150,8 @@ export type UpdateDeskOutcome =
    *  reachable from the screen — but a write that applied to nothing must answer something, and
    *  a 500 for a well-formed request naming a missing resource is the wrong shape. */
   | { kind: 'not_found' };
+
+export type SetDeskActiveOutcome = { kind: 'ok'; desk: DeskRow } | { kind: 'not_found' };
 
 export const desksRepository: DesksRepository = {
   async listAllDesks() {
@@ -150,5 +200,29 @@ export const desksRepository: DesksRepository = {
     if (error.code !== '23505') throw new Error(`desk update failed: ${error.message}`);
     if (error.message.includes('desks_desk_number_key')) return { kind: 'duplicate' };
     throw new Error(`unrecognised unique violation: ${error.message}`);
+  },
+
+  async countUpcomingConfirmedForDesk(deskId, status, from) {
+    const { count, error } = await supabase()
+      .from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('desk_id', deskId)
+      .eq('status', status)
+      .gte('booking_date', from);
+
+    if (error) throw new Error(`bookings count failed: ${error.message}`);
+    return count ?? 0;
+  },
+
+  async setDeskActive(id, isActive) {
+    const { data, error } = await supabase()
+      .from('desks')
+      .update({ is_active: isActive })
+      .eq('id', id)
+      .select('id, desk_number, is_active')
+      .maybeSingle();
+
+    if (error) throw new Error(`desk state update failed: ${error.message}`);
+    return data ? { kind: 'ok', desk: data as DeskRow } : { kind: 'not_found' };
   },
 };

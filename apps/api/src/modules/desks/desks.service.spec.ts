@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDesksService } from './desks.service.js';
-import type { DesksRepository, InsertDeskOutcome, UpdateDeskOutcome } from './desks.repository.js';
+import type { DesksRepository, InsertDeskOutcome, SetDeskActiveOutcome, UpdateDeskOutcome } from './desks.repository.js';
 
 const TODAY = '2026-09-19';
 const NOW_MS = Date.parse(`${TODAY}T12:00:00Z`);
@@ -12,22 +12,39 @@ interface StubOptions {
   upcomingDeskIds?: string[];
   insertResult?: InsertDeskOutcome;
   updateResult?: UpdateDeskOutcome;
+  /** US-019 — the queue of counts `countUpcomingConfirmedForDesk` answers, one per call, the
+   *  last repeating if a test calls more times than it stubbed (AC-07's re-check). */
+  upcomingCounts?: number[];
+  setActiveResult?: SetDeskActiveOutcome;
 }
 
-function stubRepository({ rows, upcomingDeskIds = [], insertResult, updateResult }: StubOptions): {
+function stubRepository({
+  rows,
+  upcomingDeskIds = [],
+  insertResult,
+  updateResult,
+  upcomingCounts = [],
+  setActiveResult,
+}: StubOptions): {
   repository: DesksRepository;
   calls: Array<{ status: string; from: string }>;
   insertCalls: string[];
   updateCalls: Array<{ id: string; deskNumber: string; updatedAt: Date }>;
   upcomingCallCount: () => number;
+  countCalls: Array<{ deskId: string; status: string; from: string }>;
+  setActiveCalls: Array<{ id: string; isActive: boolean }>;
 } {
   const calls: Array<{ status: string; from: string }> = [];
   const insertCalls: string[] = [];
   const updateCalls: Array<{ id: string; deskNumber: string; updatedAt: Date }> = [];
+  const countCalls: Array<{ deskId: string; status: string; from: string }> = [];
+  const setActiveCalls: Array<{ id: string; isActive: boolean }> = [];
   return {
     calls,
     insertCalls,
     updateCalls,
+    countCalls,
+    setActiveCalls,
     upcomingCallCount: () => calls.length,
     repository: {
       async listAllDesks() {
@@ -44,6 +61,15 @@ function stubRepository({ rows, upcomingDeskIds = [], insertResult, updateResult
       async updateDeskNumber(id, deskNumber, updatedAt) {
         updateCalls.push({ id, deskNumber, updatedAt });
         return updateResult ?? { kind: 'ok', desk: { id, desk_number: deskNumber, is_active: true } };
+      },
+      async countUpcomingConfirmedForDesk(deskId, status, from) {
+        countCalls.push({ deskId, status, from });
+        const i = countCalls.length - 1;
+        return upcomingCounts[i] ?? upcomingCounts[upcomingCounts.length - 1] ?? 0;
+      },
+      async setDeskActive(id, isActive) {
+        setActiveCalls.push({ id, isActive });
+        return setActiveResult ?? { kind: 'ok', desk: { id, desk_number: 'A-01', is_active: isActive } };
       },
     },
   };
@@ -243,5 +269,137 @@ describe('createDesksService.renameDesk (US-018/AC-01, AC-02, AC-03, AC-05, AC-0
     expect(updateCalls).toHaveLength(1);
     expect(insertCalls).toHaveLength(0);
     expect(upcomingCallCount()).toBe(0);
+  });
+});
+
+describe('createDesksService.deactivateDesk (US-019/AC-01, AC-04, AC-05, AC-07, AC-08 — BR-001.9, V-09)', () => {
+  it('deactivates a desk with no upcoming bookings (US-019/AC-01)', async () => {
+    const { repository, setActiveCalls } = stubRepository({
+      rows: [],
+      upcomingCounts: [0],
+      setActiveResult: { kind: 'ok', desk: { id: 'a', desk_number: 'A-02', is_active: false } },
+    });
+
+    const result = await service(repository).deactivateDesk('a');
+
+    expect(result).toEqual({ kind: 'ok', desk: { id: 'a', deskNumber: 'A-02', isActive: false } });
+    expect(setActiveCalls).toEqual([{ id: 'a', isActive: false }]);
+  });
+
+  it('a desk with 3 upcoming confirmed bookings is blocked, reporting the exact count (US-019/AC-04)', async () => {
+    const { repository } = stubRepository({ rows: [], upcomingCounts: [3] });
+
+    const result = await service(repository).deactivateDesk('b');
+
+    expect(result).toEqual({ kind: 'blocked', upcomingBookings: 3 });
+  });
+
+  it('setDeskActive is NEVER called on a blocked attempt — nothing changed, the structural half of AC-05 (US-019/AC-05)', async () => {
+    const { repository, setActiveCalls } = stubRepository({ rows: [], upcomingCounts: [3] });
+
+    await service(repository).deactivateDesk('b');
+
+    expect(setActiveCalls).toHaveLength(0);
+  });
+
+  it('produces exactly one repository interaction on the blocked path — the count, and nothing else (US-019/AC-05)', async () => {
+    const { repository, countCalls, setActiveCalls } = stubRepository({ rows: [], upcomingCounts: [3] });
+
+    await service(repository).deactivateDesk('b');
+
+    expect(countCalls).toHaveLength(1);
+    expect(setActiveCalls).toHaveLength(0);
+  });
+
+  it('borrows displayStatusPredicate for "confirmed" as-of today — the count is never a literal (US-019/AC-04, AC-06)', async () => {
+    const { repository, countCalls } = stubRepository({ rows: [], upcomingCounts: [0] });
+
+    await service(repository).deactivateDesk('a');
+
+    expect(countCalls).toEqual([{ deskId: 'a', status: 'confirmed', from: TODAY }]);
+  });
+
+  it('the count is read fresh, inside this request, before the write — the server is the rule, not a prediction (US-019/AC-08)', async () => {
+    const { repository, countCalls, setActiveCalls } = stubRepository({
+      rows: [],
+      upcomingCounts: [0],
+      setActiveResult: { kind: 'ok', desk: { id: 'a', desk_number: 'A-01', is_active: false } },
+    });
+
+    await service(repository).deactivateDesk('a');
+
+    // The count call happened, genuinely, before the write — not seeded from a caller-supplied
+    // number (there is none: `deactivateDesk` takes only an id).
+    expect(countCalls).toHaveLength(1);
+    expect(setActiveCalls).toHaveLength(1);
+  });
+
+  it('a previously blocked desk deactivates once its bookings are cleared, with nothing cached between attempts (US-019/AC-07)', async () => {
+    const { repository } = stubRepository({
+      rows: [],
+      upcomingCounts: [3, 0],
+      setActiveResult: { kind: 'ok', desk: { id: 'a', desk_number: 'A-01', is_active: false } },
+    });
+    const svc = service(repository);
+
+    const first = await svc.deactivateDesk('a');
+    expect(first).toEqual({ kind: 'blocked', upcomingBookings: 3 });
+
+    const second = await svc.deactivateDesk('a');
+    expect(second.kind).toBe('ok');
+  });
+
+  it('reports not_found without mapping a desk', async () => {
+    const { repository } = stubRepository({ rows: [], upcomingCounts: [0], setActiveResult: { kind: 'not_found' } });
+
+    const result = await service(repository).deactivateDesk('missing');
+
+    expect(result).toEqual({ kind: 'not_found' });
+  });
+
+  it('reads the clock exactly once per call', async () => {
+    let calls = 0;
+    const nowMs = () => {
+      calls += 1;
+      return NOW_MS;
+    };
+    const { repository } = stubRepository({ rows: [], upcomingCounts: [0] });
+
+    await service(repository, nowMs).deactivateDesk('a');
+
+    expect(calls).toBe(1);
+  });
+});
+
+describe('createDesksService.activateDesk (US-019/AC-01, AC-09 — no rule, no count)', () => {
+  it('activates a desk unconditionally (US-019/AC-01, AC-09)', async () => {
+    const { repository, setActiveCalls } = stubRepository({
+      rows: [],
+      setActiveResult: { kind: 'ok', desk: { id: 'b', desk_number: 'C-05', is_active: true } },
+    });
+
+    const result = await service(repository).activateDesk('b');
+
+    expect(result).toEqual({ kind: 'ok', desk: { id: 'b', deskNumber: 'C-05', isActive: true } });
+    expect(setActiveCalls).toEqual([{ id: 'b', isActive: true }]);
+  });
+
+  it('makes NO call to countUpcomingConfirmedForDesk — the absence IS the AC (US-019/AC-09)', async () => {
+    const { repository, countCalls } = stubRepository({
+      rows: [],
+      setActiveResult: { kind: 'ok', desk: { id: 'b', desk_number: 'C-05', is_active: true } },
+    });
+
+    await service(repository).activateDesk('b');
+
+    expect(countCalls).toHaveLength(0);
+  });
+
+  it('reports not_found without mapping a desk', async () => {
+    const { repository } = stubRepository({ rows: [], setActiveResult: { kind: 'not_found' } });
+
+    const result = await service(repository).activateDesk('missing');
+
+    expect(result).toEqual({ kind: 'not_found' });
   });
 });
