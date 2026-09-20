@@ -4,6 +4,8 @@ import {
   adminUserSchema,
   adminUsersQuerySchema,
   adminUsersResponseSchema,
+  createAccountRequestSchema,
+  emailTakenDetailsSchema,
 } from './users.js';
 
 const VALID_USER = {
@@ -136,5 +138,84 @@ describe('adminUsersResponseSchema (US-020/AC-01, AC-02 — GET /api/admin/users
     expect(result.success).toBe(true);
     // Not .strict(), so the extra parses — but the TYPE carries no top-level total to read.
     expect(result.success && 'total' in result.data).toBe(false);
+  });
+});
+
+const VALID_CREATE_ACCOUNT = {
+  fullName: 'Dana Silva',
+  email: 'dana@company.com',
+  role: 'employee',
+  password: 'Correct-Horse7',
+};
+
+describe('createAccountRequestSchema (US-021/AC-01, AC-02, AC-03)', () => {
+  it('parses a well-formed body', () => {
+    const result = createAccountRequestSchema.safeParse(VALID_CREATE_ACCOUNT);
+    expect(result.success).toBe(true);
+  });
+
+  it('lower-cases and trims the email, so the parsed value is what gets checked and stored (US-021/D-01)', () => {
+    const result = createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, email: '  Dana@Company.com  ' });
+    expect(result.success).toBe(true);
+    expect(result.data?.email).toBe('dana@company.com');
+  });
+
+  it('trims fullName', () => {
+    const result = createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, fullName: '  Dana Silva  ' });
+    expect(result.success).toBe(true);
+    expect(result.data?.fullName).toBe('Dana Silva');
+  });
+
+  it('rejects an empty fullName', () => {
+    expect(createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, fullName: '' }).success).toBe(false);
+  });
+
+  it('rejects an implausible email', () => {
+    expect(createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, email: 'not-an-email' }).success).toBe(false);
+  });
+
+  it('rejects a role outside employee/admin', () => {
+    expect(createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, role: 'superadmin' }).success).toBe(false);
+  });
+
+  it.each([
+    ['too short', 'Aa1!aaa'],
+    ['no upper-case letter', 'correct-horse7'],
+    ['no lower-case letter', 'CORRECT-HORSE7'],
+    ['no digit', 'Correct-Horse'],
+    ['no special character', 'CorrectHorse7'],
+  ])('rejects a password failing V-12 (%s) — the same evaluator the checklist runs (US-021/AC-03)', (_label, password) => {
+    expect(createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, password }).success).toBe(false);
+  });
+
+  it('accepts a password meeting all five V-12 rules at exactly 8 characters', () => {
+    expect(createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, password: 'Aa1!aaaa' }).success).toBe(true);
+  });
+
+  it('rejects an unknown field (.strict())', () => {
+    expect(createAccountRequestSchema.safeParse({ ...VALID_CREATE_ACCOUNT, isActive: true }).success).toBe(false);
+  });
+
+  it('rejects a missing password', () => {
+    const { password: _password, ...rest } = VALID_CREATE_ACCOUNT;
+    expect(createAccountRequestSchema.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe('emailTakenDetailsSchema (US-021/AC-06, ADR-009 §2 second application)', () => {
+  it('parses an active holder', () => {
+    expect(emailTakenDetailsSchema.safeParse({ fullName: 'Dana Silva', isActive: true }).success).toBe(true);
+  });
+
+  it('parses a deactivated holder', () => {
+    expect(emailTakenDetailsSchema.safeParse({ fullName: 'Dana Silva', isActive: false }).success).toBe(true);
+  });
+
+  it('rejects a missing isActive', () => {
+    expect(emailTakenDetailsSchema.safeParse({ fullName: 'Dana Silva' }).success).toBe(false);
+  });
+
+  it('rejects an unknown field (.strict())', () => {
+    expect(emailTakenDetailsSchema.safeParse({ fullName: 'Dana Silva', isActive: true, id: 'x' }).success).toBe(false);
   });
 });

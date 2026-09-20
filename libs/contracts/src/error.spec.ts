@@ -87,6 +87,12 @@ describe('ERROR_CODES', () => {
     expect(errorCodeSchema.parse('desk_number_taken')).toBe('desk_number_taken');
   });
 
+  it('carries email_taken, distinct from desk_number_taken (US-021/AC-06)', () => {
+    expect(ERROR_CODES.email_taken).toBe('email_taken');
+    expect(ERROR_CODES.email_taken).not.toBe(ERROR_CODES.desk_number_taken);
+    expect(errorCodeSchema.parse('email_taken')).toBe('email_taken');
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

@@ -18,6 +18,17 @@ export interface PasswordFieldProps extends Omit<TextFieldProps, 'type' | 'trail
   /** Announced labels for the toggle. Defaults match SCR-001's copy. */
   showLabel?: string;
   hideLabel?: string;
+  /**
+   * Controlled visibility (US-021/AC-04, D-07). Every existing caller (SCR-001, SCR-010) omits
+   * this and keeps the original uncontrolled, always-starts-hidden behaviour untouched.
+   *
+   * SCR-009 ST-09 needs it: **Suggest a password** must reveal the generated value immediately —
+   * "there is no point hiding a value that must be read aloud" — and that has to happen from
+   * OUTSIDE this component, on a value it did not receive from its own toggle. Internal state
+   * alone cannot do that; a parent needs to be able to set visibility as a fact, not just read it.
+   */
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
 }
 
 export function PasswordField({
@@ -25,11 +36,20 @@ export function PasswordField({
   hideLabel = 'Hide',
   disabled,
   readOnly,
+  visible: controlledVisible,
+  onVisibleChange,
   ...rest
 }: PasswordFieldProps) {
   // Never persisted. The toggle resets to hidden on every load — SCR-001's security surface
-  // note, and the reason this is component state rather than anything durable.
-  const [visible, setVisible] = useState(false);
+  // note, and the reason this is component state rather than anything durable. Used only when
+  // the caller does not pass `visible` — every existing caller's own behaviour, unchanged.
+  const [uncontrolledVisible, setUncontrolledVisible] = useState(false);
+  const visible = controlledVisible ?? uncontrolledVisible;
+
+  function setVisible(next: boolean) {
+    if (onVisibleChange) onVisibleChange(next);
+    else setUncontrolledVisible(next);
+  }
 
   return (
     <TextField
@@ -45,7 +65,7 @@ export function PasswordField({
           aria-pressed={visible}
           aria-label={visible ? hideLabel : showLabel}
           disabled={disabled || readOnly}
-          onClick={() => setVisible((v) => !v)}
+          onClick={() => setVisible(!visible)}
         >
           {visible ? hideLabel : showLabel}
         </button>

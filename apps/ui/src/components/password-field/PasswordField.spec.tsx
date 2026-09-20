@@ -58,4 +58,22 @@ describe('PasswordField (US-001/AC-05)', () => {
 
     expect(screen.getByRole('button', { name: 'Show' })).toBeDisabled();
   });
+
+  it('renders revealed when a caller passes visible={true} (US-021/AC-04, D-07 — Suggest a password)', () => {
+    render(<PasswordField label="Password" visible onVisibleChange={() => {}} />);
+
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('calls onVisibleChange rather than managing its own state once controlled (US-021/D-07)', async () => {
+    const calls: boolean[] = [];
+    render(<PasswordField label="Password" visible={false} onVisibleChange={(v) => calls.push(v)} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show' }));
+
+    expect(calls).toEqual([true]);
+    // The field itself did not flip — the parent owns the value and re-renders with it.
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+  });
 });

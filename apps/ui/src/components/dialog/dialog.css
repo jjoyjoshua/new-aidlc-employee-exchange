@@ -15,10 +15,16 @@
   justify-content: center;
   background: var(--c-scrim);
   z-index: 100;
+  /* A strip above the sheet at every width, so a tall dialog never touches the very top of the
+   * viewport with nothing to show it is a sheet rather than a page — and, combined with the
+   * dialog's own max-height below, the thing that gives a tall form somewhere to be capped
+   * against. `>=768px` overrides this to `var(--s-16)` on every side (centred card). */
+  padding-top: var(--s-16);
 }
 
 .dialog {
   width: 100%;
+  max-height: 100%;
   background: var(--c-surface-overlay);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   box-shadow: var(--shadow-sheet);
@@ -26,6 +32,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-12);
+  overflow: hidden;
 }
 
 .dialog:focus-visible {
@@ -37,6 +44,8 @@
   display: flex;
   align-items: center;
   gap: var(--s-16);
+  /* Pinned — only the body scrolls when the dialog's content exceeds `.dialog`'s max-height. */
+  flex-shrink: 0;
 }
 
 /* SCR-006 ST-06 (US-019/AC-04) — the header's non-colour warning signal. Caller-owned SVG; this
@@ -103,6 +112,14 @@
   font-size: var(--t-body);
   line-height: var(--lh-body);
   color: var(--c-text-secondary);
+  /* The one part allowed to scroll — `min-height: 0` is load-bearing: without it a flex child
+   * cannot shrink below its content size, and the whole dialog would grow past `.dialog`'s
+   * `max-height` instead of this scrolling internally (found by measuring a real tall form:
+   * ST-01's header rendered above the viewport's top edge and the footer below its bottom, with
+   * no scrollbar anywhere, until this rule existed). */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .dialog__footer {
@@ -111,6 +128,8 @@
   gap: var(--s-8);
   padding-top: var(--s-16);
   border-top: var(--bw-1) solid var(--c-border);
+  /* Pinned — see `.dialog__header`. */
+  flex-shrink: 0;
 }
 
 /* >=768px: centred card, not a bottom sheet. */

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminSummary } from '@desk-booking/contracts';
 import {
+  accountCreatedToast,
   disabledMenuItemReason,
+  emailTakenMessage,
   matchLine,
   noMatchMessage,
   roleActionLabel,
@@ -57,5 +59,25 @@ describe('roleActionLabel (US-020/AC-10)', () => {
 describe('rowMenuTriggerLabel (US-020/AC-10, design note A9/§5.4)', () => {
   it('names the row so forty triggers do not all read "Actions" (US-020/AC-10)', () => {
     expect(rowMenuTriggerLabel('Dana Silva')).toBe('Actions for Dana Silva');
+  });
+});
+
+describe('emailTakenMessage (US-021/AC-06, ADR-009 §2 second application)', () => {
+  it('names the holder for an active account, with no reactivation sentence', () => {
+    expect(emailTakenMessage('Dana Silva', true)).toBe('already belongs to Dana Silva.');
+  });
+
+  it('adds the reactivation sentence for a deactivated holder (US-021/AC-06)', () => {
+    expect(emailTakenMessage('Dana Silva', false)).toBe(
+      'already belongs to Dana Silva. That account is deactivated — reactivate it on the people list instead of creating a new one.',
+    );
+  });
+});
+
+describe('accountCreatedToast (US-021/AC-09)', () => {
+  it('names the person and repeats the delivery instruction (US-021/AC-09)', () => {
+    expect(accountCreatedToast('Dana Silva')).toBe(
+      "Dana Silva added. Give them the password you set — it hasn't been emailed, and they'll change it when they sign in.",
+    );
   });
 });

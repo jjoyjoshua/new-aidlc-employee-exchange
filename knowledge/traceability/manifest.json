@@ -1128,10 +1128,28 @@
         "AC-11",
         "AC-12"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/error.spec.ts",
+        "libs/contracts/src/users.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.adapter.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/ui/src/components/password-field/PasswordField.spec.tsx",
+        "apps/ui/src/lib/generate-password.spec.ts",
+        "apps/ui/src/lib/create-account.spec.ts",
+        "apps/ui/src/lib/use-users.spec.ts",
+        "apps/ui/src/screens/people/RadioGroup.spec.tsx",
+        "apps/ui/src/screens/people/UserFormDialog.spec.tsx",
+        "apps/ui/src/screens/people/copy.spec.ts",
+        "apps/ui/src/screens/people/People.spec.tsx"
+      ],
       "screens": [
         "SCR-008",
         "SCR-009"
+      ],
+      "decisions": [
+        "ADR-011"
       ]
     },
     "US-022": {

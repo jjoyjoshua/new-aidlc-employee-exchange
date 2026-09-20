@@ -63,6 +63,10 @@ export const errorCodeSchema = z.enum([
   // (US-017 edge cases). Distinct from `desk_already_booked`, which is a BOOKING race on a desk
   // that exists — one character apart in a switch, which is why both are constants.
   'desk_number_taken',
+  // US-021/AC-06 — `user_profiles_email_key` fired, or the pre-emptive `findByEmail` read caught
+  // it first (BR-001.10, V-10). Distinct from `desk_number_taken` for the same reason that code
+  // is distinct from `desk_already_booked` — one character apart in a switch.
+  'email_taken',
   // US-019/AC-04 — BR-001.9, V-09. The desk holds one or more CONFIRMED bookings dated the
   // office's today or later, so it cannot be deactivated and NOTHING is cancelled (AC-05).
   // 422, not 409: the request is well formed and the rule refuses it — retrying the same

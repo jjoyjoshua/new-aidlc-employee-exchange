@@ -84,3 +84,83 @@ describe('useUsers (US-020/AC-01, AC-02, design note §7.5, A8)', () => {
     expect(firstAborted).toBe(true);
   });
 });
+
+describe('useUsers.markAdded — summary always, array only when appendToList (US-021, design note §4.1, §4.2, A5, A6)', () => {
+  const FIVE: AdminUser[] = [
+    { id: '1', fullName: 'Amy Ito', email: 'amy@company.com', role: 'employee', isActive: true },
+    { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: true },
+    { id: '3', fullName: 'Zed Okoro', email: 'zed@company.com', role: 'admin', isActive: true },
+  ];
+  const FIVE_SUMMARY: AdminSummary = { total: 3, employees: 2, admins: 1, deactivated: 0 };
+  const NEW_EMPLOYEE: AdminUser = { id: 'new', fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: true };
+  const NEW_ADMIN: AdminUser = { id: 'new', fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin', isActive: true };
+
+  async function readyHook(users: AdminUser[] = FIVE, summary: AdminSummary = FIVE_SUMMARY) {
+    const fetchUsers: UsersFetcher = async () => ({ kind: 'ok', users, summary });
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    return result;
+  }
+
+  it('appendToList: true inserts the new account at its SORTED position, never at the end (US-021/AC-01, A5)', async () => {
+    const result = await readyHook();
+
+    act(() => result.current.markAdded(NEW_EMPLOYEE, { appendToList: true }));
+
+    expect(result.current.status === 'ready' && result.current.users.map((u) => u.fullName)).toEqual([
+      'Amy Ito',
+      'Dana Silva',
+      'Marcus Webb',
+      'Zed Okoro',
+    ]);
+  });
+
+  it('appendToList: true increments total and employees for an employee', async () => {
+    const result = await readyHook();
+
+    act(() => result.current.markAdded(NEW_EMPLOYEE, { appendToList: true }));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 4,
+      employees: 3,
+      admins: 1,
+      deactivated: 0,
+    });
+  });
+
+  it('appendToList: true increments total and admins for an admin, not employees', async () => {
+    const result = await readyHook();
+
+    act(() => result.current.markAdded(NEW_ADMIN, { appendToList: true }));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 4,
+      employees: 2,
+      admins: 2,
+      deactivated: 0,
+    });
+  });
+
+  it('appendToList: false updates summary but leaves the users array UNCHANGED (design note §4.2, A6 — an active search)', async () => {
+    const result = await readyHook();
+
+    act(() => result.current.markAdded(NEW_EMPLOYEE, { appendToList: false }));
+
+    expect(result.current.status === 'ready' && result.current.users).toEqual(FIVE);
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 4,
+      employees: 3,
+      admins: 1,
+      deactivated: 0,
+    });
+  });
+
+  it('is a no-op before the first successful load (A15 — the same pre-existing hazard use-desks.ts already has)', async () => {
+    const fetchUsers: UsersFetcher = () => new Promise(() => undefined);
+    const { result } = renderHook(() => useUsers(fetchUsers));
+
+    expect(result.current.status).toBe('loading');
+    act(() => result.current.markAdded(NEW_EMPLOYEE, { appendToList: true }));
+    expect(result.current.status).toBe('loading');
+  });
+});

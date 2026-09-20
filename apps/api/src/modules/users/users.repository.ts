@@ -27,6 +27,22 @@ export interface UserSummaryRow {
   is_active: boolean;
 }
 
+/** The one row `findByEmail` reads back — just enough to compose US-021/AC-06's refusal
+ *  (`{fullName} already belongs to...`, and the reactivation sentence when `!is_active`). */
+export interface EmailLookupRow {
+  full_name: string;
+  is_active: boolean;
+}
+
+/** What `insertProfile` needs from the caller. `email` arrives already normalised
+ *  (`createAccountRequestSchema`'s `.transform`, US-021/D-01) — this method does not re-normalise. */
+export interface InsertProfileInput {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+}
+
 export interface UsersRepository {
   /**
    * US-020/AC-01, AC-04 (REQ-032, `db-design.md:351-355`). Every account — `id, full_name,
@@ -54,6 +70,22 @@ export interface UsersRepository {
    * stating here, not merely achieving by omission.
    */
   getSummaryCounts(): Promise<UserSummaryRow[]>;
+  /**
+   * US-021/AC-06, D-02. An exact `citext` match on the already-normalised email — the duplicate
+   * check reads `user_profiles` directly, BEFORE any Supabase Auth call, because that call's own
+   * "already registered" error carries neither the colliding account's name nor whether it is
+   * deactivated, and both are what ST-04's refusal must say. `undefined` when no account holds
+   * the email — the common case, and the only one that proceeds to create an account.
+   */
+  findByEmail(email: string): Promise<EmailLookupRow | undefined>;
+  /**
+   * US-021/AC-01, AC-08. Inserts the row for an account whose Auth credential already exists
+   * (`id` is the Auth user's own id — this repository never mints one). Deliberately does NOT
+   * name `is_active` or `must_change_password`: both default `true` at the column
+   * (`0001_user_profiles.sql:34-36`), the same reasoning `desks.repository.ts`'s own `insertDesk`
+   * uses for leaving `is_active` unnamed.
+   */
+  insertProfile(input: InsertProfileInput): Promise<void>;
 }
 
 export const usersRepository: UsersRepository = {
@@ -74,5 +106,24 @@ export const usersRepository: UsersRepository = {
 
     if (error) throw new Error(`user summary lookup failed: ${error.message}`);
     return (data ?? []) as UserSummaryRow[];
+  },
+
+  async findByEmail(email) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .select('full_name, is_active')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) throw new Error(`email lookup failed: ${error.message}`);
+    return (data as EmailLookupRow | null) ?? undefined;
+  },
+
+  async insertProfile({ id, email, fullName, role }) {
+    const { error } = await supabase()
+      .from('user_profiles')
+      .insert({ id, email, full_name: fullName, role });
+
+    if (error) throw new Error(`profile insert failed: ${error.message}`);
   },
 };
