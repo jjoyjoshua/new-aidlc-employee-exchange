@@ -912,3 +912,59 @@ describe('usersRepository.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-10, 
     }
   });
 });
+
+describe('usersRepository.activateAccount (US-026/AC-01, AC-03, AC-04, AC-05, AC-07)', () => {
+  const UPDATED_AT = new Date('2026-09-20T10:00:00.000Z');
+
+  it('updates is_active and updated_at ONLY, keyed on id, and touches no bookings row — never role (US-026/AC-03), never must_change_password (US-026/AC-05), never a booking (US-026/AC-04)', async () => {
+    const row = { ...ROW_B, is_active: true };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.activateAccount({ id: ROW_B.id, updatedAt: UPDATED_AT });
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          select: 'id, full_name, email, role, is_active',
+          eq: [['id', ROW_B.id]],
+          order: [],
+          update: { is_active: true, updated_at: UPDATED_AT.toISOString() },
+          maybeSingle: true,
+        },
+      ]);
+      expect(calls[0]?.update).not.toHaveProperty('role');
+      expect(calls[0]?.update).not.toHaveProperty('must_change_password');
+      expect(calls[0]?.update).not.toHaveProperty('deactivated_at');
+      expect(result).toEqual({ kind: 'ok', profile: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when no row matches the id — zero rows, not an error (US-026/AC-07)', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.activateAccount({ id: 'missing-id', updatedAt: UPDATED_AT });
+      expect(result).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on any repository error — reactivation never fires the last-active-admin trigger, so there is no "blocked" kind to map to', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.activateAccount({ id: ROW_B.id, updatedAt: UPDATED_AT }),
+      ).rejects.toThrow(/account activation failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});

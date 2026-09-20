@@ -31,10 +31,10 @@
  * component owns every one of `aria-disabled`, `title` and the visually-hidden reason directly —
  * `Button` is not modified, and no prop is added to it for this (`aria-disabled` would pass
  * through its `...rest` if it WERE used, which is the whole argument against adding a prop).
- * **US-023, US-024 and now US-025 (the deactivate branch only) are live:** `Edit`, the role item,
- * and Deactivate are now real items — no `aria-disabled`, no reason to carry — exactly as
- * ADR-010 forecast, one item at a time (`users/README.md`). Reset password, and the ACTIVATE
- * branch of this same item (`!account.isActive`, US-026), stay `aria-disabled`.
+ * **US-023, US-024, US-025 and now US-026 are live:** `Edit`, the role item, and both branches of
+ * the last item (Deactivate/Activate) are now real items — no `aria-disabled`, no reason to
+ * carry — exactly as ADR-010 forecast, one item at a time (`users/README.md`). Reset password is
+ * the only item still `aria-disabled`.
  *
  * **Outside-click dismissal** is implemented as a document-level listener scoped to the menu's
  * own DOM subtree, not the overlay element's own click target — the overlay is a zero-size
@@ -79,9 +79,12 @@ export interface AccountRowMenuProps {
    *  stay `aria-disabled` until US-025/US-027. */
   onChangeRole: (account: AdminUser) => void;
   /** US-025. The deactivate branch's own destination — stops being `aria-disabled` and gains this
-   *  handler, the third of the four (`users/README.md`). Only called when `account.isActive` —
-   *  the activate branch (US-026) still routes to nothing. */
+   *  handler, the third of the four (`users/README.md`). Only called when `account.isActive`. */
   onDeactivate: (account: AdminUser) => void;
+  /** US-026. The activate branch's own destination — stops being `aria-disabled` and gains this
+   *  handler, the fourth and last of the four (`users/README.md`). Only called when
+   *  `!account.isActive`. */
+  onActivate: (account: AdminUser) => void;
 }
 
 interface MenuItemSpec {
@@ -96,7 +99,7 @@ type AnchorStyle = CSSProperties & {
   '--menu-anchor-right'?: string;
 };
 
-export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChangeRole, onDeactivate }: AccountRowMenuProps) {
+export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChangeRole, onDeactivate, onActivate }: AccountRowMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `people-menu-title-${account.id}`;
 
@@ -214,11 +217,19 @@ export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChang
 
   // US-025's own destination — the same shape as `handleEdit`/`handleChangeRole`, one item later
   // still. Only reachable when `account.isActive`: the button below renders live for that branch
-  // only, so this handler is never wired to the (still-disabled) activate branch.
+  // only.
   function handleDeactivate() {
     triggerRef.current?.focus();
     onDismiss();
     onDeactivate(account);
+  }
+
+  // US-026's own destination — the same shape as `handleDeactivate`, the fourth and last item.
+  // Only reachable when `!account.isActive`.
+  function handleActivate() {
+    triggerRef.current?.focus();
+    onDismiss();
+    onActivate(account);
   }
 
   return createPortal(
@@ -245,7 +256,12 @@ export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChang
             {DEACTIVATE_LABEL}
           </button>
         ) : (
-          renderDisabledItem({ label: ACTIVATE_LABEL, danger: true })
+          // US-026, design note §6.2/F2: deliberately NOT `--danger` — unlike Deactivate,
+          // activating "restores access, harms nobody" (the story's own edge case), matching the
+          // sibling desk-inactive chip's own "quiet-neutral, never danger" position.
+          <button type="button" role="menuitem" className="people-menu__item" onClick={handleActivate}>
+            {ACTIVATE_LABEL}
+          </button>
         )}
       </div>
     </div>,

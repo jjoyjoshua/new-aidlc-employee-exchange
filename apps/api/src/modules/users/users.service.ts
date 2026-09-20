@@ -70,6 +70,13 @@ export type DeactivateAccountOutcome =
   | { kind: 'blocked' }
   | { kind: 'not_found' };
 
+/**
+ * US-026/AC-01, AC-03, AC-04, AC-05, AC-07. Two kinds only — `changeRole`'s shape minus `blocked`:
+ * reactivation cannot fire the last-active-admin trigger (design note §2), so there is nothing for
+ * a `blocked` branch to report.
+ */
+export type ActivateAccountOutcome = { kind: 'ok'; account: AdminUser } | { kind: 'not_found' };
+
 export type UpdateAccountOutcome =
   | { kind: 'ok'; account: AdminUser }
   | { kind: 'duplicate'; fullName: string; isActive: boolean }
@@ -374,6 +381,18 @@ export function createUsersService({ users, usersAuth, nowMs, officeTimezone }: 
         account: mapAccount(result.profile),
         cancelledCount: result.cancelledBookings.length,
       };
+    },
+
+    /**
+     * US-026/AC-01, AC-03, AC-04, AC-05, AC-07. ONE `nowMs()` reading, threaded to the repository
+     * as `updatedAt` — `changeRole`'s own discipline. No `blocked` branch to handle: reactivation
+     * cannot fire the last-active-admin trigger (design note §2), so `activateAccount`'s outcome
+     * passes straight through with no in-app admin count on any branch.
+     */
+    async activateAccount(id: string): Promise<ActivateAccountOutcome> {
+      const result = await users.activateAccount({ id, updatedAt: new Date(nowMs()) });
+      if (result.kind !== 'ok') return result;
+      return { kind: 'ok', account: mapAccount(result.profile) };
     },
   };
 }

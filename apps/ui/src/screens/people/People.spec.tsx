@@ -14,6 +14,7 @@ import type { CreateAccountFetcher, CreateAccountOutcome } from '../../lib/creat
 import type { UpdateAccountFetcher, UpdateAccountOutcome } from '../../lib/update-account.js';
 import type { ChangeRoleFetcher } from '../../lib/change-role.js';
 import type { DeactivateAccountFetcher, DeactivationPreviewFetcher } from '../../lib/deactivate-account.js';
+import type { ActivateAccountFetcher } from '../../lib/activate-account.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -39,6 +40,7 @@ function SignedIn({
   changeRole,
   previewDeactivation,
   deactivateAccount,
+  activateAccount,
   user = ADMIN,
   guarded = false,
 }: {
@@ -48,6 +50,7 @@ function SignedIn({
   changeRole?: ChangeRoleFetcher;
   previewDeactivation?: DeactivationPreviewFetcher;
   deactivateAccount?: DeactivateAccountFetcher;
+  activateAccount?: ActivateAccountFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -67,6 +70,7 @@ function SignedIn({
       changeRole={changeRole}
       previewDeactivation={previewDeactivation}
       deactivateAccount={deactivateAccount}
+      activateAccount={activateAccount}
     />
   );
 
@@ -510,6 +514,42 @@ describe('People — deactivate an account, row menu route (US-025/AC-05, AC-06,
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Search name or email')).toHaveFocus();
+  });
+});
+
+async function clickActivateFor(fullName: string) {
+  await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${fullName}` })[0]!);
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Activate' }));
+}
+
+describe('People — reactivate an account, row menu route, no dialog (US-026/AC-01, AC-06, AC-07)', () => {
+  it('a successful activation updates the row and the deactivated count, shows the toast, and returns focus to the row trigger (US-026/AC-06)', async () => {
+    let fetchCalls = 0;
+    const fetchUsers: FetchUsers = async () => {
+      fetchCalls += 1;
+      return okUsers([DANA, PRIYA], SUMMARY);
+    };
+    const activateAccount: ActivateAccountFetcher = async () => ({ kind: 'ok', account: { ...PRIYA, isActive: true } });
+    render(<SignedIn fetchUsers={fetchUsers} activateAccount={activateAccount} />);
+    await screen.findAllByText('Priya Raman');
+
+    await clickActivateFor('Priya Raman');
+
+    expect(await screen.findByText('Priya Raman can sign in again.')).toBeInTheDocument();
+    expect(screen.getByText('38 people · 36 employees, 2 admins · 0 deactivated')).toBeInTheDocument();
+    expect(fetchCalls).toBe(1);
+    expect(screen.getAllByRole('button', { name: 'Actions for Priya Raman' })[0]).toHaveFocus();
+  });
+
+  it('a failed activation leaves the row Deactivated and shows a page-level alert — no dialog to live in (US-026/AC-07)', async () => {
+    const activateAccount: ActivateAccountFetcher = async () => ({ kind: 'failed' });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, PRIYA])} activateAccount={activateAccount} />);
+    await screen.findAllByText('Priya Raman');
+
+    await clickActivateFor('Priya Raman');
+
+    expect(await screen.findByText("We couldn't activate Priya Raman just now. Nothing has changed. Try again.")).toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
 

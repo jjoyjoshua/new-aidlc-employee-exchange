@@ -133,6 +133,9 @@ const noUsers: UsersRepository = {
   async deactivateAccount() {
     throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
   },
+  async activateAccount() {
+    throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
+  },
 };
 
 const notUsedUsersAuth: UsersAuthAdapter = {
@@ -207,6 +210,9 @@ function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
       throw new Error('not exercised');
     },
     async deactivateAccount() {
+      throw new Error('not exercised');
+    },
+    async activateAccount() {
       throw new Error('not exercised');
     },
     ...overrides,
@@ -1233,6 +1239,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async deactivateAccount() {
         throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
       },
+      async activateAccount() {
+        throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
+      },
     };
     const app = appWith({ users });
 
@@ -1288,6 +1297,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async deactivateAccount() {
         throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
       },
+      async activateAccount() {
+        throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
+      },
     };
     const app = appWith({ users });
 
@@ -1326,6 +1338,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async deactivateAccount() {
         throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
+      },
+      async activateAccount() {
+        throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
       },
     };
     const app = appWith({ users });
@@ -1390,6 +1405,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async deactivateAccount() {
         throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
+      },
+      async activateAccount() {
+        throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
       },
     };
     const app = appWith({ users });
@@ -2218,6 +2236,104 @@ describe('POST /api/admin/users/:id/deactivate (US-025/AC-01, AC-02, AC-04, AC-1
   it('refuses a request with no token at all', async () => {
     const app = appWith({ users: usersFor() });
     const response = await request(app).post(`/api/admin/users/${USER_ID}/deactivate`);
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/users/:id/activate (US-026/AC-01, AC-03, AC-04, AC-05, AC-07, AC-08)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  it('a successful activation returns 200 with the exact account shape and a private, no-store cache header (US-026/AC-06, design note §6.1/F1)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async activateAccount({ id }) {
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true },
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/activate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: USER_ID,
+      fullName: 'Dana Silva',
+      email: 'dana@company.com',
+      role: 'employee',
+      isActive: true,
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('an id matching no account gets 404 user_not_found', async () => {
+    const app = appWith({ users: usersFor({ async activateAccount() { return { kind: 'not_found' }; } }) });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/activate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('user_not_found');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ users: usersFor() });
+
+    const response = await request(app)
+      .post('/api/admin/users/not-a-uuid/activate')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('the repository failing returns a bare 500', async () => {
+    const app = appWith({
+      users: usersFor({
+        async activateAccount() {
+          throw new Error('db unreachable');
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/activate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('refuses an Employee session with 403 admin_only, through the REAL mount, and changes nothing (US-026/AC-08)', async () => {
+    const activateCalls: unknown[] = [];
+    const app = appWith({
+      users: usersFor({
+        async activateAccount({ id }) {
+          activateCalls.push({ id });
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true },
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/activate`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    expect(activateCalls).toEqual([]);
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor() });
+    const response = await request(app).post(`/api/admin/users/${USER_ID}/activate`);
     expect(response.status).toBe(401);
   });
 });

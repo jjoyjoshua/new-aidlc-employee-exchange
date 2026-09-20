@@ -295,17 +295,38 @@ when the cascade runs (a race, or a stale row-menu list) is reported by the repo
 kind — `not_found`'s approved 404 copy would be false about an account that plainly exists. The
 **service** collapses it to `ok` with `cancelledCount: 0`, logged (design note §2.2, §3.2, D-05).
 
+## `activateAccount` (US-026/AC-01–AC-08 — the exact inverse of `deactivateAccount`, and much simpler)
+
+**No new migration.** `0004_last_active_admin_guard.sql`'s own closing comment forecast this:
+reactivation's `WHEN` clause requires `old.is_active`, which is false by definition on every
+`activateAccount` call, so the trigger function is never entered — not merely unlikely to fire, but
+structurally unreachable from this write. Architect design note:
+`inception/specs/US-026-reactivate-an-account/design-note.md` §2.
+
+**A plain single-row `UPDATE`, not an RPC — deliberately unlike `deactivateAccount`.** This write
+has one statement and no cross-table effect, so it follows `setRole`'s shape exactly: `is_active`
+and `updated_at` only, `.maybeSingle()`, no `blocked` outcome (there is nothing for the trigger to
+refuse) and no `already_active` outcome (a plain `UPDATE` cannot see the pre-write state, and
+unlike the cascade, a repeat activation has no side effect to double-fire — design note §3).
+
+**`deactivated_at` is never touched.** `0001_user_profiles.sql`'s own comment scopes that column to
+"when REQ-020 last ran" — an audit stamp of the most recent deactivation, not a live state flag.
+Nulling it on reactivation would erase that history for no requirement that asks for it
+(`decisions.md` D-01, design note §4).
+
+**No `requireActingAdmin`.** Nothing this write does needs attribution — the same position
+`POST /users/:id/role` already takes, for the identical reason: no column exists to attribute to
+(`decisions.md` D-03, design note §5).
+
 ## The forward constraint
 
-US-026 (Activate) and US-027 (admin password reset) each add a route here, not to `bookings` or
-`desks`. **US-026's `is_active` flip depends on the IDENTICAL `0004` trigger US-024 added and
-US-025 confirmed, and must not add a second one** (`ADR-013` Decision item 4). US-027 is an UPDATE
+US-027 (admin password reset) adds a route here, not to `bookings` or `desks`. It is an UPDATE
 crossing the same Auth/profile seam US-023 settled, and applies `ADR-012` by name rather than
 re-deriving its ordering and compensation shape; a future story whose write *creates* a row (none
 currently forecast) would instead apply `ADR-011`, unchanged. The row-menu items US-020 renders
-disabled become live one at a time as each of these stories lands — **Edit landed first (US-023),
-the role item second (US-024), the deactivate branch of the fourth item third (US-025)** — only
-its **activate** branch (`!account.isActive`) and Reset password remain
+disabled become live one at a time as each story lands — **Edit landed first (US-023), the role
+item second (US-024), the deactivate branch of the fourth item third (US-025), its activate branch
+fourth (US-026)** — only Reset password remains
 (design note §6, `ADR-010-unbuilt-destination-controls.md`).
 
 See `../README.md` for the module boundary this file must respect (`users` may import

@@ -3,6 +3,8 @@ import type { AdminSummary } from '@desk-booking/contracts';
 import {
   accountCreatedToast,
   accountUpdatedToast,
+  activateFailedAlert,
+  reactivatedToast,
   deactivateAndCancelLabel,
   deactivateBookingListItem,
   deactivateConfirmBodyWithBookings,
@@ -231,5 +233,17 @@ describe('deactivateFailedAlert (US-025/AC-11, ST-13)', () => {
 describe('deactivatedToast (US-025/AC-13, ST-14)', () => {
   it('states the effect, with no count (AC-06\'s count was the preview\'s, not this toast\'s)', () => {
     expect(deactivatedToast('Dana Silva')).toBe('Dana Silva can no longer sign in.');
+  });
+});
+
+describe('activateFailedAlert (US-026/AC-07)', () => {
+  it('names the person and states nothing changed, matching deactivateFailedAlert\'s own shape', () => {
+    expect(activateFailedAlert('Dana Silva')).toBe("We couldn't activate Dana Silva just now. Nothing has changed. Try again.");
+  });
+});
+
+describe('reactivatedToast (US-026/AC-06)', () => {
+  it('states the effect — they can sign in again', () => {
+    expect(reactivatedToast('Dana Silva')).toBe('Dana Silva can sign in again.');
   });
 });
