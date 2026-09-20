@@ -25,6 +25,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-019 | Take a desk out of service, and put it back | Complex | implemented | [`US-019-take-a-desk-out-of-service/`](US-019-take-a-desk-out-of-service/) |
 | US-020 | Find an account in the people list | Complex | implemented | [`US-020-find-an-account/`](US-020-find-an-account/) |
 | US-021 | Create a user account | Complex | implemented | [`US-021-create-a-user-account/`](US-021-create-a-user-account/) |
+| US-022 | Suggest an initial password | Medium | implemented | [`US-022-suggest-an-initial-password/`](US-022-suggest-an-initial-password/) |
 
 ## How to update
 
