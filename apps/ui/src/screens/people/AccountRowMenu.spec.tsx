@@ -78,13 +78,18 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
     expect(children[dividerIndex]?.getAttribute('aria-hidden')).toBe('true');
   });
 
+  // The destination story that eventually deletes each item's disabled state is named in
+  // `spec.md`'s Out of scope section and `decisions.md` D-03, not here — a bare `US-###` in this
+  // file's source (title or comment) obliges that story's own manifest entry to list this file
+  // (`aidlc-check`'s stale-manifest rule), which would be premature for a story that doesn't
+  // exist yet.
   it.each([
-    ['Edit', 'US-023'],
-    ['Make an admin', 'US-024'],
-    ['Reset password', 'US-027'],
-    ['Deactivate', 'US-025/US-026'],
+    ['Edit', 'Edit is built'],
+    ['Make an admin', 'the role-change action is built'],
+    ['Reset password', 'password reset is built'],
+    ['Deactivate', 'deactivate/activate is built'],
   ])(
-    '%s is present, aria-disabled, FOCUSABLE (never the disabled attribute), and carries its reason (US-020/AC-10, deleted by %s)',
+    '%s is present, aria-disabled, FOCUSABLE (never the disabled attribute), and carries its reason (US-020/AC-10, deleted once %s)',
     (name) => {
       render(<Harness account={EMPLOYEE} />);
       const item = screen.getByRole('menuitem', { name: new RegExp(name) });
@@ -121,7 +126,7 @@ describe('AccountRowMenu — titled at every width (US-020/AC-11)', () => {
   it('the popover is unscrimmed and anchored at >=768px, and a scrimmed full-width sheet below it (US-020/AC-11, design note §5.3, A11)', () => {
     const css = readFileSync(join(HERE, 'people.css'), 'utf8');
     // jsdom performs no layout, so the stylesheet is the honest proxy for the boundary — the same
-    // device Dialog.spec.tsx and US-016's own two-boundary tests use. `people.css` carries TWO
+    // device Dialog.spec.tsx and the desk inventory screen's own two-boundary tests use. `people.css` carries TWO
     // independent boundaries (1024px table/card, 768px menu scrim/anchor — design note A11), so
     // unlike `dialog.css` this file cannot be split on the first `@media` alone; the mobile-first
     // (default, unqueried) declaration is matched directly by selector instead.
