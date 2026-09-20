@@ -7,9 +7,16 @@
  * policy cannot silently drift apart (`password.ts`'s own stated reason for `newPasswordSchema`
  * being built ON the evaluator rather than beside it).
  *
- * Excludes `1`/`l`/`I`/`0`/`O` (BR-001.12, BRD-001 §10): the value is dictated or read from a
+ * Excludes `1`/`l`/`I`/`0`/`O` (REQ-033, V-18 — a generated **initial** password's own rule; see
+ * decision B2, `2026-09-10-uncodified-design-decisions.md`): the value is dictated or read from a
  * screen, never emailed, so a glyph a listener cannot tell apart from another turns one account
- * creation into an avoidable reset (SCR-008 ST-10's own reasoning, reused here verbatim).
+ * creation into an avoidable reset.
+ *
+ * **US-027's reset-password generator (`apps/api/src/domain/generate-reset-password.ts`)
+ * deliberately does NOT exclude these glyphs — see ADR-014.** V-18 scopes to a generated
+ * *initial* password and does not reach a reset; SCR-008 ST-11's approved design relies on a
+ * monospace, disambiguating font for legibility instead of exclusion. The two generators differ
+ * on purpose; this is not a drift to reconcile.
  */
 import { evaluatePasswordPolicy } from '@desk-booking/contracts';
 

@@ -173,3 +173,26 @@ export const deactivationPreviewSchema = z.object({
   ),
 });
 export type DeactivationPreview = z.infer<typeof deactivationPreviewSchema>;
+
+/**
+ * `POST /api/admin/users/:id/reset-password`'s `200` body (US-027/AC-01, AC-03).
+ *
+ * NOT `adminUserSchema` extended: `password` is a fact about THIS ONE RESPONSE, never a field of
+ * an account — every other consumer of `adminUserSchema` (the list, create, update, role,
+ * deactivate, activate routes) would otherwise have to remember it is never actually populated.
+ * `emailTakenDetailsSchema` above is the precedent for a purpose-built schema per distinct
+ * response shape.
+ *
+ * `password` is `z.string().min(1)` and NOT `newPasswordSchema` (design note §6): the browser's
+ * job here is to DISPLAY what the server already generated and set, not to re-adjudicate V-12
+ * against it. Re-validating would turn a future server-side policy change into a client-side
+ * rejection of a credential that has ALREADY been written to the account — the password changed,
+ * the browser refused to show it, and nobody can recover it.
+ *
+ * Not `.strict()` — additive-safe, matching every response in this package.
+ */
+export const resetPasswordResponseSchema = z.object({
+  account: adminUserSchema,
+  password: z.string().min(1),
+});
+export type ResetPasswordResponse = z.infer<typeof resetPasswordResponseSchema>;

@@ -215,6 +215,26 @@ export interface UsersRepository {
    * rows must answer `{ kind: 'not_found' }`, not a thrown Postgres error.
    */
   activateAccount(input: ActivateAccountInput): Promise<ActivateAccountOutcome>;
+
+  /**
+   * US-027/AC-07, AC-10. Names `must_change_password` and `updated_at` and NOTHING else — never
+   * `role`, never `is_active` — `setRole`/`activateAccount`'s own discipline for their own two
+   * columns.
+   *
+   * Unconditional, exactly like `activateAccount`: this is the first writer to set the flag back
+   * to `true` on an account that is already active. There is no `already_armed` outcome — a plain
+   * `UPDATE` cannot see the pre-write state, and a repeat has no side effect to double-fire, so
+   * `ok` is honest either way (AC-10's re-resettable case is this branch, not a separate one).
+   *
+   * `.maybeSingle()`, never `.single()` — zero matched rows answers `not_found`, not a throw.
+   *
+   * **This write doubles as the reset endpoint's existence check** (design note §2.2, §2.3): the
+   * service calls this FIRST, before generating a password or touching Supabase Auth, and reads
+   * `not_found` straight off this result rather than a preceding `findById`. `RETURNING` the same
+   * five columns `activateAccount` does is what makes that possible — one statement is the
+   * existence check, the write, and the response body.
+   */
+  armMustChangePassword(input: ArmMustChangePasswordInput): Promise<ArmMustChangePasswordOutcome>;
 }
 
 /** US-026. What `activateAccount` needs from the caller — `updatedAt` is the ONE clock reading
@@ -225,6 +245,17 @@ export interface ActivateAccountInput {
 }
 
 export type ActivateAccountOutcome =
+  | { kind: 'ok'; profile: ProfileDetailsRow }
+  | { kind: 'not_found' };
+
+/** US-027. What `armMustChangePassword` needs from the caller — `updatedAt` is the ONE clock
+ *  reading the service takes, threaded through exactly as `activateAccount` requires. */
+export interface ArmMustChangePasswordInput {
+  id: string;
+  updatedAt: Date;
+}
+
+export type ArmMustChangePasswordOutcome =
   | { kind: 'ok'; profile: ProfileDetailsRow }
   | { kind: 'not_found' };
 
@@ -467,6 +498,18 @@ export const usersRepository: UsersRepository = {
       .maybeSingle();
 
     if (error) throw new Error(`account activation failed: ${error.message}`);
+    return data ? { kind: 'ok', profile: data as ProfileDetailsRow } : { kind: 'not_found' };
+  },
+
+  async armMustChangePassword({ id, updatedAt }) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .update({ must_change_password: true, updated_at: updatedAt.toISOString() })
+      .eq('id', id)
+      .select('id, full_name, email, role, is_active')
+      .maybeSingle();
+
+    if (error) throw new Error(`must_change_password arming failed: ${error.message}`);
     return data ? { kind: 'ok', profile: data as ProfileDetailsRow } : { kind: 'not_found' };
   },
 };

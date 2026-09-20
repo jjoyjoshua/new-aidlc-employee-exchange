@@ -43,6 +43,7 @@ import {
   type DeactivationPreviewFetcher,
 } from '../../lib/deactivate-account.js';
 import { createFetchUsers, type FetchUsers } from '../../lib/fetch-users.js';
+import { createResetPassword, type ResetPasswordFetcher } from '../../lib/reset-password.js';
 import { createUpdateAccount, type UpdateAccountFetcher } from '../../lib/update-account.js';
 import { useUsers, type UsersFetcher } from '../../lib/use-users.js';
 import { AccountRow, AccountsTableHead } from './AccountRow.js';
@@ -67,6 +68,8 @@ import {
 } from './copy.js';
 import { DeactivateAccountDialog } from './DeactivateAccountDialog.js';
 import { useDeactivateAccountDialog } from './use-deactivate-account-dialog.js';
+import { ResetPasswordDialog } from './ResetPasswordDialog.js';
+import { useResetPasswordDialog } from './use-reset-password-dialog.js';
 import { RoleChangeDialog } from './RoleChangeDialog.js';
 import { useRoleChangeDialog } from './use-role-change-dialog.js';
 import { UserFormDialog } from './UserFormDialog.js';
@@ -94,9 +97,20 @@ export interface PeopleProps {
   deactivateAccount?: DeactivateAccountFetcher | undefined;
   /** Test seam for `POST /api/admin/users/:id/activate` (US-026). Defaults to the real call. */
   activateAccount?: ActivateAccountFetcher | undefined;
+  /** Test seam for `POST /api/admin/users/:id/reset-password` (US-027). Defaults to the real call. */
+  resetPassword?: ResetPasswordFetcher | undefined;
 }
 
-export function People({ fetchUsers, createAccount, updateAccount, changeRole, previewDeactivation, deactivateAccount, activateAccount }: PeopleProps) {
+export function People({
+  fetchUsers,
+  createAccount,
+  updateAccount,
+  changeRole,
+  previewDeactivation,
+  deactivateAccount,
+  activateAccount,
+  resetPassword,
+}: PeopleProps) {
   const { api, user, updateOwnRole } = useAuth();
 
   // Behind RequireSession, `user` is always present by the time this screen renders — the same
@@ -115,6 +129,7 @@ export function People({ fetchUsers, createAccount, updateAccount, changeRole, p
       previewDeactivation={previewDeactivation}
       deactivateAccount={deactivateAccount}
       activateAccount={activateAccount}
+      resetPassword={resetPassword}
     />
   );
 }
@@ -130,6 +145,7 @@ function PeopleContent({
   previewDeactivation,
   deactivateAccount,
   activateAccount,
+  resetPassword,
 }: {
   api: ApiClient;
   currentUserId: string;
@@ -141,6 +157,7 @@ function PeopleContent({
   previewDeactivation: DeactivationPreviewFetcher | undefined;
   deactivateAccount: DeactivateAccountFetcher | undefined;
   activateAccount: ActivateAccountFetcher | undefined;
+  resetPassword: ResetPasswordFetcher | undefined;
 }) {
   const resolvedFetch = useMemo(() => fetchUsers ?? createFetchUsers(api), [fetchUsers, api]);
   const resolvedCreateAccount = useMemo(() => createAccount ?? createCreateAccount(api), [createAccount, api]);
@@ -152,6 +169,7 @@ function PeopleContent({
   );
   const resolvedDeactivateAccount = useMemo(() => deactivateAccount ?? createDeactivateAccount(api), [deactivateAccount, api]);
   const resolvedActivateAccount = useMemo(() => activateAccount ?? createActivateAccount(api), [activateAccount, api]);
+  const resolvedResetPassword = useMemo(() => resetPassword ?? createResetPassword(api), [resetPassword, api]);
 
   const [typed, setTyped] = useState('');
   const [committedQ, setCommittedQ] = useState<string | undefined>(undefined);
@@ -309,6 +327,11 @@ function PeopleContent({
     [resolvedActivateAccount, users],
   );
 
+  // US-027. No `onChanged` callback: a reset touches no field the list displays (fullName, email,
+  // role, isActive are all unchanged), so there is nothing for `use-users.ts` to mark — unlike
+  // every other row-menu action, this one has no `markXxx` call of its own.
+  const resetPasswordDialog = useResetPasswordDialog(resolvedResetPassword);
+
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
@@ -341,6 +364,14 @@ function PeopleContent({
           onConfirm={deactivateAccountDialog.confirm}
           onDismiss={deactivateAccountDialog.dismiss}
           onRouteToPromote={deactivateAccountDialog.routeToPromote}
+        />
+      ) : null}
+
+      {resetPasswordDialog.dialog ? (
+        <ResetPasswordDialog
+          dialog={resetPasswordDialog.dialog}
+          onConfirm={resetPasswordDialog.confirm}
+          onDismiss={resetPasswordDialog.dismiss}
         />
       ) : null}
 
@@ -427,6 +458,7 @@ function PeopleContent({
           onChangeRole={roleChangeDialog.open}
           onDeactivate={deactivateAccountDialog.open}
           onActivate={handleActivate}
+          onResetPassword={resetPasswordDialog.open}
         />
       ) : null}
     </>
@@ -443,6 +475,7 @@ function PeopleReady({
   onChangeRole,
   onDeactivate,
   onActivate,
+  onResetPassword,
 }: {
   users: AdminUser[];
   committedQ: string | undefined;
@@ -453,6 +486,7 @@ function PeopleReady({
   onChangeRole: (account: AdminUser) => void;
   onDeactivate: (account: AdminUser) => void;
   onActivate: (account: AdminUser) => void;
+  onResetPassword: (account: AdminUser) => void;
 }) {
   if (users.length === 0) {
     // AC-08: this is the ONLY empty branch this screen ever reaches — the signed-in
@@ -491,6 +525,7 @@ function PeopleReady({
                 onChangeRole={onChangeRole}
                 onDeactivate={onDeactivate}
                 onActivate={onActivate}
+                onResetPassword={onResetPassword}
               />
             ))}
           </tbody>
@@ -507,6 +542,7 @@ function PeopleReady({
             onChangeRole={onChangeRole}
             onDeactivate={onDeactivate}
             onActivate={onActivate}
+            onResetPassword={onResetPassword}
           />
         ))}
       </ul>

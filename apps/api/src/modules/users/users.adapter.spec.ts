@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { usersAuthAdapter } from './users.adapter.js';
 import { setSupabaseForTesting } from '../../infra/supabase/index.js';
+import { logger } from '../../infra/logger/index.js';
 
 describe('usersAuthAdapter.createAccount (US-021/AC-01, AC-10)', () => {
   it('resolves ok with the new user id, always sending email_confirm: true (US-021/AC-10 — half of its proof, design note §3.4)', async () => {
@@ -219,6 +220,69 @@ describe('usersAuthAdapter.updateEmail (US-023/AC-05, AC-07)', () => {
     const outcome = await usersAuthAdapter.updateEmail('a-user-id', 'dana.okafor@company.com');
 
     expect(outcome).toEqual({ kind: 'unavailable' });
+    setSupabaseForTesting(undefined);
+  });
+});
+
+describe('usersAuthAdapter.setPassword (US-027/AC-01, AC-06)', () => {
+  it('calls admin.updateUserById with ONE attribute — password only, no other key (US-027/AC-01, US-027/AC-06)', async () => {
+    const calls: unknown[][] = [];
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById(...args: unknown[]) {
+            calls.push(args);
+            return { data: { user: { id: 'a-user-id' } }, error: null };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.setPassword('a-user-id', 'q4Lm1I0oTz8v');
+
+    expect(outcome).toEqual({ kind: 'ok' });
+    expect(calls).toEqual([['a-user-id', { password: 'q4Lm1I0oTz8v' }]]);
+    setSupabaseForTesting(undefined);
+  });
+
+  it('resolves unavailable, never throws, on any admin error — and never logs the password (US-027/AC-08)', async () => {
+    const logSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            return { data: { user: null }, error: { message: 'network error', code: undefined } };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.setPassword('a-user-id', 'q4Lm1I0oTz8v');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(logSpy.mock.calls[0])).not.toContain('q4Lm1I0oTz8v');
+    logSpy.mockRestore();
+    setSupabaseForTesting(undefined);
+  });
+
+  it('resolves unavailable when the admin call throws outright, and never logs the password (US-027/AC-08)', async () => {
+    const logSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            throw new Error('boom');
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.setPassword('a-user-id', 'q4Lm1I0oTz8v');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    expect(JSON.stringify(logSpy.mock.calls)).not.toContain('q4Lm1I0oTz8v');
+    logSpy.mockRestore();
     setSupabaseForTesting(undefined);
   });
 });

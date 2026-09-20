@@ -363,6 +363,46 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
   });
 
   /**
+   * US-027/AC-01, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11. No body — the verb sub-resource shape
+   * `/desks/:id/activate` already established, matching this file's own `/users/:id/activate`
+   * immediately above. `requireAdmin` at the mount point is AC-11's whole proof (no per-route
+   * check — the mount already decided who may reach this handler).
+   *
+   * No `requireActingAdmin` (D-03): a reset has no attribution column, the same position
+   * `POST /users/:id/role` already takes, deliberately unlike `/deactivate`.
+   *
+   * `unavailable` → `503 service_unavailable`: the account's own password was NOT changed on this
+   * branch (D-06, design note §2.1) — the service armed `must_change_password` before attempting
+   * the Auth write, and does not un-arm it on failure (design note §2.4, an accepted residual).
+   * `not_found` reuses `user_not_found`, the same code every other admin user route uses.
+   *
+   * `Cache-Control: private, no-store` is not optional here (NFR-01): the body carries a live,
+   * one-time credential, the most sensitive payload any route in this router returns.
+   */
+  router.post('/users/:id/reset-password', async (req, res, next) => {
+    try {
+      const parsedParams = userIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await users.resetPassword(parsedParams.data.id);
+
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.user_not_found, 'That account could not be found.');
+      }
+      if (outcome.kind === 'unavailable') {
+        throw serviceUnavailable('The account service is unavailable. Try again.');
+      }
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ account: outcome.account, password: outcome.password });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * US-014/AC-03, edge case. The desk vocabulary for the admin filter — every desk, active and
    * inactive. US-016/AC-01, AC-04, AC-05 extended this same handler additively with `bookedAhead`
    * (the service now also tallies each desk's upcoming Confirmed bookings) rather than adding a

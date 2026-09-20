@@ -22,19 +22,14 @@
  * properties; the <768px bottom sheet ignores them (it was always a plain `position: fixed;
  * inset: 0`, independent of the trigger's position).
  *
- * **The still-unbuilt items are `aria-disabled="true"` and FOCUSABLE — never the HTML `disabled`
- * attribute** (design note §6, ADR-010, ADR-010's decision record). `Button` renders `disabled`
- * as a real HTML attribute, which drops a control from the tab order and most screen readers'
- * browse mode; four such items inside a `role="menu"` would leave NOTHING focusable when it
- * opens, so AC-12's focus-return has nothing to test and the arrow keys below have nothing to
- * move between. Plain `<button>`s are used here, not the shared `Button` component, so this
- * component owns every one of `aria-disabled`, `title` and the visually-hidden reason directly —
- * `Button` is not modified, and no prop is added to it for this (`aria-disabled` would pass
- * through its `...rest` if it WERE used, which is the whole argument against adding a prop).
- * **US-023, US-024, US-025 and now US-026 are live:** `Edit`, the role item, and both branches of
- * the last item (Deactivate/Activate) are now real items — no `aria-disabled`, no reason to
- * carry — exactly as ADR-010 forecast, one item at a time (`users/README.md`). Reset password is
- * the only item still `aria-disabled`.
+ * **Every item is now live** (US-020's `aria-disabled="true"`/FOCUSABLE placeholder shape,
+ * ADR-010, was carried by `Edit`, the role item, Deactivate/Activate and finally Reset password
+ * one at a time as each destination story landed — US-023, US-024, US-025/US-026, then US-027 —
+ * exactly as ADR-010 forecast, `users/README.md`). Plain `<button>`s, not the shared `Button`
+ * component: `Button` renders `disabled` as a real HTML attribute, which would have dropped a
+ * still-unbuilt item from the tab order and most screen readers' browse mode while this menu
+ * carried any — that reasoning is now historical, but the plain `<button>`s stayed rather than
+ * being swapped for `Button` with nothing left to prove against the swap.
  *
  * **Outside-click dismissal** is implemented as a document-level listener scoped to the menu's
  * own DOM subtree, not the overlay element's own click target — the overlay is a zero-size
@@ -51,14 +46,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { AdminUser } from '@desk-booking/contracts';
-import {
-  ACTIVATE_LABEL,
-  DEACTIVATE_LABEL,
-  disabledMenuItemReason,
-  EDIT_LABEL,
-  RESET_PASSWORD_LABEL,
-  roleActionLabel,
-} from './copy.js';
+import { ACTIVATE_LABEL, DEACTIVATE_LABEL, EDIT_LABEL, RESET_PASSWORD_LABEL, roleActionLabel } from './copy.js';
 import './people.css';
 
 export interface AccountRowMenuProps {
@@ -85,11 +73,11 @@ export interface AccountRowMenuProps {
    *  handler, the fourth and last of the four (`users/README.md`). Only called when
    *  `!account.isActive`. */
   onActivate: (account: AdminUser) => void;
-}
-
-interface MenuItemSpec {
-  label: string;
-  danger?: boolean;
+  /** US-027. The reset-password item's own destination — stops being `aria-disabled` and gains
+   *  this handler. Permitted on the acting admin's own row too (US-027 edge cases; no self-row
+   *  exception in the approved SCR-008 spec) — the server is the only place V-07's admin-only
+   *  rule is enforced (design note §8). */
+  onResetPassword: (account: AdminUser) => void;
 }
 
 /** `--menu-anchor-*` are read by `people.css`'s >=768px rule only; the <768px bottom sheet is a
@@ -99,7 +87,16 @@ type AnchorStyle = CSSProperties & {
   '--menu-anchor-right'?: string;
 };
 
-export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChangeRole, onDeactivate, onActivate }: AccountRowMenuProps) {
+export function AccountRowMenu({
+  account,
+  triggerRef,
+  onDismiss,
+  onEdit,
+  onChangeRole,
+  onDeactivate,
+  onActivate,
+  onResetPassword,
+}: AccountRowMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `people-menu-title-${account.id}`;
 
@@ -176,29 +173,6 @@ export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChang
     items[nextIndex]?.focus();
   };
 
-  // The three items with no destination yet: real, correctly labelled, `aria-disabled`,
-  // focusable, carrying their reason via `title` AND a visually-hidden span (the pair
-  // `AdminBookingRow.tsx`'s own docblock establishes — "`title` alone is not an accessible name
-  // in practice"). `onClick` returns immediately; nothing this story builds ever runs (ADR-010).
-  function renderDisabledItem({ label, danger }: MenuItemSpec) {
-    return (
-      <button
-        key={label}
-        type="button"
-        role="menuitem"
-        aria-disabled="true"
-        title={disabledMenuItemReason}
-        className={danger ? 'people-menu__item people-menu__item--danger' : 'people-menu__item'}
-        onClick={(event) => {
-          event.preventDefault();
-        }}
-      >
-        {label}
-        <span className="people__visually-hidden">{disabledMenuItemReason}</span>
-      </button>
-    );
-  }
-
   // US-023's own destination has landed: a real, live item — no `aria-disabled`, no reason to
   // carry, and focus returns to the trigger the same way Escape/outside-click do (design note
   // §4.4's "Edit stops being aria-disabled and gains its handler").
@@ -213,6 +187,14 @@ export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChang
     triggerRef.current?.focus();
     onDismiss();
     onChangeRole(account);
+  }
+
+  // US-027's own destination — the same shape as `handleEdit`/`handleChangeRole`, the third of
+  // the four items. Reachable on every account, including the acting admin's own row.
+  function handleResetPassword() {
+    triggerRef.current?.focus();
+    onDismiss();
+    onResetPassword(account);
   }
 
   // US-025's own destination — the same shape as `handleEdit`/`handleChangeRole`, one item later
@@ -244,7 +226,9 @@ export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit, onChang
         <button type="button" role="menuitem" className="people-menu__item" onClick={handleChangeRole}>
           {roleActionLabel(account.role)}
         </button>
-        {renderDisabledItem({ label: RESET_PASSWORD_LABEL })}
+        <button type="button" role="menuitem" className="people-menu__item" onClick={handleResetPassword}>
+          {RESET_PASSWORD_LABEL}
+        </button>
         <hr className="people-menu__divider" aria-hidden="true" />
         {account.isActive ? (
           <button

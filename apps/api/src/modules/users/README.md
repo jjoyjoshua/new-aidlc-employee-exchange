@@ -40,6 +40,19 @@ The ONLY things stopping any of those four columns from leaking are this reposit
 test asserting the exact response body with `toEqual` (never `toMatchObject`) is what turns this
 into a check rather than a convention (`admin.routes.spec.ts`).
 
+**US-027 is `must_change_password`'s first re-armer.** Every writer before it only ever set the
+flag `false` (`clearMustChangePassword`, `modules/auth/auth.repository.ts`, once a person chooses
+their own password) — account creation gets `true` for free from the column default
+(`insertProfile`'s own docblock, `users.repository.ts`, states this explicitly). `armMustChangePassword`
+(`users.repository.ts`) is the first statement anywhere in this codebase that sets it back to
+`true` on an account that is already active. It is unconditional and doubles as the reset
+endpoint's existence check (design note §2.2, §2.3): there is no `already_armed` outcome, because
+a plain `UPDATE` cannot see the pre-write state and a repeat has no side effect to double-fire.
+**No compensating un-arm exists** if the follow-on Supabase Auth write then fails (D-06, design
+note §2.4): the account's password is untouched on that branch, so the only residual is an armed
+flag on an account whose credential did not change — which is what BR-001.17 already asks of a
+person carrying this flag, not a divergence worth a second write to repair.
+
 **`getSummaryCounts()` (US-020/AC-02, AC-06 — BR-001.11).** Selects `role, is_active` **only** —
 no `id`, no `email`, no `full_name` — over the WHOLE table, unconditionally unfiltered: this
 method takes no `q` parameter at all, so a future caller cannot pass one by mistake. It is the

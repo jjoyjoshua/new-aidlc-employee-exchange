@@ -24,7 +24,7 @@
 | REQ-018 | US-021 | 12/12 | delivered |
 | REQ-019 | US-023 | 9/9 | delivered |
 | REQ-020 | US-025, US-026 | 20/20 | delivered |
-| REQ-021 | US-027 | 0/11 | planned |
+| REQ-021 | US-027 | 11/11 | delivered |
 | REQ-022 | US-024 | 13/13 | delivered |
 | REQ-023 | US-028 | 0/8 | planned |
 | REQ-024 | US-029 | 0/10 | planned |

@@ -15,6 +15,7 @@ import type { UpdateAccountFetcher, UpdateAccountOutcome } from '../../lib/updat
 import type { ChangeRoleFetcher } from '../../lib/change-role.js';
 import type { DeactivateAccountFetcher, DeactivationPreviewFetcher } from '../../lib/deactivate-account.js';
 import type { ActivateAccountFetcher } from '../../lib/activate-account.js';
+import type { ResetPasswordFetcher } from '../../lib/reset-password.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -41,6 +42,7 @@ function SignedIn({
   previewDeactivation,
   deactivateAccount,
   activateAccount,
+  resetPassword,
   user = ADMIN,
   guarded = false,
 }: {
@@ -51,6 +53,7 @@ function SignedIn({
   previewDeactivation?: DeactivationPreviewFetcher;
   deactivateAccount?: DeactivateAccountFetcher;
   activateAccount?: ActivateAccountFetcher;
+  resetPassword?: ResetPasswordFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -71,6 +74,7 @@ function SignedIn({
       previewDeactivation={previewDeactivation}
       deactivateAccount={deactivateAccount}
       activateAccount={activateAccount}
+      resetPassword={resetPassword}
     />
   );
 
@@ -647,5 +651,104 @@ describe('People — change a role, edit-form route (US-024/AC-01, AC-08, AC-11)
 
     expect(await within(dialog).findByText('Marcus Vale is the only active admin.')).toBeInTheDocument();
     expect(updateAccount).not.toHaveBeenCalled();
+  });
+});
+
+async function openResetPasswordFor(fullName: string) {
+  await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${fullName}` })[0]!);
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Reset password' }));
+}
+
+describe('People — reset a password, row menu route (US-027/AC-01, AC-02, AC-03, AC-09, AC-10)', () => {
+  it('opening Reset password renders ST-10s confirmation, naming the account', async () => {
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openResetPasswordFor('Dana Silva');
+
+    expect(await screen.findByRole('alertdialog', { name: "Reset Dana Silva's password?" })).toBeInTheDocument();
+  });
+
+  it('a successful reset switches the SAME dialog to ST-11, showing the password exactly once, and never marks the row changed (US-027/AC-01, US-027/AC-03)', async () => {
+    let fetchCalls = 0;
+    const fetchUsers: FetchUsers = async () => {
+      fetchCalls += 1;
+      return okUsers([DANA, MARCUS], SUMMARY);
+    };
+    const resetPassword: ResetPasswordFetcher = async () => ({ kind: 'ok', account: DANA, password: 'q4Lm1I0oTz8v' });
+    render(<SignedIn fetchUsers={fetchUsers} resetPassword={resetPassword} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openResetPasswordFor('Dana Silva');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+
+    expect(await screen.findByRole('alertdialog', { name: "Dana Silva's new password" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('q4Lm1I0oTz8v')).toBeInTheDocument();
+    // No `markXxx` call for this action — the account's list-visible fields are unchanged, so no
+    // extra fetch and no changed summary line (design note: "no markXxx call of its own").
+    expect(fetchCalls).toBe(1);
+    expect(screen.getByText('38 people · 36 employees, 2 admins · 1 deactivated')).toBeInTheDocument();
+  });
+
+  it('Done closes the dialog and returns focus to the row trigger — the password is gone from state (US-027/AC-05)', async () => {
+    const resetPassword: ResetPasswordFetcher = async () => ({ kind: 'ok', account: DANA, password: 'q4Lm1I0oTz8v' });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} resetPassword={resetPassword} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openResetPasswordFor('Dana Silva');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Done' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('q4Lm1I0oTz8v')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Actions for Dana Silva' })[0]).toHaveFocus();
+  });
+
+  it('a failed reset shows the retryable failure, and the password is never rendered anywhere (US-027/AC-09)', async () => {
+    const resetPassword: ResetPasswordFetcher = async () => ({ kind: 'failed' });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} resetPassword={resetPassword} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openResetPasswordFor('Dana Silva');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+
+    expect(await screen.findByText("We couldn't reset Dana Silva's password just now. Nothing has changed. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('resetting an already-deactivated account still succeeds — no is_active predicate blocks it (story edge case 2, US-027/AC-01)', async () => {
+    const resetPassword: ResetPasswordFetcher = async () => ({ kind: 'ok', account: PRIYA, password: 'q4Lm1I0oTz8v' });
+    render(<SignedIn fetchUsers={async () => okUsers([PRIYA])} resetPassword={resetPassword} />);
+    await screen.findAllByText('Priya Raman');
+
+    await openResetPasswordFor('Priya Raman');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+
+    expect(await screen.findByRole('alertdialog', { name: "Priya Raman's new password" })).toBeInTheDocument();
+  });
+
+  it('an administrator can reset their OWN password from this screen — no self-row exception (US-027 edge cases, design note §8)', async () => {
+    // MARCUS shares the signed-in ADMIN's id in these fixtures.
+    const resetPassword: ResetPasswordFetcher = async () => ({ kind: 'ok', account: MARCUS, password: 'q4Lm1I0oTz8v' });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, MARCUS])} resetPassword={resetPassword} />);
+    await screen.findAllByRole('button', { name: 'Actions for Marcus Vale' });
+
+    await openResetPasswordFor('Marcus Vale');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
+
+    // The credential is still shown and readable before any subsequent admin request would 403
+    // the acting admin's own session (design note §8 — the server permits it, and the dialog
+    // survives to let it be read/copied).
+    expect(await screen.findByRole('alertdialog', { name: "Marcus Vale's new password" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('q4Lm1I0oTz8v')).toBeInTheDocument();
+  });
+});
+
+describe('People — reset password is admin-only, at the UI layer (US-027/AC-11)', () => {
+  it('an Employee session never reaches the people list, so the row menu (and Reset password within it) is unreachable', async () => {
+    render(<SignedIn fetchUsers={async () => okUsers([])} user={EMPLOYEE} guarded />);
+
+    expect(await screen.findByText('My bookings')).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Reset password' })).not.toBeInTheDocument();
   });
 });
