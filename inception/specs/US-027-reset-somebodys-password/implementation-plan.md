@@ -15,7 +15,7 @@
 | Status               | approved                       |
 | Approved by          | Joy Joshua <joy_j@trigent.com> |
 | Approved on          | 2026-09-20                     |
-| Plan commit approved | *(fill in once committed)*     |
+| Plan commit approved | c3d3888a2b5c6a39e9566c0e0cceb8a52e28139f |
 
 `go` was given in chat on 2026-09-20. `Approved by` is the human's name and email from `git config user.name` / `user.email`; if either is unset, ask them rather than writing `unknown`. `Plan commit approved` is normally the SHA of a commit holding this plan **as they read it**, made before this stamp, so a D2 reviewer can `git diff <sha> -- <this file>` and see whether the plan changed after approval. Here the human asked to combine the spec-package commit with the implementation commit rather than committing the plan separately first, so **the developer must fill in the `Plan commit approved` cell with that commit's own SHA right after making it** (`git rev-parse HEAD`), replacing the placeholder above — `aidlc-check` treats an unfilled or non-hex value as "records no plan commit" and fails until that cell holds a real, reachable SHA. The name is self-asserted, so it is attribution, not authentication.
 
