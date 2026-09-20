@@ -1312,7 +1312,17 @@
         "AC-07",
         "AC-08"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/ui/src/lib/activate-account.spec.ts",
+        "apps/ui/src/lib/use-users.spec.ts",
+        "apps/ui/src/screens/people/copy.spec.ts",
+        "apps/ui/src/screens/people/AccountRow.spec.tsx",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx",
+        "apps/ui/src/screens/people/People.spec.tsx"
+      ],
       "screens": [
         "SCR-008"
       ]

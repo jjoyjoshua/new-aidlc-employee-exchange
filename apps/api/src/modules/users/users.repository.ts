@@ -190,7 +190,43 @@ export interface UsersRepository {
    * a mis-spelled argument name, never a business outcome).
    */
   deactivateAccount(input: DeactivateAccountInput): Promise<DeactivateAccountOutcome>;
+  /**
+   * US-026/AC-01, AC-03, AC-04, AC-05, AC-07. Names `is_active` and `updated_at` and NOTHING
+   * else — never `role` (AC-03), never `must_change_password` (AC-05), never `deactivated_at`
+   * (design note §4 — that column is scoped in writing to "when REQ-020 last ran", an audit
+   * stamp `0001_user_profiles.sql:42` gives no reactivation branch to clear). AC-04 needs no
+   * predicate here at all: this method never names `bookings`, so the cascade's cancellations
+   * cannot be touched by construction, not by a guard.
+   *
+   * A plain `UPDATE`, not an RPC (design note §3) — unlike `deactivateAccount`, this write is one
+   * statement with no cross-table effect, so `setRole`'s shape (`:341-352`) is the correct model,
+   * right down to `updated_at` being set: `user_profiles.updated_at` carries no narrower scope the
+   * way `desks.updated_at` does (`0002_desks.sql`'s "REQ-016 only"), so this write sets it exactly
+   * as `updateProfileDetails`/`setRole` already do for their own non-rename edits.
+   *
+   * No `blocked` outcome: the last-active-admin trigger's `WHEN` clause requires `old.is_active`,
+   * which is false on every reactivation by definition, so the trigger is never entered (design
+   * note §2) — a `blocked` branch here would be unreachable. No `already_active` outcome either:
+   * a plain `UPDATE` cannot see the pre-write state, and unlike `deactivateAccount`'s cascade, a
+   * repeat activation has no side effect to double-fire, so `ok` is an honest answer either way
+   * (design note §3).
+   *
+   * `.maybeSingle()`, never `.single()` — `updateProfileDetails`'s own stated reason: zero matched
+   * rows must answer `{ kind: 'not_found' }`, not a thrown Postgres error.
+   */
+  activateAccount(input: ActivateAccountInput): Promise<ActivateAccountOutcome>;
 }
+
+/** US-026. What `activateAccount` needs from the caller — `updatedAt` is the ONE clock reading
+ *  the service takes, threaded through exactly as `setRole` requires. */
+export interface ActivateAccountInput {
+  id: string;
+  updatedAt: Date;
+}
+
+export type ActivateAccountOutcome =
+  | { kind: 'ok'; profile: ProfileDetailsRow }
+  | { kind: 'not_found' };
 
 /** US-025/AC-05. One row `previewDeactivation` reads back. */
 export interface PreviewDeactivationRow {
@@ -420,5 +456,17 @@ export const usersRepository: UsersRepository = {
     // `updateProfileDetails`'s "unrecognised unique violation" discipline: an outcome this code
     // does not know is a bug, never a refusal.
     throw new Error(`unrecognised deactivation outcome: ${String((payload as { outcome: unknown }).outcome)}`);
+  },
+
+  async activateAccount({ id, updatedAt }) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .update({ is_active: true, updated_at: updatedAt.toISOString() })
+      .eq('id', id)
+      .select('id, full_name, email, role, is_active')
+      .maybeSingle();
+
+    if (error) throw new Error(`account activation failed: ${error.message}`);
+    return data ? { kind: 'ok', profile: data as ProfileDetailsRow } : { kind: 'not_found' };
   },
 };

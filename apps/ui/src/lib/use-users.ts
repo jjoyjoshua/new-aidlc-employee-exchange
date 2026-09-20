@@ -96,6 +96,12 @@ export type UseUsersResult = UsersState & {
    * defensive consistency `markRoleChanged` applies, though a name never changes here.
    */
   markDeactivated: (account: AdminUser) => void;
+  /**
+   * US-026/AC-06. The exact inverse of `markDeactivated`: moves `summary.deactivated` by **-1
+   * only** — `total` and `employees`/`admins` stay exactly as they were, the same discipline
+   * `markDeactivated`'s own docblock states for its own single column.
+   */
+  markReactivated: (account: AdminUser) => void;
 };
 
 export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
@@ -185,5 +191,18 @@ export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
     });
   }, []);
 
-  return { ...state, markAdded, markUpdated, markRoleChanged, markDeactivated };
+  const markReactivated = useCallback((account: AdminUser) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+
+      // `total`/`employees`/`admins` are UNCHANGED — the exact inverse of `markDeactivated`'s own
+      // reasoning, moving the same single column the other way.
+      const summary = { ...current.summary, deactivated: current.summary.deactivated - 1 };
+      const users = current.users.map((row) => (row.id === account.id ? account : row)).sort(byFullName);
+
+      return { ...current, users, summary };
+    });
+  }, []);
+
+  return { ...state, markAdded, markUpdated, markRoleChanged, markDeactivated, markReactivated };
 }

@@ -33,6 +33,7 @@ import { TextField } from '../../components/text-field/TextField.js';
 import { Toast } from '../../components/toast/Toast.js';
 import { useAuth } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
+import { createActivateAccount, type ActivateAccountFetcher } from '../../lib/activate-account.js';
 import { createChangeRole, type ChangeRoleFetcher } from '../../lib/change-role.js';
 import { createCreateAccount, type CreateAccountFetcher } from '../../lib/create-account.js';
 import {
@@ -49,6 +50,7 @@ import { AccountSkeletonRow } from './AccountSkeletonRow.js';
 import {
   accountCreatedToast,
   accountUpdatedToast,
+  activateFailedAlert,
   ADD_PERSON_LABEL,
   CLEAR_SEARCH_FIELD_LABEL,
   CLEAR_SEARCH_LABEL,
@@ -57,6 +59,7 @@ import {
   matchLine,
   noMatchMessage,
   PAGE_TITLE,
+  reactivatedToast,
   roleChangedToast,
   SEARCH_LABEL,
   summaryLine,
@@ -89,9 +92,11 @@ export interface PeopleProps {
   previewDeactivation?: DeactivationPreviewFetcher | undefined;
   /** Test seam for `POST /api/admin/users/:id/deactivate` (US-025). Defaults to the real call. */
   deactivateAccount?: DeactivateAccountFetcher | undefined;
+  /** Test seam for `POST /api/admin/users/:id/activate` (US-026). Defaults to the real call. */
+  activateAccount?: ActivateAccountFetcher | undefined;
 }
 
-export function People({ fetchUsers, createAccount, updateAccount, changeRole, previewDeactivation, deactivateAccount }: PeopleProps) {
+export function People({ fetchUsers, createAccount, updateAccount, changeRole, previewDeactivation, deactivateAccount, activateAccount }: PeopleProps) {
   const { api, user, updateOwnRole } = useAuth();
 
   // Behind RequireSession, `user` is always present by the time this screen renders — the same
@@ -109,6 +114,7 @@ export function People({ fetchUsers, createAccount, updateAccount, changeRole, p
       changeRole={changeRole}
       previewDeactivation={previewDeactivation}
       deactivateAccount={deactivateAccount}
+      activateAccount={activateAccount}
     />
   );
 }
@@ -123,6 +129,7 @@ function PeopleContent({
   changeRole,
   previewDeactivation,
   deactivateAccount,
+  activateAccount,
 }: {
   api: ApiClient;
   currentUserId: string;
@@ -133,6 +140,7 @@ function PeopleContent({
   changeRole: ChangeRoleFetcher | undefined;
   previewDeactivation: DeactivationPreviewFetcher | undefined;
   deactivateAccount: DeactivateAccountFetcher | undefined;
+  activateAccount: ActivateAccountFetcher | undefined;
 }) {
   const resolvedFetch = useMemo(() => fetchUsers ?? createFetchUsers(api), [fetchUsers, api]);
   const resolvedCreateAccount = useMemo(() => createAccount ?? createCreateAccount(api), [createAccount, api]);
@@ -143,6 +151,7 @@ function PeopleContent({
     [previewDeactivation, api],
   );
   const resolvedDeactivateAccount = useMemo(() => deactivateAccount ?? createDeactivateAccount(api), [deactivateAccount, api]);
+  const resolvedActivateAccount = useMemo(() => activateAccount ?? createActivateAccount(api), [activateAccount, api]);
 
   const [typed, setTyped] = useState('');
   const [committedQ, setCommittedQ] = useState<string | undefined>(undefined);
@@ -274,6 +283,32 @@ function PeopleContent({
     handleClear,
   );
 
+  // US-026/AC-01, AC-06, AC-07, FR-05 (design note §6.2): no dialog, no count, no confirmation —
+  // activating just happens, `Desks.tsx`'s own `handleToggleActive` activate branch mirrored
+  // exactly. `activateInFlight` guards a double-click the same way that ref does there.
+  const activateInFlight = useRef(false);
+  const [activateFailure, setActivateFailure] = useState<string | undefined>(undefined);
+  const handleActivate = useCallback(
+    (account: AdminUser) => {
+      if (activateInFlight.current) return;
+      activateInFlight.current = true;
+      setActivateFailure(undefined);
+
+      void resolvedActivateAccount(account.id).then((outcome) => {
+        activateInFlight.current = false;
+        if (outcome.kind === 'ok') {
+          if (users.status === 'ready') users.markReactivated(outcome.account);
+          setSavedMessage(reactivatedToast(outcome.account.fullName));
+          return;
+        }
+        // AC-07's failure has no dialog to live in — a page-level `Alert`, mirroring
+        // `Desks.tsx`'s own `activateFailedAlert` shape for the identical asymmetry.
+        setActivateFailure(activateFailedAlert(account.fullName));
+      });
+    },
+    [resolvedActivateAccount, users],
+  );
+
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
@@ -317,6 +352,12 @@ function PeopleContent({
           </Button>
         ) : null}
       </div>
+
+      {activateFailure ? (
+        <Alert tone="danger" live="assertive">
+          {activateFailure}
+        </Alert>
+      ) : null}
 
       <div className="people__search">
         <span className="people__search-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: searchIconMarkup }} />
@@ -385,6 +426,7 @@ function PeopleContent({
           onEdit={userFormDialog.openEdit}
           onChangeRole={roleChangeDialog.open}
           onDeactivate={deactivateAccountDialog.open}
+          onActivate={handleActivate}
         />
       ) : null}
     </>
@@ -400,6 +442,7 @@ function PeopleReady({
   onEdit,
   onChangeRole,
   onDeactivate,
+  onActivate,
 }: {
   users: AdminUser[];
   committedQ: string | undefined;
@@ -409,6 +452,7 @@ function PeopleReady({
   onEdit: (account: AdminUser) => void;
   onChangeRole: (account: AdminUser) => void;
   onDeactivate: (account: AdminUser) => void;
+  onActivate: (account: AdminUser) => void;
 }) {
   if (users.length === 0) {
     // AC-08: this is the ONLY empty branch this screen ever reaches — the signed-in
@@ -446,6 +490,7 @@ function PeopleReady({
                 onEdit={onEdit}
                 onChangeRole={onChangeRole}
                 onDeactivate={onDeactivate}
+                onActivate={onActivate}
               />
             ))}
           </tbody>
@@ -461,6 +506,7 @@ function PeopleReady({
             onEdit={onEdit}
             onChangeRole={onChangeRole}
             onDeactivate={onDeactivate}
+            onActivate={onActivate}
           />
         ))}
       </ul>

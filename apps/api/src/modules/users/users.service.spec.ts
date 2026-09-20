@@ -61,6 +61,9 @@ function stubRepository({ accountsByQuery, summaryRows }: StubOptions): {
       async deactivateAccount() {
         throw new Error('deactivateAccount not stubbed — this suite does not exercise deactivateAccount');
       },
+      async activateAccount() {
+        throw new Error('activateAccount not stubbed — this suite does not exercise activateAccount');
+      },
     },
   };
 }
@@ -274,6 +277,9 @@ function stubForCreate({
     },
     async deactivateAccount() {
       throw new Error('deactivateAccount not stubbed — this suite does not exercise deactivateAccount');
+    },
+    async activateAccount() {
+      throw new Error('activateAccount not stubbed — this suite does not exercise activateAccount');
     },
   };
 
@@ -493,6 +499,9 @@ function stubForUpdate({
       throw new Error('not exercised by updateAccount tests');
     },
     async deactivateAccount() {
+      throw new Error('not exercised by updateAccount tests');
+    },
+    async activateAccount() {
       throw new Error('not exercised by updateAccount tests');
     },
   };
@@ -794,6 +803,9 @@ function stubForRoleChange(setRoleImpl?: (input: { id: string; role: 'employee' 
     async deactivateAccount() {
       throw new Error('not exercised by changeRole tests');
     },
+    async activateAccount() {
+      throw new Error('not exercised by changeRole tests');
+    },
   };
 
   return { repository, setRoleCalls };
@@ -888,6 +900,9 @@ function stubForPreview(
     async deactivateAccount() {
       throw new Error('not exercised by previewDeactivation tests');
     },
+    async activateAccount() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
   };
   return { repository, calls };
 }
@@ -962,6 +977,9 @@ function stubForDeactivate(
     async deactivateAccount(input) {
       calls.push(input);
       return impl(input);
+    },
+    async activateAccount() {
+      throw new Error('not exercised by deactivateAccount tests');
     },
   };
   return { repository, calls };
@@ -1064,5 +1082,98 @@ describe('createUsersService.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-1
     await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
 
     expect(Object.keys(calls[0] ?? {})).toEqual(['id', 'actorId', 'now', 'today']);
+  });
+});
+
+function stubForActivate(
+  activateImpl?: (input: { id: string; updatedAt: Date }) => Promise<{ kind: 'ok'; profile: ProfileDetailsRow } | { kind: 'not_found' }>,
+) {
+  const activateCalls: Array<{ id: string; updatedAt: Date }> = [];
+  const echoImpl = async (input: { id: string; updatedAt: Date }) => ({
+    kind: 'ok' as const,
+    profile: { ...currentRow(), id: input.id, is_active: true },
+  });
+
+  const repository: UsersRepository = {
+    async listAccounts() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async findByEmail() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async insertProfile() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async findById() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async updateProfileDetails() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async setRole() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async previewDeactivation() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async deactivateAccount() {
+      throw new Error('not exercised by activateAccount tests');
+    },
+    async activateAccount(input) {
+      activateCalls.push(input);
+      return (activateImpl ?? echoImpl)(input);
+    },
+  };
+
+  return { repository, activateCalls };
+}
+
+describe('createUsersService.activateAccount (US-026/AC-01, AC-03, AC-04, AC-05, AC-07)', () => {
+  it('threads ONE nowMs() reading to the repository as updatedAt, and returns isActive: true — the flag require-session.ts gates sign-in on (US-026/AC-01, US-026/AC-02)', async () => {
+    const { repository, activateCalls } = stubForActivate();
+
+    const outcome = await service(repository).activateAccount(UPDATE_INPUT.id);
+
+    expect(activateCalls).toEqual([{ id: UPDATE_INPUT.id, updatedAt: new Date(NOW_MS) }]);
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: true },
+    });
+  });
+
+  it('returns not_found when the repository reports zero matched rows (US-026/AC-07)', async () => {
+    const { repository } = stubForActivate(async () => ({ kind: 'not_found' }));
+
+    const outcome = await service(repository).activateAccount('missing-id');
+
+    expect(outcome).toEqual({ kind: 'not_found' });
+  });
+
+  it('reactivates a deactivated admin with its role intact — role is never in the write (US-026/AC-03)', async () => {
+    const { repository } = stubForActivate(async (input) => ({
+      kind: 'ok',
+      profile: { ...currentRow({ role: 'admin', is_active: false }), id: input.id, is_active: true },
+    }));
+
+    const outcome = await service(repository).activateAccount(UPDATE_INPUT.id);
+
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin', isActive: true },
+    });
+  });
+
+  it('no in-app admin count and no "blocked" branch — reactivation cannot fire the last-active-admin trigger (design note §2)', async () => {
+    // Structural: this test asserts the SHAPE of the call. The repository stub above never
+    // receives anything but { id, updatedAt } — no admins/summary argument exists for a
+    // service-side count to have been threaded through, mirroring changeRole's own proof.
+    const { repository, activateCalls } = stubForActivate();
+
+    await service(repository).activateAccount(UPDATE_INPUT.id);
+
+    expect(Object.keys(activateCalls[0] ?? {})).toEqual(['id', 'updatedAt']);
   });
 });

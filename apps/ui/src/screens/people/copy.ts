@@ -258,3 +258,18 @@ export function deactivateFailedAlert(fullName: string): string {
 export function deactivatedToast(fullName: string): string {
   return `${fullName} can no longer sign in.`;
 }
+
+// ── SCR-008 ST-12–ST-14 — reactivate an account (US-026) ────────────────────
+
+/** ST-13's shape, applied to a reactivation (US-026/AC-07) — matching this file's own
+ *  `deactivateFailedAlert`, not `desks/copy.ts`'s shorter `activateFailedAlert` (design note
+ *  §6.5/F5): "nothing has changed" is the useful half either way. */
+export function activateFailedAlert(fullName: string): string {
+  return `We couldn't activate ${fullName} just now. Nothing has changed. Try again.`;
+}
+
+/** ST-14's transient message (US-026/AC-06) — the exact inverse of `deactivatedToast`, stating
+ *  the effect (they can sign in again), not the mechanism. */
+export function reactivatedToast(fullName: string): string {
+  return `${fullName} can sign in again.`;
+}

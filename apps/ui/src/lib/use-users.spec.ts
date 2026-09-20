@@ -402,3 +402,66 @@ describe('useUsers.markDeactivated — replaces in place, moves ONLY deactivated
     expect(result.current.status).toBe('loading');
   });
 });
+
+describe('useUsers.markReactivated — replaces in place, moves ONLY deactivated (by -1), total/employees/admins untouched (US-026/AC-06)', () => {
+  const THREE: AdminUser[] = [
+    { id: '1', fullName: 'Amy Ito', email: 'amy@company.com', role: 'employee', isActive: true },
+    { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: false },
+    { id: '3', fullName: 'Zed Okoro', email: 'zed@company.com', role: 'admin', isActive: false },
+  ];
+  const THREE_SUMMARY: AdminSummary = { total: 3, employees: 2, admins: 1, deactivated: 2 };
+
+  async function readyHook(users: AdminUser[] = THREE, summary: AdminSummary = THREE_SUMMARY) {
+    const fetchUsers: UsersFetcher = async () => ({ kind: 'ok', users, summary });
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    return result;
+  }
+
+  it('replaces the row matching id with the updated (isActive: true) account (US-026/AC-06)', async () => {
+    const result = await readyHook();
+    const reactivated: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markReactivated(reactivated));
+
+    expect(result.current.status === 'ready' && result.current.users.find((u) => u.id === '2')).toEqual(reactivated);
+  });
+
+  it('moves ONLY summary.deactivated by -1 — total, employees and admins are unchanged (US-026/AC-06)', async () => {
+    const result = await readyHook();
+    const reactivated: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markReactivated(reactivated));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 3,
+      employees: 2,
+      admins: 1,
+      deactivated: 1,
+    });
+  });
+
+  it('reactivating an ADMIN moves the same single count — admins is untouched, unlike markRoleChanged (US-026/AC-03)', async () => {
+    const result = await readyHook();
+    const reactivated: AdminUser = { id: '3', fullName: 'Zed Okoro', email: 'zed@company.com', role: 'admin', isActive: true };
+
+    act(() => result.current.markReactivated(reactivated));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 3,
+      employees: 2,
+      admins: 1,
+      deactivated: 1,
+    });
+  });
+
+  it('is a no-op before the first successful load', async () => {
+    const fetchUsers: UsersFetcher = () => new Promise(() => undefined);
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    const reactivated: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: true };
+
+    expect(result.current.status).toBe('loading');
+    act(() => result.current.markReactivated(reactivated));
+    expect(result.current.status).toBe('loading');
+  });
+});

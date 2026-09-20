@@ -329,6 +329,40 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
   });
 
   /**
+   * US-026/AC-01, AC-03, AC-04, AC-05, AC-06, AC-08. No body — the verb sub-resource shape
+   * `/desks/:id/activate` already established (`api-standards.md`), not a `PATCH`. Unlike that
+   * desk route, this one DOES set `Cache-Control: private, no-store` (design note §6.1) — the
+   * account body carries email and full name, and every other `/users/*` route returning one sets
+   * this header; a desk body carries no PII and is the one mirror that must not be followed here.
+   *
+   * No `requireActingAdmin`: reactivation clears no attribution column (`deactivated_at` is left
+   * untouched, `decisions.md` D-01/D-03) — the same position `POST /users/:id/role` already takes.
+   *
+   * No `blocked` branch: reactivation cannot fire the last-active-admin trigger (design note §2),
+   * so the service reports only `ok`/`not_found`. `not_found` reuses `user_not_found`, the same
+   * code every other admin user route already uses.
+   */
+  router.post('/users/:id/activate', async (req, res, next) => {
+    try {
+      const parsedParams = userIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await users.activateAccount(parsedParams.data.id);
+
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.user_not_found, 'That account could not be found.');
+      }
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(outcome.account);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * US-014/AC-03, edge case. The desk vocabulary for the admin filter — every desk, active and
    * inactive. US-016/AC-01, AC-04, AC-05 extended this same handler additively with `bookedAhead`
    * (the service now also tallies each desk's upcoming Confirmed bookings) rather than adding a
