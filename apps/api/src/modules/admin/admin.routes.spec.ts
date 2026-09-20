@@ -127,6 +127,12 @@ const noUsers: UsersRepository = {
   async setRole() {
     throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
   },
+  async previewDeactivation() {
+    throw new Error('previewDeactivation not stubbed — this test does not exercise GET /users/:id/deactivation-preview');
+  },
+  async deactivateAccount() {
+    throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
+  },
 };
 
 const notUsedUsersAuth: UsersAuthAdapter = {
@@ -196,6 +202,12 @@ function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
     },
     async setRole({ id, role }) {
       return { kind: 'ok', profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role, is_active: true } };
+    },
+    async previewDeactivation() {
+      throw new Error('not exercised');
+    },
+    async deactivateAccount() {
+      throw new Error('not exercised');
     },
     ...overrides,
   };
@@ -1215,6 +1227,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async setRole() {
         throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
       },
+      async previewDeactivation() {
+        throw new Error('previewDeactivation not stubbed — this test does not exercise GET /users/:id/deactivation-preview');
+      },
+      async deactivateAccount() {
+        throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
+      },
     };
     const app = appWith({ users });
 
@@ -1264,6 +1282,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async setRole() {
         throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
       },
+      async previewDeactivation() {
+        throw new Error('previewDeactivation not stubbed — this test does not exercise GET /users/:id/deactivation-preview');
+      },
+      async deactivateAccount() {
+        throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
+      },
     };
     const app = appWith({ users });
 
@@ -1296,6 +1320,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async setRole() {
         throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
+      },
+      async previewDeactivation() {
+        throw new Error('previewDeactivation not stubbed — this test does not exercise GET /users/:id/deactivation-preview');
+      },
+      async deactivateAccount() {
+        throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
       },
     };
     const app = appWith({ users });
@@ -1354,6 +1384,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async setRole() {
         throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
+      },
+      async previewDeactivation() {
+        throw new Error('previewDeactivation not stubbed — this test does not exercise GET /users/:id/deactivation-preview');
+      },
+      async deactivateAccount() {
+        throw new Error('deactivateAccount not stubbed — this test does not exercise POST /users/:id/deactivate');
       },
     };
     const app = appWith({ users });
@@ -1955,6 +1991,233 @@ describe('POST /api/admin/users/:id/role (US-024/AC-01, AC-04, AC-13)', () => {
   it('refuses a request with no token at all', async () => {
     const app = appWith({ users: usersFor() });
     const response = await request(app).post(`/api/admin/users/${USER_ID}/role`).send({ role: 'admin' });
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('GET /api/admin/users/:id/deactivation-preview (US-025/AC-05)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  it('returns the previewed bookings mapped to the wire shape, with no count field — toEqual, never toMatchObject', async () => {
+    const previewCalls: Array<{ id: string; status: string; from: string }> = [];
+    const app = appWith({
+      users: usersFor({
+        async previewDeactivation(id, status, from) {
+          previewCalls.push({ id, status, from });
+          return [
+            { id: 'b-1', desk_number: 'A-01', booking_date: '2026-09-17' },
+            { id: 'b-2', desk_number: 'B-02', booking_date: '2026-09-19' },
+          ];
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .get(`/api/admin/users/${USER_ID}/deactivation-preview`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      bookings: [
+        { id: 'b-1', deskNumber: 'A-01', date: '2026-09-17' },
+        { id: 'b-2', deskNumber: 'B-02', date: '2026-09-19' },
+      ],
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    // The service's own "today" reading (US-025/AC-05, mirroring deactivateDesk's discipline).
+    expect(previewCalls).toEqual([{ id: USER_ID, status: 'confirmed', from: TODAY }]);
+  });
+
+  it('returns an empty bookings array for a person with nothing upcoming (US-025/AC-07)', async () => {
+    const app = appWith({ users: usersFor({ async previewDeactivation() { return []; } }) });
+
+    const response = await request(app)
+      .get(`/api/admin/users/${USER_ID}/deactivation-preview`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ bookings: [] });
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ users: usersFor() });
+
+    const response = await request(app)
+      .get('/api/admin/users/not-a-uuid/deactivation-preview')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('refuses an Employee session with 403 admin_only, through the REAL mount', async () => {
+    const app = appWith({
+      users: usersFor({
+        async previewDeactivation() {
+          throw new Error('must not be reached — the guard runs first');
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .get(`/api/admin/users/${USER_ID}/deactivation-preview`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor() });
+    const response = await request(app).get(`/api/admin/users/${USER_ID}/deactivation-preview`);
+    expect(response.status).toBe(401);
+  });
+
+  it('the repository failing returns a bare 500', async () => {
+    const app = appWith({
+      users: usersFor({
+        async previewDeactivation() {
+          throw new Error('db unreachable');
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .get(`/api/admin/users/${USER_ID}/deactivation-preview`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(500);
+  });
+});
+
+describe('POST /api/admin/users/:id/deactivate (US-025/AC-01, AC-02, AC-04, AC-10, AC-12, AC-13, AC-14)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  it('a successful deactivation returns 200 with the exact account shape — toEqual, never toMatchObject (US-025/AC-13)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async deactivateAccount({ id }) {
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: false },
+            cancelledBookings: [],
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: USER_ID,
+      fullName: 'Dana Silva',
+      email: 'dana@company.com',
+      role: 'employee',
+      isActive: false,
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('attributes the write to the ACTING admin, via requireActingAdmin — deliberately unlike the role route (design note §0, C19)', async () => {
+    const deactivateCalls: Array<{ id: string; actorId: string }> = [];
+    const app = appWith({
+      users: usersFor({
+        async deactivateAccount({ id, actorId }) {
+          deactivateCalls.push({ id, actorId });
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: false },
+            cancelledBookings: [],
+          };
+        },
+      }),
+    });
+
+    await request(app).post(`/api/admin/users/${USER_ID}/deactivate`).set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(deactivateCalls).toEqual([{ id: USER_ID, actorId: ADMIN.id }]);
+  });
+
+  it('the trigger\'s refusal maps to 422 last_active_admin, with no details payload (US-025/AC-10)', async () => {
+    const app = appWith({ users: usersFor({ async deactivateAccount() { return { kind: 'blocked' }; } }) });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('last_active_admin');
+    expect(response.body.details).toBeUndefined();
+  });
+
+  it('an id matching no account gets 404 user_not_found', async () => {
+    const app = appWith({ users: usersFor({ async deactivateAccount() { return { kind: 'not_found' }; } }) });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('user_not_found');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ users: usersFor() });
+
+    const response = await request(app)
+      .post('/api/admin/users/not-a-uuid/deactivate')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('the repository failing returns a bare 500', async () => {
+    const app = appWith({
+      users: usersFor({
+        async deactivateAccount() {
+          throw new Error('db unreachable');
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('refuses an Employee session with 403 admin_only, through the REAL mount, and changes nothing (US-025/AC-14)', async () => {
+    const deactivateCalls: unknown[] = [];
+    const app = appWith({
+      users: usersFor({
+        async deactivateAccount({ id, actorId }) {
+          deactivateCalls.push({ id, actorId });
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: false },
+            cancelledBookings: [],
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    expect(deactivateCalls).toEqual([]);
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor() });
+    const response = await request(app).post(`/api/admin/users/${USER_ID}/deactivate`);
     expect(response.status).toBe(401);
   });
 });

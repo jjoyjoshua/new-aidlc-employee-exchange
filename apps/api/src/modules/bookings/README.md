@@ -2,8 +2,8 @@
 
 ## Ownership (ADR-004 — read across, write within)
 
-**Owns (may write):** `bookings`, from **two** objects as of US-015: the owner-scoped
-`AvailabilityRepository` (`bookings.repository.ts`) and the cross-employee
+**Owns (may write):** `bookings`, from **two** objects **inside this module** as of US-015: the
+owner-scoped `AvailabilityRepository` (`bookings.repository.ts`) and the cross-employee
 `AdminBookingsRepository` (`admin-bookings.repository.ts`) — see US-015's paragraph below for why
 the second object writes at all. **Reads:** `desks`, via an explicit column list
 (`bookings.repository.ts`'s `listActiveDesks`) — never writes it. Desk inventory writes stay
@@ -11,6 +11,16 @@ exclusively in `modules/desks` once US-017 builds them. **Also reads `user_profi
 US-013 — `admin-bookings.repository.ts`'s `listBookings` joins to it for the employee's name
 (`full_name`), disambiguated by column (`user_profiles!user_id(...)`) because `bookings` has two
 foreign keys into that table (`user_id`, `cancelled_by`). Never writes it.
+
+**A THIRD writer exists as of US-025, and it lives outside this module entirely.**
+`deactivate_account_cascade` (`supabase/migrations/0005_deactivate_account_cascade.sql`), called
+via `usersRepository.deactivateAccount`'s `.rpc()`, cancels every one of a deactivated account's
+upcoming Confirmed bookings in the same transaction as the `user_profiles` flip. This is a written
+exception `app-architecture.md` §2 grants by name, not an ADR-004 violation: *"`users` owns the
+deactivation cascade, not `bookings`. BR-001.18 makes cancelling the leaver's desks part of
+deactivating the account — one act, one transaction, refusable as a whole."* If a reviewer is
+hunting a stray write to this table from outside `modules/bookings`, this is the one exception on
+record — see `modules/users/README.md`'s own section on it for the rest of the reasoning.
 
 ## What's here
 

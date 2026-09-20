@@ -195,3 +195,66 @@ export function roleChangeFailedAlert(fullName: string): string {
 export function roleChangedToast(fullName: string, newRole: UserRole): string {
   return newRole === 'admin' ? `${fullName} is now an admin.` : `${fullName} is now an employee.`;
 }
+
+// ── SCR-008 ST-05/ST-06/ST-07, ST-13, ST-14 — deactivate an account (US-025) ────
+
+/** ST-05/ST-06's shared title — the account, and the question, regardless of which body follows. */
+export function deactivateConfirmTitle(fullName: string): string {
+  return `Deactivate ${fullName}?`;
+}
+
+/** ST-05's body (US-025/AC-07) — no cancellation clause, no count: this person holds nothing
+ *  upcoming to cancel. */
+export const DEACTIVATE_CONFIRM_BODY_NO_BOOKINGS = "They won't be able to sign in. Their past bookings are kept.";
+
+/**
+ * ST-06's body (US-025/AC-05) — lists every qualifying booking individually (desk + date), never
+ * only the count, and states the desk return and the email in the same sentence. The FIRST word
+ * of `fullName` is used for "Dana is emailed" — the frames name the person conversationally, not
+ * by their full name a second time in one paragraph.
+ */
+export function deactivateConfirmBodyWithBookings(fullName: string, bookings: string[]): string {
+  const firstName = fullName.split(' ')[0];
+  const list = bookings.join(', ');
+  return (
+    `They won't be able to sign in, and their ${bookings.length === 1 ? 'upcoming booking' : `${bookings.length} upcoming bookings`} ` +
+    `will be cancelled — ${list}. Those desks go back into the pool and ${firstName} is emailed about each one. ` +
+    'Past bookings are kept.'
+  );
+}
+
+/** One line of ST-06's list — "A-01 on Tue 8 Sep" — `deactivateConfirmBodyWithBookings` joins
+ *  these with ", ". Kept separate so the dialog can build the array from typed booking rows
+ *  without this module reaching into `format-office-date.ts` twice for the same string. */
+export function deactivateBookingListItem(deskNumber: string, dateLabel: string): string {
+  return `${deskNumber} on ${dateLabel}`;
+}
+
+export const KEEP_ACTIVE_LABEL = 'Keep active';
+
+/** ST-06's confirming action carries the count in its own label (US-025/AC-06) — a habitual click
+ *  cannot hide what it does. ST-05 (no bookings) uses the plain `DEACTIVATE_LABEL` instead. */
+export function deactivateAndCancelLabel(count: number): string {
+  return `Deactivate and cancel ${count} ${count === 1 ? 'booking' : 'bookings'}`;
+}
+
+/**
+ * ST-07's refusal (US-025/AC-10). The TITLE is `lastActiveAdminRefusalTitle`, reused verbatim
+ * from the role-change refusal above — the frames render the identical sentence for both doors.
+ * The BODY differs: this one names desks, bookings and people, and that nobody could undo it —
+ * BR-001.11's full consequence for a deactivation, not a role change.
+ */
+export const DEACTIVATE_LAST_ACTIVE_ADMIN_REFUSAL_BODY =
+  'Deactivating this account would leave nobody able to manage desks, bookings or people — including nobody able to undo it. Make someone else an admin first.';
+
+/** ST-13's shape, applied to a deactivation (US-025/AC-11) — "nothing has changed" is the useful
+ *  half, matching `roleChangeFailedAlert`'s own pattern. */
+export function deactivateFailedAlert(fullName: string): string {
+  return `We couldn't deactivate ${fullName} just now. Nothing has changed. Try again.`;
+}
+
+/** ST-14's transient message (US-025/AC-13) — states the effect (they can no longer sign in),
+ *  not the mechanism, and carries no count: AC-06's count was the preview's, not this toast's. */
+export function deactivatedToast(fullName: string): string {
+  return `${fullName} can no longer sign in.`;
+}

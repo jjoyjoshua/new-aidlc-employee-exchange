@@ -9,7 +9,7 @@
  * naming this story by id.
  */
 import { supabase } from '../../infra/supabase/index.js';
-import type { UserRole } from '@desk-booking/contracts';
+import type { BookingStatus, OfficeDate, UserRole } from '@desk-booking/contracts';
 import { buildSearchFilter } from './search-filter.js';
 
 /** One row `listAccounts` reads back — the EXACT select list, and no more. */
@@ -152,7 +152,87 @@ export interface UsersRepository {
    * unique index), so no second discriminator is needed.
    */
   setRole(input: SetRoleInput): Promise<SetRoleOutcome>;
+  /**
+   * US-025/AC-05. The account's own **Confirmed** bookings dated `from` or later — desk number
+   * and date each, for the deactivate confirmation dialog to list individually. Read-only,
+   * changes nothing.
+   *
+   * Reads `bookings`, a table `modules/users` does NOT own — per `app-architecture.md` §2's
+   * written exception granting `users` the whole deactivation cascade (design note §6.1, D-02),
+   * the same "read across, write within" shape `desks.repository.ts`'s
+   * `countUpcomingConfirmedForDesk` already exercises for a different table.
+   *
+   * `status`/`from` arrive from the SERVICE's `displayStatusPredicate('confirmed', today)`
+   * reading — never written literally here, `countUpcomingConfirmedForDesk`'s own discipline.
+   * No `count` returned: the caller reads `.length` (design note §3.3, C15).
+   */
+  previewDeactivation(id: string, status: BookingStatus, from: OfficeDate): Promise<PreviewDeactivationRow[]>;
+  /**
+   * US-025/AC-01, AC-02, AC-03, AC-04, AC-10, AC-12. Calls the migration's
+   * `deactivate_account_cascade` Postgres function via `.rpc()` — the project's first cross-table
+   * transactional write (design note §2). One call, one transaction: flips `is_active` and
+   * `deactivated_at`, and cancels every Confirmed booking dated `today` or later for this account,
+   * or aborts the whole thing if BR-001.11's existing trigger (`0004_last_active_admin_guard.sql`,
+   * unmodified) refuses it.
+   *
+   * The four PostgREST argument names (`p_target_id`, `p_actor_id`, `p_now`, `p_today`) are a wire
+   * contract spelled ONLY in this method (design note §2.1, §3.1) — renaming any of them here
+   * without the migration is a breaking change that surfaces as `PGRST202` at runtime, never at
+   * typecheck.
+   *
+   * Four outcomes, not three: `already_inactive` is a real case (a race, or a stale list) that
+   * `not_found`'s approved 404 copy would misrepresent — the account plainly exists (design note
+   * §2.2). This method reports it faithfully; `usersService.deactivateAccount` decides what it
+   * means for the product (collapses it to `ok`, design note §3.2, C8).
+   *
+   * Matches `error.code === LAST_ACTIVE_ADMIN_SQLSTATE` ONLY — the same constant `setRole` uses,
+   * not re-declared — and throws on everything else, including `PGRST202` (a schema-cache miss or
+   * a mis-spelled argument name, never a business outcome).
+   */
+  deactivateAccount(input: DeactivateAccountInput): Promise<DeactivateAccountOutcome>;
 }
+
+/** US-025/AC-05. One row `previewDeactivation` reads back. */
+export interface PreviewDeactivationRow {
+  id: string;
+  desk_number: string;
+  booking_date: OfficeDate;
+}
+
+/** US-025. What `deactivateAccount` needs from the caller. `now`/`today` are ONE clock reading
+ *  (`officeToday(nowMs(), officeTimezone)`), never two — the same discipline every other writer
+ *  in this module follows for `updatedAt`. `actorId` is ATTRIBUTION only (`bookings.cancelled_by`,
+ *  BR-001.20) — `requireAdmin` at the mount is the sole authority over who may call this at all. */
+export interface DeactivateAccountInput {
+  id: string;
+  actorId: string;
+  now: Date;
+  today: OfficeDate;
+}
+
+/** One cascade-cancelled booking, as the RPC returns it (design note §2.3, C16). `deskNumber` is
+ *  joined so US-029/US-032 can compose copy naming a desk without a second query (FR-12) — a uuid
+ *  is not composable copy. `cancellationSource` is read BACK from the row, never re-asserted —
+ *  `0003_bookings.sql`'s own instruction to the notification composer. */
+export interface CancelledBookingRow {
+  id: string;
+  deskId: string;
+  deskNumber: string;
+  bookingDate: OfficeDate;
+  cancellationSource: 'deactivation_cascade';
+}
+
+export type DeactivateAccountOutcome =
+  | { kind: 'ok'; profile: ProfileDetailsRow; cancelledBookings: CancelledBookingRow[] }
+  /** US-025/design note §2.2. The account exists and was ALREADY inactive when the cascade ran —
+   *  a race, or a stale list. Distinct from `not_found`, whose approved 404 copy would be false
+   *  about an account that plainly exists. The SERVICE decides what this means for the product. */
+  | { kind: 'already_inactive'; profile: ProfileDetailsRow }
+  /** US-025/AC-10 (BR-001.11, V-11). The DATABASE refused it, inside the writing transaction,
+   *  via the SAME trigger and advisory lock `setRole` above relies on (`ADR-013`) — never an
+   *  in-app count. */
+  | { kind: 'blocked' }
+  | { kind: 'not_found' };
 
 /** US-024. What `setRole` needs from the caller — `updatedAt` is the ONE clock reading the
  *  service takes, threaded through exactly as `updateProfileDetails` requires (US-023's own
@@ -177,6 +257,25 @@ export type SetRoleOutcome =
  *  contract is `ERROR_CODES.last_active_admin` (`libs/contracts`), which the ROUTE composes from
  *  `blocked`. */
 const LAST_ACTIVE_ADMIN_SQLSTATE = 'Z0011';
+
+/** US-025. The one place this name and its four PostgREST argument names are spelled (design
+ *  note §2.1, §3.1) — renaming either without the migration is a breaking change that surfaces
+ *  as `PGRST202` at runtime, never at typecheck. */
+const DEACTIVATE_ACCOUNT_RPC = 'deactivate_account_cascade';
+
+/** The shape `deactivate_account_cascade` returns, as JSON, before this method reshapes it into
+ *  `DeactivateAccountOutcome` (design note §2.2, §2.3). Not exported — a database detail. */
+interface DeactivateAccountPayload {
+  outcome: 'ok' | 'not_found' | 'already_inactive';
+  profile?: ProfileDetailsRow;
+  cancelled_bookings?: Array<{
+    id: string;
+    desk_id: string;
+    desk_number: string;
+    booking_date: OfficeDate;
+    cancellation_source: 'deactivation_cascade';
+  }>;
+}
 
 export const usersRepository: UsersRepository = {
   async listAccounts(q) {
@@ -250,5 +349,76 @@ export const usersRepository: UsersRepository = {
     if (!error) return data ? { kind: 'ok', profile: data as ProfileDetailsRow } : { kind: 'not_found' };
     if (error.code === LAST_ACTIVE_ADMIN_SQLSTATE) return { kind: 'blocked' };
     throw new Error(`role change failed: ${error.message}`);
+  },
+
+  async previewDeactivation(id, status, from) {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('id, booking_date, desks(desk_number)')
+      .eq('user_id', id)
+      .eq('status', status)
+      .gte('booking_date', from);
+
+    if (error) throw new Error(`deactivation preview lookup failed: ${error.message}`);
+
+    // A many-to-one embed defaults to an array in supabase-js's types with no generated
+    // `Database` schema, but PostgREST embeds it as a single object at runtime
+    // (`admin-bookings.repository.ts`'s own precedent for this cast).
+    const rows = (data ?? []) as unknown as Array<{
+      id: string;
+      booking_date: OfficeDate;
+      desks: { desk_number: string } | null;
+    }>;
+
+    return rows.map((row) => {
+      // desk_id is NOT NULL (0003_bookings.sql) — a missing embed means something is
+      // structurally wrong, the same reasoning `admin-bookings.repository.ts` states.
+      if (!row.desks) throw new Error(`booking ${row.id} has no joined desk — desk_id is NOT NULL, this is a bug`);
+      return { id: row.id, desk_number: row.desks.desk_number, booking_date: row.booking_date };
+    });
+  },
+
+  async deactivateAccount({ id, actorId, now, today }) {
+    const { data, error } = await supabase().rpc(DEACTIVATE_ACCOUNT_RPC, {
+      p_target_id: id,
+      p_actor_id: actorId,
+      p_now: now.toISOString(),
+      p_today: today,
+    });
+
+    // Same constant, same single match, same reason as `setRole` above: `Z0011` is raised by
+    // exactly one statement in the whole schema. Everything else — including `PGRST202` (schema
+    // cache / a mis-spelled argument name) — throws rather than being mapped to a refusal it is
+    // not (design note §2.7, §3.1).
+    if (error) {
+      if (error.code === LAST_ACTIVE_ADMIN_SQLSTATE) return { kind: 'blocked' };
+      throw new Error(`account deactivation failed: ${error.message}`);
+    }
+
+    const payload = data as DeactivateAccountPayload | null;
+    if (!payload) throw new Error('deactivation returned no payload — this is a bug');
+
+    if (payload.outcome === 'not_found') return { kind: 'not_found' };
+
+    if (payload.outcome === 'already_inactive') {
+      if (!payload.profile) throw new Error('deactivation outcome "already_inactive" carried no profile — this is a bug');
+      return { kind: 'already_inactive', profile: payload.profile };
+    }
+
+    if (payload.outcome === 'ok') {
+      if (!payload.profile) throw new Error('deactivation outcome "ok" carried no profile — this is a bug');
+      const cancelledBookings: CancelledBookingRow[] = (payload.cancelled_bookings ?? []).map((row) => ({
+        id: row.id,
+        deskId: row.desk_id,
+        deskNumber: row.desk_number,
+        bookingDate: row.booking_date,
+        cancellationSource: row.cancellation_source,
+      }));
+      return { kind: 'ok', profile: payload.profile, cancelledBookings };
+    }
+
+    // `updateProfileDetails`'s "unrecognised unique violation" discipline: an outcome this code
+    // does not know is a bug, never a refusal.
+    throw new Error(`unrecognised deactivation outcome: ${String((payload as { outcome: unknown }).outcome)}`);
   },
 };

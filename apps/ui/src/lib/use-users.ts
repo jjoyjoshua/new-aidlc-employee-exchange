@@ -89,6 +89,13 @@ export type UseUsersResult = UsersState & {
    * account still moves these counts, exactly as one on an active account does.
    */
   markRoleChanged: (account: AdminUser) => void;
+  /**
+   * US-025/AC-13. NOT `markRoleChanged`'s shape: a deactivation moves `summary.deactivated` by
+   * +1 only — `total` (the population is unchanged) and `employees`/`admins` (role is untouched)
+   * stay exactly as they were. The row is replaced in place; sorted via `byFullName` for the same
+   * defensive consistency `markRoleChanged` applies, though a name never changes here.
+   */
+  markDeactivated: (account: AdminUser) => void;
 };
 
 export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
@@ -165,5 +172,18 @@ export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
     });
   }, []);
 
-  return { ...state, markAdded, markUpdated, markRoleChanged };
+  const markDeactivated = useCallback((account: AdminUser) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+
+      // `total`/`employees`/`admins` are UNCHANGED — the population did not change and neither did
+      // anyone's role (`markUpdated`'s own reasoning, applied to the one column this story moves).
+      const summary = { ...current.summary, deactivated: current.summary.deactivated + 1 };
+      const users = current.users.map((row) => (row.id === account.id ? account : row)).sort(byFullName);
+
+      return { ...current, users, summary };
+    });
+  }, []);
+
+  return { ...state, markAdded, markUpdated, markRoleChanged, markDeactivated };
 }

@@ -206,7 +206,6 @@
     },
     "REQ-024": {
       "stories": [
-        "US-025",
         "US-029"
       ],
       "screens": [
@@ -1264,8 +1263,7 @@
       "requirements": [
         "REQ-020",
         "REQ-030",
-        "REQ-005",
-        "REQ-024"
+        "REQ-005"
       ],
       "acs": [
         "AC-01",
@@ -1275,15 +1273,26 @@
         "AC-05",
         "AC-06",
         "AC-07",
-        "AC-08",
-        "AC-09",
         "AC-10",
         "AC-11",
         "AC-12",
         "AC-13",
         "AC-14"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/admin/admin.concurrency.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/ui/src/lib/deactivate-account.spec.ts",
+        "apps/ui/src/lib/use-users.spec.ts",
+        "apps/ui/src/screens/people/copy.spec.ts",
+        "apps/ui/src/screens/people/DeactivateAccountDialog.spec.tsx",
+        "apps/ui/src/screens/people/People.spec.tsx",
+        "apps/ui/src/screens/people/use-deactivate-account-dialog.spec.ts",
+        "libs/contracts/src/users.spec.ts",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx"
+      ],
       "screens": [
         "SCR-008"
       ]

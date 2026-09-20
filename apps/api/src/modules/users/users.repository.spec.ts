@@ -23,6 +23,7 @@ interface RecordedCall {
   or?: string;
   eq: Array<[string, unknown]>;
   neq?: [string, unknown];
+  gte?: [string, unknown];
   order: Array<{ column: string; ascending: boolean }>;
   insert?: unknown;
   update?: Record<string, unknown>;
@@ -53,6 +54,10 @@ function fakeSupabase(response: FakeResponse) {
         call.neq = [column, value];
         return builder;
       },
+      gte(column: string, value: unknown) {
+        call.gte = [column, value];
+        return builder;
+      },
       order(column: string, opts?: { ascending?: boolean }) {
         call.order.push({ column, ascending: opts?.ascending ?? true });
         return builder;
@@ -79,6 +84,24 @@ function fakeSupabase(response: FakeResponse) {
   }
 
   return { calls, client: { from } as unknown as SupabaseClient };
+}
+
+interface RecordedRpcCall {
+  name: string;
+  args: unknown;
+}
+
+/** US-025. This module's first `.rpc()` fake — `deactivateAccount` never calls `.from()`, so the
+ *  table-recording `fakeSupabase` above does not apply. Records the RPC name and its argument
+ *  object so a test can assert the exact wire contract (design note §2.1, §3.1) without touching
+ *  real Postgres — that proof is `admin.concurrency.spec.ts`'s gated case, not this file's job. */
+function fakeSupabaseRpc(response: FakeResponse) {
+  const calls: RecordedRpcCall[] = [];
+  function rpc(name: string, args: unknown) {
+    calls.push({ name, args });
+    return Promise.resolve(response);
+  }
+  return { calls, client: { rpc } as unknown as SupabaseClient };
 }
 
 const ROW_A = { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true };
@@ -646,6 +669,244 @@ describe('usersRepository.setRole (US-024/AC-01, AC-04, AC-07, AC-12)', () => {
       await expect(
         usersRepository.setRole({ id: ROW_A.id, role: 'employee', updatedAt: UPDATED_AT }),
       ).rejects.toThrow(/role change failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('usersRepository.previewDeactivation (US-025/AC-05)', () => {
+  it('selects id, booking_date and the joined desk_number, filtered on user_id/status/booking_date >= from', async () => {
+    const { calls, client } = fakeSupabase({
+      data: [{ id: 'b-1', booking_date: '2026-09-08', desks: { desk_number: 'A-01' } }],
+      error: null,
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.previewDeactivation(ROW_A.id, 'confirmed', '2026-09-08');
+
+      expect(calls).toEqual([
+        {
+          table: 'bookings',
+          select: 'id, booking_date, desks(desk_number)',
+          eq: [
+            ['user_id', ROW_A.id],
+            ['status', 'confirmed'],
+          ],
+          gte: ['booking_date', '2026-09-08'],
+          order: [],
+        },
+      ]);
+      expect(result).toEqual([{ id: 'b-1', desk_number: 'A-01', booking_date: '2026-09-08' }]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns an empty list rather than throwing when nothing qualifies (US-025/AC-07\'s population)', async () => {
+    const { client } = fakeSupabase({ data: [], error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      expect(await usersRepository.previewDeactivation(ROW_A.id, 'confirmed', '2026-09-08')).toEqual([]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws if a row has no joined desk — desk_id is NOT NULL, this would be a bug', async () => {
+    const { client } = fakeSupabase({ data: [{ id: 'b-1', booking_date: '2026-09-08', desks: null }], error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.previewDeactivation(ROW_A.id, 'confirmed', '2026-09-08')).rejects.toThrow(
+        /has no joined desk/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.previewDeactivation(ROW_A.id, 'confirmed', '2026-09-08')).rejects.toThrow(
+        /deactivation preview lookup failed/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+/**
+ * US-025/AC-01, AC-02, AC-04, AC-10, AC-12 (design note §2.1–§2.3, §3.1). Proves the four
+ * PostgREST argument names are the exact wire contract the migration expects, and that the four
+ * `outcome` values the RPC can return each map to the right repository kind — including the
+ * negative that matters: the SAME refusal MESSAGE under the default SQLSTATE must throw, never
+ * be reported as `blocked`, the identical discipline `setRole`'s own negative test proves.
+ */
+describe('usersRepository.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-10, AC-12)', () => {
+  const NOW = new Date('2026-09-20T10:00:00.000Z');
+  const INPUT = { id: ROW_A.id, actorId: 'actor-1', now: NOW, today: '2026-09-20' as const };
+
+  it('calls the RPC with exactly the four documented argument names', async () => {
+    const { calls, client } = fakeSupabaseRpc({
+      data: { outcome: 'ok', profile: { ...ROW_A, is_active: false }, cancelled_bookings: [] },
+      error: null,
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await usersRepository.deactivateAccount(INPUT);
+
+      expect(calls).toEqual([
+        {
+          name: 'deactivate_account_cascade',
+          args: {
+            p_target_id: ROW_A.id,
+            p_actor_id: 'actor-1',
+            p_now: NOW.toISOString(),
+            p_today: '2026-09-20',
+          },
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "ok" } with the deactivated profile and each cancelled booking mapped to camelCase', async () => {
+    const { client } = fakeSupabaseRpc({
+      data: {
+        outcome: 'ok',
+        profile: { ...ROW_A, is_active: false },
+        cancelled_bookings: [
+          {
+            id: 'b-1',
+            desk_id: 'd-1',
+            desk_number: 'A-01',
+            booking_date: '2026-09-20',
+            cancellation_source: 'deactivation_cascade',
+          },
+        ],
+      },
+      error: null,
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.deactivateAccount(INPUT);
+      expect(result).toEqual({
+        kind: 'ok',
+        profile: { ...ROW_A, is_active: false },
+        cancelledBookings: [
+          {
+            id: 'b-1',
+            deskId: 'd-1',
+            deskNumber: 'A-01',
+            bookingDate: '2026-09-20',
+            cancellationSource: 'deactivation_cascade',
+          },
+        ],
+      });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "ok" } with an empty cancelledBookings array when nothing qualified (US-025/AC-07\'s population)', async () => {
+    const { client } = fakeSupabaseRpc({
+      data: { outcome: 'ok', profile: { ...ROW_A, is_active: false }, cancelled_bookings: [] },
+      error: null,
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.deactivateAccount(INPUT);
+      expect(result).toEqual({ kind: 'ok', profile: { ...ROW_A, is_active: false }, cancelledBookings: [] });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when the outcome is not_found — no profile in the payload', async () => {
+    const { client } = fakeSupabaseRpc({ data: { outcome: 'not_found' }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      expect(await usersRepository.deactivateAccount(INPUT)).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "already_inactive" } with the profile — distinct from not_found, design note §2.2', async () => {
+    const { client } = fakeSupabaseRpc({
+      data: { outcome: 'already_inactive', profile: { ...ROW_A, is_active: false }, cancelled_bookings: [] },
+      error: null,
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.deactivateAccount(INPUT);
+      expect(result).toEqual({ kind: 'already_inactive', profile: { ...ROW_A, is_active: false } });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "blocked" } on the Z0011 SQLSTATE the last-active-admin trigger raises (US-025/AC-10)', async () => {
+    const { client } = fakeSupabaseRpc({
+      data: null,
+      error: { code: 'Z0011', message: 'BR-001.11: this change would leave the office with no active administrator' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      expect(await usersRepository.deactivateAccount(INPUT)).toEqual({ kind: 'blocked' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws — never "blocked" — on the SAME message under the DEFAULT SQLSTATE: the match is on the code, not the prose', async () => {
+    const { client } = fakeSupabaseRpc({
+      data: null,
+      error: { code: 'P0001', message: 'BR-001.11: this change would leave the office with no active administrator' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.deactivateAccount(INPUT)).rejects.toThrow(/account deactivation failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on PGRST202 (schema cache / mis-spelled argument) rather than mapping it to any outcome', async () => {
+    const { client } = fakeSupabaseRpc({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function in the schema cache' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.deactivateAccount(INPUT)).rejects.toThrow(/account deactivation failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on an unrecognised outcome value — a bug, never a refusal', async () => {
+    const { client } = fakeSupabaseRpc({ data: { outcome: 'something_new' }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.deactivateAccount(INPUT)).rejects.toThrow(/unrecognised deactivation outcome/);
     } finally {
       setSupabaseForTesting(undefined);
     }

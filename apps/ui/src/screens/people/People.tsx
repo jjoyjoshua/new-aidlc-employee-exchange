@@ -35,6 +35,12 @@ import { useAuth } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
 import { createChangeRole, type ChangeRoleFetcher } from '../../lib/change-role.js';
 import { createCreateAccount, type CreateAccountFetcher } from '../../lib/create-account.js';
+import {
+  createDeactivateAccount,
+  createPreviewDeactivation,
+  type DeactivateAccountFetcher,
+  type DeactivationPreviewFetcher,
+} from '../../lib/deactivate-account.js';
 import { createFetchUsers, type FetchUsers } from '../../lib/fetch-users.js';
 import { createUpdateAccount, type UpdateAccountFetcher } from '../../lib/update-account.js';
 import { useUsers, type UsersFetcher } from '../../lib/use-users.js';
@@ -46,6 +52,7 @@ import {
   ADD_PERSON_LABEL,
   CLEAR_SEARCH_FIELD_LABEL,
   CLEAR_SEARCH_LABEL,
+  deactivatedToast,
   LOAD_FAILED,
   matchLine,
   noMatchMessage,
@@ -55,6 +62,8 @@ import {
   summaryLine,
   TRY_AGAIN_LABEL,
 } from './copy.js';
+import { DeactivateAccountDialog } from './DeactivateAccountDialog.js';
+import { useDeactivateAccountDialog } from './use-deactivate-account-dialog.js';
 import { RoleChangeDialog } from './RoleChangeDialog.js';
 import { useRoleChangeDialog } from './use-role-change-dialog.js';
 import { UserFormDialog } from './UserFormDialog.js';
@@ -76,9 +85,13 @@ export interface PeopleProps {
   updateAccount?: UpdateAccountFetcher | undefined;
   /** Test seam for `POST /api/admin/users/:id/role` (US-024). Defaults to the real call. */
   changeRole?: ChangeRoleFetcher | undefined;
+  /** Test seam for `GET /api/admin/users/:id/deactivation-preview` (US-025). Defaults to the real call. */
+  previewDeactivation?: DeactivationPreviewFetcher | undefined;
+  /** Test seam for `POST /api/admin/users/:id/deactivate` (US-025). Defaults to the real call. */
+  deactivateAccount?: DeactivateAccountFetcher | undefined;
 }
 
-export function People({ fetchUsers, createAccount, updateAccount, changeRole }: PeopleProps) {
+export function People({ fetchUsers, createAccount, updateAccount, changeRole, previewDeactivation, deactivateAccount }: PeopleProps) {
   const { api, user, updateOwnRole } = useAuth();
 
   // Behind RequireSession, `user` is always present by the time this screen renders — the same
@@ -94,6 +107,8 @@ export function People({ fetchUsers, createAccount, updateAccount, changeRole }:
       createAccount={createAccount}
       updateAccount={updateAccount}
       changeRole={changeRole}
+      previewDeactivation={previewDeactivation}
+      deactivateAccount={deactivateAccount}
     />
   );
 }
@@ -106,6 +121,8 @@ function PeopleContent({
   createAccount,
   updateAccount,
   changeRole,
+  previewDeactivation,
+  deactivateAccount,
 }: {
   api: ApiClient;
   currentUserId: string;
@@ -114,11 +131,18 @@ function PeopleContent({
   createAccount: CreateAccountFetcher | undefined;
   updateAccount: UpdateAccountFetcher | undefined;
   changeRole: ChangeRoleFetcher | undefined;
+  previewDeactivation: DeactivationPreviewFetcher | undefined;
+  deactivateAccount: DeactivateAccountFetcher | undefined;
 }) {
   const resolvedFetch = useMemo(() => fetchUsers ?? createFetchUsers(api), [fetchUsers, api]);
   const resolvedCreateAccount = useMemo(() => createAccount ?? createCreateAccount(api), [createAccount, api]);
   const resolvedUpdateAccount = useMemo(() => updateAccount ?? createUpdateAccount(api), [updateAccount, api]);
   const resolvedChangeRole = useMemo(() => changeRole ?? createChangeRole(api), [changeRole, api]);
+  const resolvedPreviewDeactivation = useMemo(
+    () => previewDeactivation ?? createPreviewDeactivation(api),
+    [previewDeactivation, api],
+  );
+  const resolvedDeactivateAccount = useMemo(() => deactivateAccount ?? createDeactivateAccount(api), [deactivateAccount, api]);
 
   const [typed, setTyped] = useState('');
   const [committedQ, setCommittedQ] = useState<string | undefined>(undefined);
@@ -230,6 +254,26 @@ function PeopleContent({
   // clearing any stale term too: the administrator is about to type a NEW name to promote.
   const roleChangeDialog = useRoleChangeDialog(resolvedChangeRole, handleRoleChanged, handleClear);
 
+  // US-025/AC-13. `markDeactivated`, NOT `markRoleChanged`/`markUpdated`: a deactivation moves
+  // only `summary.deactivated` (`use-users.ts`'s own module docblock states why the three
+  // diverge). No `updateOwnRole` call here — self-deactivation is a server-permitted edge case
+  // this story does not build session handling for (design note §6.2 F13, open item 3).
+  const handleDeactivated = useCallback(
+    (account: AdminUser) => {
+      if (users.status === 'ready') users.markDeactivated(account);
+      setSavedMessage(deactivatedToast(account.fullName));
+    },
+    [users],
+  );
+  // ST-07's primary action (US-025/AC-10) — the identical focus-the-field device `roleChangeDialog`
+  // uses for its own last-active-admin refusal.
+  const deactivateAccountDialog = useDeactivateAccountDialog(
+    resolvedPreviewDeactivation,
+    resolvedDeactivateAccount,
+    handleDeactivated,
+    handleClear,
+  );
+
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
@@ -253,6 +297,15 @@ function PeopleContent({
           onConfirm={roleChangeDialog.confirm}
           onDismiss={roleChangeDialog.dismiss}
           onRouteToPromote={roleChangeDialog.routeToPromote}
+        />
+      ) : null}
+
+      {deactivateAccountDialog.dialog ? (
+        <DeactivateAccountDialog
+          dialog={deactivateAccountDialog.dialog}
+          onConfirm={deactivateAccountDialog.confirm}
+          onDismiss={deactivateAccountDialog.dismiss}
+          onRouteToPromote={deactivateAccountDialog.routeToPromote}
         />
       ) : null}
 
@@ -331,6 +384,7 @@ function PeopleContent({
           onAddPerson={userFormDialog.openAdd}
           onEdit={userFormDialog.openEdit}
           onChangeRole={roleChangeDialog.open}
+          onDeactivate={deactivateAccountDialog.open}
         />
       ) : null}
     </>
@@ -345,6 +399,7 @@ function PeopleReady({
   onAddPerson,
   onEdit,
   onChangeRole,
+  onDeactivate,
 }: {
   users: AdminUser[];
   committedQ: string | undefined;
@@ -353,6 +408,7 @@ function PeopleReady({
   onAddPerson: () => void;
   onEdit: (account: AdminUser) => void;
   onChangeRole: (account: AdminUser) => void;
+  onDeactivate: (account: AdminUser) => void;
 }) {
   if (users.length === 0) {
     // AC-08: this is the ONLY empty branch this screen ever reaches — the signed-in
@@ -389,6 +445,7 @@ function PeopleReady({
                 currentUserId={currentUserId}
                 onEdit={onEdit}
                 onChangeRole={onChangeRole}
+                onDeactivate={onDeactivate}
               />
             ))}
           </tbody>
@@ -403,6 +460,7 @@ function PeopleReady({
             currentUserId={currentUserId}
             onEdit={onEdit}
             onChangeRole={onChangeRole}
+            onDeactivate={onDeactivate}
           />
         ))}
       </ul>

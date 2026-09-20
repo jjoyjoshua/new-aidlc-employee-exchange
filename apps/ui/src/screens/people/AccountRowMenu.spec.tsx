@@ -31,11 +31,13 @@ function Harness({
   onDismiss = vi.fn(),
   onEdit = vi.fn(),
   onChangeRole = vi.fn(),
+  onDeactivate = vi.fn(),
 }: {
   account: AdminUser;
   onDismiss?: () => void;
   onEdit?: (account: AdminUser) => void;
   onChangeRole?: (account: AdminUser) => void;
+  onDeactivate?: (account: AdminUser) => void;
 }) {
   const triggerRef = createRef<HTMLButtonElement>();
   return (
@@ -43,7 +45,14 @@ function Harness({
       <button type="button" ref={triggerRef}>
         {`Actions for ${account.fullName}`}
       </button>
-      <AccountRowMenu account={account} triggerRef={triggerRef} onDismiss={onDismiss} onEdit={onEdit} onChangeRole={onChangeRole} />
+      <AccountRowMenu
+        account={account}
+        triggerRef={triggerRef}
+        onDismiss={onDismiss}
+        onEdit={onEdit}
+        onChangeRole={onChangeRole}
+        onDeactivate={onDeactivate}
+      />
     </div>
   );
 }
@@ -92,25 +101,32 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
   // `spec.md`'s Out of scope section and `decisions.md` D-03, not here — a bare `US-###` in this
   // file's source (title or comment) obliges that story's own manifest entry to list this file
   // (`aidlc-check`'s stale-manifest rule), which would be premature for a story that doesn't
-  // exist yet. `Edit` and the role item are no longer in this list — US-023 and US-024 are the
-  // destinations that landed.
-  it.each([
-    ['Reset password', 'password reset is built'],
-    ['Deactivate', 'deactivate/activate is built'],
-  ])(
-    '%s is present, aria-disabled, FOCUSABLE (never the disabled attribute), and carries its reason (US-020/AC-10, deleted once %s)',
-    (name) => {
-      render(<Harness account={EMPLOYEE} />);
-      const item = screen.getByRole('menuitem', { name: new RegExp(name) });
+  // exist yet. `Edit`, the role item and the deactivate branch are no longer in this list —
+  // US-023, US-024 and US-025 are the destinations that landed. Reset password, and the still
+  // unbuilt activate branch (exercised on a deactivated account below), remain.
+  it('Reset password is present, aria-disabled, FOCUSABLE (never the disabled attribute), and carries its reason (US-020/AC-10)', () => {
+    render(<Harness account={EMPLOYEE} />);
+    const item = screen.getByRole('menuitem', { name: /Reset password/ });
 
-      expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).not.toHaveAttribute('disabled');
-      expect(item).not.toBeDisabled();
-      expect(item.tabIndex).not.toBe(-1);
-      expect(item).toHaveAttribute('title', disabledMenuItemReason);
-      expect(within(item).getByText(disabledMenuItemReason)).toBeInTheDocument();
-    },
-  );
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).not.toHaveAttribute('disabled');
+    expect(item).not.toBeDisabled();
+    expect(item.tabIndex).not.toBe(-1);
+    expect(item).toHaveAttribute('title', disabledMenuItemReason);
+    expect(within(item).getByText(disabledMenuItemReason)).toBeInTheDocument();
+  });
+
+  it('the Activate branch is present, aria-disabled, FOCUSABLE, and carries its reason, for a deactivated account (US-020/AC-10, still unbuilt)', () => {
+    render(<Harness account={DEACTIVATED_ADMIN} />);
+    const item = screen.getByRole('menuitem', { name: /Activate/ });
+
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).not.toHaveAttribute('disabled');
+    expect(item).not.toBeDisabled();
+    expect(item.tabIndex).not.toBe(-1);
+    expect(item).toHaveAttribute('title', disabledMenuItemReason);
+    expect(within(item).getByText(disabledMenuItemReason)).toBeInTheDocument();
+  });
 
   it('clicking a disabled item does nothing — the menu stays open and onDismiss is not called (US-020/AC-10)', async () => {
     const onDismiss = vi.fn();
@@ -172,6 +188,32 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
 
     await userEvent.click(roleItem);
     expect(onChangeRole).toHaveBeenCalledWith(DEACTIVATED_ADMIN);
+  });
+
+  it('Deactivate is a real, live item for an active account — no aria-disabled, no title reason (US-025)', () => {
+    render(<Harness account={EMPLOYEE} />);
+    const deactivate = screen.getByRole('menuitem', { name: 'Deactivate' });
+
+    expect(deactivate).not.toHaveAttribute('aria-disabled');
+    expect(deactivate).not.toHaveAttribute('title');
+    expect(deactivate).not.toBeDisabled();
+  });
+
+  it('clicking Deactivate calls onDeactivate with the account, dismisses the menu, and returns focus to the trigger (US-025)', async () => {
+    const onDismiss = vi.fn();
+    const onDeactivate = vi.fn();
+    render(<Harness account={EMPLOYEE} onDismiss={onDismiss} onDeactivate={onDeactivate} />);
+
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Deactivate' }));
+
+    expect(onDeactivate).toHaveBeenCalledWith(EMPLOYEE);
+    expect(onDismiss).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Actions for Dana Silva' })).toHaveFocus();
+  });
+
+  it('Deactivate is NOT reachable for an already-deactivated account — that row renders the still-unbuilt Activate branch instead (US-025 boundary)', () => {
+    render(<Harness account={DEACTIVATED_ADMIN} />);
+    expect(screen.queryByRole('menuitem', { name: 'Deactivate' })).not.toBeInTheDocument();
   });
 });
 

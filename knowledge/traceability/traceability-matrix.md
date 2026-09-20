@@ -8,7 +8,7 @@
 | REQ-002 | US-001 | 8/8 | delivered |
 | REQ-003 | US-002 | 4/4 | delivered |
 | REQ-004 | US-020, US-021, US-024 | 38/38 | delivered |
-| REQ-005 | US-001, US-025, US-026 | 8/30 | in progress |
+| REQ-005 | US-001, US-025, US-026 | 20/28 | in progress |
 | REQ-006 | US-005 | 8/8 | delivered |
 | REQ-007 | US-006 | 10/10 | delivered |
 | REQ-008 | US-007 | 12/12 | delivered |
@@ -23,17 +23,17 @@
 | REQ-017 | US-006, US-016, US-019 | 32/32 | delivered |
 | REQ-018 | US-021 | 12/12 | delivered |
 | REQ-019 | US-023 | 9/9 | delivered |
-| REQ-020 | US-025, US-026 | 0/22 | planned |
+| REQ-020 | US-025, US-026 | 12/20 | in progress |
 | REQ-021 | US-027 | 0/11 | planned |
 | REQ-022 | US-024 | 13/13 | delivered |
 | REQ-023 | US-028 | 0/8 | planned |
-| REQ-024 | US-025, US-029 | 0/24 | planned |
+| REQ-024 | US-029 | 0/10 | planned |
 | REQ-025 | US-030 | 0/10 | planned |
 | REQ-026 | US-031 | 0/11 | planned |
 | REQ-027 | US-032 | 0/10 | planned |
 | REQ-028 | US-010, US-013 | 21/21 | delivered |
 | REQ-029 | US-004 | 8/8 | delivered |
-| REQ-030 | US-025 | 0/14 | planned |
+| REQ-030 | US-025 | 12/12 | delivered |
 | REQ-031 | US-014 | 10/10 | delivered |
 | REQ-032 | US-020 | 13/13 | delivered |
 | REQ-033 | US-022 | 6/6 | delivered |

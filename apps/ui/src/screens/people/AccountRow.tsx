@@ -49,6 +49,8 @@ export interface AccountRowProps {
   onEdit: (account: AdminUser) => void;
   /** US-024. Threaded down to the row's own `AccountRowMenu` — the role item. */
   onChangeRole: (account: AdminUser) => void;
+  /** US-025. Threaded down to the row's own `AccountRowMenu` — the deactivate branch. */
+  onDeactivate: (account: AdminUser) => void;
 }
 
 function OverflowIcon() {
@@ -68,10 +70,12 @@ function OverflowTrigger({
   account,
   onEdit,
   onChangeRole,
+  onDeactivate,
 }: {
   account: AdminUser;
   onEdit: (account: AdminUser) => void;
   onChangeRole: (account: AdminUser) => void;
+  onDeactivate: (account: AdminUser) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -96,6 +100,7 @@ function OverflowTrigger({
           onDismiss={() => setMenuOpen(false)}
           onEdit={onEdit}
           onChangeRole={onChangeRole}
+          onDeactivate={onDeactivate}
         />
       ) : null}
     </span>
@@ -109,7 +114,7 @@ function displayName(account: AdminUser, currentUserId: string): string {
   return account.id === currentUserId ? `${account.fullName} ${YOU_MARKER}` : account.fullName;
 }
 
-export function AccountRow({ account, layout, currentUserId, onEdit, onChangeRole }: AccountRowProps) {
+export function AccountRow({ account, layout, currentUserId, onEdit, onChangeRole, onDeactivate }: AccountRowProps) {
   const status = account.isActive ? 'active' : 'inactive';
   const name = displayName(account, currentUserId);
 
@@ -123,7 +128,7 @@ export function AccountRow({ account, layout, currentUserId, onEdit, onChangeRol
           <StatusChip kind="account" status={status} />
         </td>
         <td className="people-table__actions">
-          <OverflowTrigger account={account} onEdit={onEdit} onChangeRole={onChangeRole} />
+          <OverflowTrigger account={account} onEdit={onEdit} onChangeRole={onChangeRole} onDeactivate={onDeactivate} />
         </td>
       </tr>
     );
@@ -140,7 +145,7 @@ export function AccountRow({ account, layout, currentUserId, onEdit, onChangeRol
         </div>
       </div>
       <div className="people-card__actions">
-        <OverflowTrigger account={account} onEdit={onEdit} onChangeRole={onChangeRole} />
+        <OverflowTrigger account={account} onEdit={onEdit} onChangeRole={onChangeRole} onDeactivate={onDeactivate} />
       </div>
     </li>
   );
