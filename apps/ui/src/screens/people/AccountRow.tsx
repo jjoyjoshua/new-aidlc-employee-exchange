@@ -45,6 +45,8 @@ export interface AccountRowProps {
   /** US-020/AC-03. Compared against `account.id` to render the "(you)" marker — derived in the
    *  browser from `useAuth()`, never a wire field (design note §7.3). */
   currentUserId: string;
+  /** US-023. Threaded down to the row's own `AccountRowMenu` — the row menu's **Edit** item. */
+  onEdit: (account: AdminUser) => void;
 }
 
 function OverflowIcon() {
@@ -60,7 +62,7 @@ function OverflowIcon() {
   );
 }
 
-function OverflowTrigger({ account }: { account: AdminUser }) {
+function OverflowTrigger({ account, onEdit }: { account: AdminUser; onEdit: (account: AdminUser) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -78,7 +80,12 @@ function OverflowTrigger({ account }: { account: AdminUser }) {
         <OverflowIcon />
       </button>
       {menuOpen ? (
-        <AccountRowMenu account={account} triggerRef={triggerRef} onDismiss={() => setMenuOpen(false)} />
+        <AccountRowMenu
+          account={account}
+          triggerRef={triggerRef}
+          onDismiss={() => setMenuOpen(false)}
+          onEdit={onEdit}
+        />
       ) : null}
     </span>
   );
@@ -91,7 +98,7 @@ function displayName(account: AdminUser, currentUserId: string): string {
   return account.id === currentUserId ? `${account.fullName} ${YOU_MARKER}` : account.fullName;
 }
 
-export function AccountRow({ account, layout, currentUserId }: AccountRowProps) {
+export function AccountRow({ account, layout, currentUserId, onEdit }: AccountRowProps) {
   const status = account.isActive ? 'active' : 'inactive';
   const name = displayName(account, currentUserId);
 
@@ -105,7 +112,7 @@ export function AccountRow({ account, layout, currentUserId }: AccountRowProps) 
           <StatusChip kind="account" status={status} />
         </td>
         <td className="people-table__actions">
-          <OverflowTrigger account={account} />
+          <OverflowTrigger account={account} onEdit={onEdit} />
         </td>
       </tr>
     );
@@ -122,7 +129,7 @@ export function AccountRow({ account, layout, currentUserId }: AccountRowProps) 
         </div>
       </div>
       <div className="people-card__actions">
-        <OverflowTrigger account={account} />
+        <OverflowTrigger account={account} onEdit={onEdit} />
       </div>
     </li>
   );

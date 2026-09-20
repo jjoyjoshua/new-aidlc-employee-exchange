@@ -26,23 +26,55 @@ export interface RadioGroupProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /**
+   * US-023, ADR-010. Additive to `disabled` above, never a replacement — the two mean different
+   * things and the create-mode caller's existing `disabled` behaviour is untouched by this prop
+   * existing. Renders `aria-disabled="true"` and a per-option reason instead of the native
+   * `disabled` attribute, which would drop every radio from the tab order (`AccountRowMenu.tsx`'s
+   * own reasoning, `disabledMenuItemReason`/`ROLE_FIELD_DISABLED_REASON` — one vocabulary). A
+   * selection attempt is swallowed rather than reaching `onChange`, the same "return immediately;
+   * nothing runs" shape that component uses.
+   */
+  ariaDisabled?: boolean;
+  /** The reason announced for each option when `ariaDisabled` is set — required together with it,
+   *  since an `aria-disabled` control with no stated reason is exactly the failure ADR-010 exists
+   *  to prevent. */
+  ariaDisabledReason?: string;
 }
 
-export function RadioGroup({ legend, name, options, value, onChange, disabled }: RadioGroupProps) {
+export function RadioGroup({
+  legend,
+  name,
+  options,
+  value,
+  onChange,
+  disabled,
+  ariaDisabled,
+  ariaDisabledReason,
+}: RadioGroupProps) {
   return (
     <fieldset className="radio-group" disabled={disabled}>
       <legend className="radio-group__legend">{legend}</legend>
       {options.map((option) => (
-        <label key={option.value} className="radio-group__option">
+        <label
+          key={option.value}
+          className="radio-group__option"
+          title={ariaDisabled ? ariaDisabledReason : undefined}
+        >
           <input
             type="radio"
             className="radio-group__input"
             name={name}
             value={option.value}
             checked={value === option.value}
-            onChange={() => onChange(option.value)}
+            aria-disabled={ariaDisabled ? 'true' : undefined}
+            onChange={() => {
+              if (ariaDisabled) return;
+              onChange(option.value);
+            }}
           />
           <span className="radio-group__label">{option.label}</span>
+          {ariaDisabled ? <span className="people__visually-hidden">{ariaDisabledReason}</span> : null}
         </label>
       ))}
     </fieldset>

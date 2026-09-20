@@ -127,3 +127,33 @@ export const EMAIL_TAKEN_FIELD_MESSAGE = 'Already in use.';
 export function accountCreatedToast(fullName: string): string {
   return `${fullName} added. Give them the password you set — it hasn't been emailed, and they'll change it when they sign in.`;
 }
+
+// ── SCR-009 ST-02 — User form, edit mode (US-023) ──────────────────────────
+
+/** ST-02 — US-023/AC-01. `(you)` when editing the signed-in administrator's own account, so a
+ *  role change to self reads as visibly a change to self (SCR-009:126) — reuses `YOU_MARKER`
+ *  above, the same suffix `AccountRow`'s own name composes, never a second string for one fact. */
+export function editPersonTitle(fullName: string, isYou: boolean): string {
+  return isYou ? `Edit person — ${fullName} ${YOU_MARKER}` : `Edit person — ${fullName}`;
+}
+
+export const SAVE_CHANGES_LABEL = 'Save changes';
+
+/** ST-02's one line where create's password field would be (SCR-009:88, :108) — this story's own
+ *  design commitment: no password field and no password rules anywhere on the edit form. */
+export const RESET_PASSWORD_NOTE = "To change their password, use Reset password on the people list.";
+
+/** ST-07's edit-mode toast, distinct from `accountCreatedToast` above (SCR-009:157) — no delivery
+ *  burden to repeat, because nothing about a name/email correction is a credential. */
+export function accountUpdatedToast(fullName: string): string {
+  return `${fullName} updated.`;
+}
+
+/**
+ * Reused for the edit form's role radios, ADR-010's established string (`disabledMenuItemReason`
+ * above) rather than a second copy of the same fact: a role change is genuinely "not available yet
+ * — coming in a later release" from THIS form, since US-024 is what makes it savable (design note
+ * §4.3). Named separately from `disabledMenuItemReason` because the two are read in different
+ * contexts (a menu item's `title` vs. a fieldset's radios), not because the words differ.
+ */
+export const ROLE_FIELD_DISABLED_REASON = disabledMenuItemReason;

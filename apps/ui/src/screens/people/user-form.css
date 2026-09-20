@@ -13,3 +13,14 @@
   flex-direction: column;
   gap: var(--s-16);
 }
+
+/* US-023, SCR-009 ST-02 — where create's password field would be. Same quiet, non-error look as
+ * `text-field.css`'s own `.field__helper` (US-017 design note §5.4), reused here rather than a
+ * second helper-text rule for one line of copy. */
+.user-form__reset-password-note {
+  margin: 0;
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  color: var(--c-text-muted);
+}

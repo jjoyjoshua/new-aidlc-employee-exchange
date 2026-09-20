@@ -22,8 +22,10 @@ interface RecordedCall {
   select?: string;
   or?: string;
   eq: Array<[string, unknown]>;
+  neq?: [string, unknown];
   order: Array<{ column: string; ascending: boolean }>;
   insert?: unknown;
+  update?: Record<string, unknown>;
   maybeSingle?: true;
 }
 
@@ -47,12 +49,20 @@ function fakeSupabase(response: FakeResponse) {
         call.eq.push([column, value]);
         return builder;
       },
+      neq(column: string, value: unknown) {
+        call.neq = [column, value];
+        return builder;
+      },
       order(column: string, opts?: { ascending?: boolean }) {
         call.order.push({ column, ascending: opts?.ascending ?? true });
         return builder;
       },
       insert(row: unknown) {
         call.insert = row;
+        return builder;
+      },
+      update(values: Record<string, unknown>) {
+        call.update = values;
         return builder;
       },
       maybeSingle() {
@@ -287,6 +297,30 @@ describe('usersRepository.findByEmail (US-021/AC-06, D-02)', () => {
       setSupabaseForTesting(undefined);
     }
   });
+
+  it('issues no .neq() at all when excludeId is omitted — the two existing US-021 call sites (US-023)', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await usersRepository.findByEmail('dana@company.com');
+      expect(calls[0]?.neq).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('carries a .neq(id, excludeId) clause when excludeId is given (US-023/AC-02, AC-03 — defence in depth)', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await usersRepository.findByEmail('dana@company.com', '3f2504e0-4f89-41d3-9a0c-0305e82c3301');
+      expect(calls[0]?.neq).toEqual(['id', '3f2504e0-4f89-41d3-9a0c-0305e82c3301']);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
 });
 
 describe('usersRepository.insertProfile (US-021/AC-01, AC-08)', () => {
@@ -333,6 +367,184 @@ describe('usersRepository.insertProfile (US-021/AC-01, AC-08)', () => {
           role: 'employee',
         }),
       ).rejects.toThrow(/profile insert failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('usersRepository.findById (US-023 — read before any write, design note §2.6)', () => {
+  it('selects id, full_name, email, role, is_active, keyed on id', async () => {
+    const { calls, client } = fakeSupabase({ data: ROW_A, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.findById(ROW_A.id);
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          select: 'id, full_name, email, role, is_active',
+          eq: [['id', ROW_A.id]],
+          order: [],
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual(ROW_A);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined, not null, when no account holds the id', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      expect(await usersRepository.findById('missing-id')).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.findById(ROW_A.id)).rejects.toThrow(/user lookup failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('usersRepository.updateProfileDetails (US-023/AC-01, AC-07 — this module\'s first UPDATE)', () => {
+  const UPDATED_AT = new Date('2026-09-20T10:00:00.000Z');
+
+  it('updates full_name, email and updated_at ONLY, keyed on id — never must_change_password, never is_active (US-023/AC-06)', async () => {
+    const row = { ...ROW_A, full_name: 'Dana Okafor', email: 'dana.okafor@company.com' };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.updateProfileDetails({
+        id: ROW_A.id,
+        fullName: 'Dana Okafor',
+        email: 'dana.okafor@company.com',
+        updatedAt: UPDATED_AT,
+      });
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          select: 'id, full_name, email, role, is_active',
+          eq: [['id', ROW_A.id]],
+          order: [],
+          update: { full_name: 'Dana Okafor', email: 'dana.okafor@company.com', updated_at: UPDATED_AT.toISOString() },
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ kind: 'ok', profile: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('this is also the COMPENSATING restore\'s own statement — called again with the remembered old values (ADR-012)', async () => {
+    const row = { ...ROW_A };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await usersRepository.updateProfileDetails({
+        id: ROW_A.id,
+        fullName: ROW_A.full_name,
+        email: ROW_A.email,
+        updatedAt: UPDATED_AT,
+      });
+
+      expect(calls[0]?.update).toEqual({
+        full_name: ROW_A.full_name,
+        email: ROW_A.email,
+        updated_at: UPDATED_AT.toISOString(),
+      });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when no row matches the id — zero rows, not an error (US-023)', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.updateProfileDetails({
+        id: 'missing-id',
+        fullName: 'Dana Silva',
+        email: 'dana@company.com',
+        updatedAt: UPDATED_AT,
+      });
+      expect(result).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "duplicate" } on a 23505 naming user_profiles_email_key (US-023/AC-02)', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "user_profiles_email_key"' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.updateProfileDetails({
+        id: ROW_A.id,
+        fullName: 'Dana Silva',
+        email: 'marcus@company.com',
+        updatedAt: UPDATED_AT,
+      });
+      expect(result).toEqual({ kind: 'duplicate' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a 23505 naming an unrecognised index', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_key"' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.updateProfileDetails({
+          id: ROW_A.id,
+          fullName: 'Dana Silva',
+          email: 'dana@company.com',
+          updatedAt: UPDATED_AT,
+        }),
+      ).rejects.toThrow(/unrecognised unique violation/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on any other repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.updateProfileDetails({
+          id: ROW_A.id,
+          fullName: 'Dana Silva',
+          email: 'dana@company.com',
+          updatedAt: UPDATED_AT,
+        }),
+      ).rejects.toThrow(/user update failed/);
     } finally {
       setSupabaseForTesting(undefined);
     }

@@ -1188,9 +1188,28 @@
         "AC-08",
         "AC-09"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/error.spec.ts",
+        "libs/contracts/src/users.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.adapter.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/ui/src/screens/people/RadioGroup.spec.tsx",
+        "apps/ui/src/screens/people/UserFormDialog.spec.tsx",
+        "apps/ui/src/screens/people/AccountRow.spec.tsx",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx",
+        "apps/ui/src/screens/people/use-user-form-dialog.spec.ts",
+        "apps/ui/src/screens/people/copy.spec.ts",
+        "apps/ui/src/lib/update-account.spec.ts",
+        "apps/ui/src/lib/use-users.spec.ts",
+        "apps/ui/src/screens/people/People.spec.tsx"
+      ],
       "screens": [
         "SCR-009"
+      ],
+      "decisions": [
+        "ADR-012"
       ]
     },
     "US-024": {

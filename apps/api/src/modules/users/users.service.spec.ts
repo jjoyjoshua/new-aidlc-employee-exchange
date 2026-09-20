@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { createUsersService } from './users.service.js';
-import type { EmailLookupRow, InsertProfileInput, UserAccountRow, UsersRepository, UserSummaryRow } from './users.repository.js';
+import type {
+  EmailLookupRow,
+  InsertProfileInput,
+  ProfileDetailsRow,
+  UpdateProfileDetailsInput,
+  UpdateProfileDetailsOutcome,
+  UserAccountRow,
+  UsersRepository,
+  UserSummaryRow,
+} from './users.repository.js';
 import type { UsersAuthAdapter } from './users.adapter.js';
+
+const NOW_MS = new Date('2026-09-20T10:00:00.000Z').getTime();
 
 interface StubOptions {
   accountsByQuery: (q: string | undefined) => UserAccountRow[];
@@ -28,10 +39,16 @@ function stubRepository({ accountsByQuery, summaryRows }: StubOptions): {
         return summaryRows;
       },
       async findByEmail() {
-        throw new Error('findByEmail not stubbed — this suite does not exercise createAccount');
+        throw new Error('findByEmail not stubbed — this suite does not exercise createAccount/updateAccount');
       },
       async insertProfile() {
         throw new Error('insertProfile not stubbed — this suite does not exercise createAccount');
+      },
+      async findById() {
+        throw new Error('findById not stubbed — this suite does not exercise updateAccount');
+      },
+      async updateProfileDetails() {
+        throw new Error('updateProfileDetails not stubbed — this suite does not exercise updateAccount');
       },
     },
   };
@@ -45,11 +62,14 @@ function notStubbedUsersAuth(): UsersAuthAdapter {
     async deleteAccount() {
       throw new Error('deleteAccount not stubbed — this suite does not exercise it');
     },
+    async updateEmail() {
+      throw new Error('updateEmail not stubbed — this suite does not exercise it');
+    },
   };
 }
 
 function service(repository: UsersRepository, usersAuth: UsersAuthAdapter = notStubbedUsersAuth()) {
-  return createUsersService({ users: repository, usersAuth });
+  return createUsersService({ users: repository, usersAuth, nowMs: () => NOW_MS });
 }
 
 function row(overrides: Partial<UserAccountRow> = {}): UserAccountRow {
@@ -227,6 +247,12 @@ function stubForCreate({
       insertProfileCalls.push(input);
       return insertProfileImpl(input);
     },
+    async findById() {
+      throw new Error('findById not stubbed — this suite does not exercise updateAccount');
+    },
+    async updateProfileDetails() {
+      throw new Error('updateProfileDetails not stubbed — this suite does not exercise updateAccount');
+    },
   };
 
   const usersAuth: UsersAuthAdapter = {
@@ -236,6 +262,9 @@ function stubForCreate({
     async deleteAccount(userId) {
       deleteAccountCalls.push(userId);
       return deleteAccountResult;
+    },
+    async updateEmail() {
+      throw new Error('updateEmail not stubbed — this suite does not exercise updateAccount');
     },
   };
 
@@ -280,6 +309,9 @@ describe('createUsersService.createAccount — duplicate email (US-021/AC-06)', 
       },
       async deleteAccount() {
         return { kind: 'ok' };
+      },
+      async updateEmail() {
+        throw new Error('updateEmail not stubbed — this suite does not exercise updateAccount');
       },
     };
 
@@ -360,5 +392,326 @@ describe('createUsersService.createAccount — profile insert fails after the cr
     const outcome = await service(repository, usersAuth).createAccount(CREATE_INPUT);
 
     expect(outcome).toEqual({ kind: 'failed' });
+  });
+});
+
+function currentRow(overrides: Partial<ProfileDetailsRow> = {}): ProfileDetailsRow {
+  return {
+    id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    full_name: 'Dana Silva',
+    email: 'dana@company.com',
+    role: 'employee',
+    is_active: true,
+    ...overrides,
+  };
+}
+
+interface UpdateStubOptions {
+  /** Omit for the default row (`currentRow()`); pass `null` for "no account exists" (US-023's
+   *  not_found case) — `null`, not `undefined`, so a destructuring default can still fire on an
+   *  omitted key while leaving an explicit "no account" distinguishable (`exactOptionalPropertyTypes`). */
+  findByIdResult?: ProfileDetailsRow | null;
+  findByEmailResults?: Array<EmailLookupRow | undefined>;
+  updateProfileDetailsImpl?: (input: UpdateProfileDetailsInput) => Promise<UpdateProfileDetailsOutcome>;
+  updateEmailResult?: Awaited<ReturnType<UsersAuthAdapter['updateEmail']>>;
+}
+
+function stubForUpdate({
+  findByIdResult: findByIdResultOption = currentRow(),
+  findByEmailResults = [undefined],
+  updateProfileDetailsImpl,
+  updateEmailResult = { kind: 'ok' },
+}: UpdateStubOptions = {}) {
+  const findByIdResult = findByIdResultOption === null ? undefined : findByIdResultOption;
+  const findByEmailCalls: Array<{ email: string; excludeId?: string }> = [];
+  const updateProfileDetailsCalls: UpdateProfileDetailsInput[] = [];
+  const updateEmailCalls: Array<{ userId: string; email: string }> = [];
+  const deleteAccountCalls: string[] = [];
+  const createAccountCalls: unknown[] = [];
+  let findByEmailCallIndex = 0;
+
+  const echoImpl = async (input: UpdateProfileDetailsInput): Promise<UpdateProfileDetailsOutcome> => ({
+    kind: 'ok',
+    profile: {
+      id: input.id,
+      full_name: input.fullName,
+      email: input.email,
+      role: findByIdResult?.role ?? 'employee',
+      is_active: findByIdResult?.is_active ?? true,
+    },
+  });
+
+  const repository: UsersRepository = {
+    async listAccounts() {
+      throw new Error('not exercised by updateAccount tests');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised by updateAccount tests');
+    },
+    async findByEmail(email, excludeId) {
+      findByEmailCalls.push(excludeId === undefined ? { email } : { email, excludeId });
+      const result = findByEmailResults[findByEmailCallIndex];
+      findByEmailCallIndex = Math.min(findByEmailCallIndex + 1, findByEmailResults.length - 1);
+      return result;
+    },
+    async insertProfile() {
+      throw new Error('not exercised by updateAccount tests');
+    },
+    async findById() {
+      return findByIdResult;
+    },
+    async updateProfileDetails(input) {
+      updateProfileDetailsCalls.push(input);
+      return (updateProfileDetailsImpl ?? echoImpl)(input);
+    },
+  };
+
+  const usersAuth: UsersAuthAdapter = {
+    async createAccount() {
+      createAccountCalls.push('called');
+      return { kind: 'ok', userId: 'x' };
+    },
+    async deleteAccount(userId) {
+      deleteAccountCalls.push(userId);
+      return { kind: 'ok' };
+    },
+    async updateEmail(userId, email) {
+      updateEmailCalls.push({ userId, email });
+      return updateEmailResult;
+    },
+  };
+
+  return {
+    repository,
+    usersAuth,
+    findByEmailCalls,
+    updateProfileDetailsCalls,
+    updateEmailCalls,
+    deleteAccountCalls,
+    createAccountCalls,
+  };
+}
+
+const UPDATE_INPUT = {
+  id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+  fullName: 'Dana Okafor',
+  email: 'dana.okafor@company.com',
+};
+
+describe('createUsersService.updateAccount — account missing (US-023)', () => {
+  it('resolves not_found without touching either write', async () => {
+    const { repository, usersAuth, updateProfileDetailsCalls, updateEmailCalls } = stubForUpdate({
+      findByIdResult: null,
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'not_found' });
+    expect(updateProfileDetailsCalls).toEqual([]);
+    expect(updateEmailCalls).toEqual([]);
+  });
+});
+
+describe('createUsersService.updateAccount — email unchanged (US-023/AC-01, AC-03, design note §2.3)', () => {
+  it('never calls the Auth adapter at all when the normalised email is unchanged', async () => {
+    const { repository, usersAuth, updateEmailCalls } = stubForUpdate({
+      findByIdResult: currentRow({ email: 'dana@company.com' }),
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount({
+      id: UPDATE_INPUT.id,
+      fullName: 'Dana Silva (corrected)',
+      email: 'dana@company.com',
+    });
+
+    expect(outcome.kind).toBe('ok');
+    expect(updateEmailCalls).toEqual([]);
+  });
+
+  it('the unchanged-email guard is LOAD-BEARING (US-023/AC-03) — the current email never reaches the duplicate pre-check, even when findByEmail would report a self-collision', async () => {
+    const { repository, usersAuth, findByEmailCalls } = stubForUpdate({
+      findByIdResult: currentRow({ email: 'dana@company.com' }),
+      // If the guard were absent, this result would make the save look like a self-collision.
+      findByEmailResults: [{ full_name: 'Dana Silva', is_active: true }],
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount({
+      id: UPDATE_INPUT.id,
+      fullName: 'Dana Silva',
+      email: 'dana@company.com',
+    });
+
+    expect(outcome.kind).toBe('ok');
+    expect(findByEmailCalls).toEqual([]);
+  });
+
+  it('writes full_name/email/updated_at with the injected nowMs() reading (US-023, design note §2.10)', async () => {
+    const { repository, usersAuth, updateProfileDetailsCalls } = stubForUpdate({
+      findByIdResult: currentRow({ email: 'dana@company.com' }),
+    });
+
+    await service(repository, usersAuth).updateAccount({
+      id: UPDATE_INPUT.id,
+      fullName: 'Dana Silva (corrected)',
+      email: 'dana@company.com',
+    });
+
+    expect(updateProfileDetailsCalls).toEqual([
+      { id: UPDATE_INPUT.id, fullName: 'Dana Silva (corrected)', email: 'dana@company.com', updatedAt: new Date(NOW_MS) },
+    ]);
+  });
+});
+
+describe('createUsersService.updateAccount — the excludeId pre-check is defence in depth (US-023/AC-02, AC-03, design note §2.8)', () => {
+  it('passes excludeId on the pre-check whenever the email actually changed', async () => {
+    const { repository, usersAuth, findByEmailCalls } = stubForUpdate();
+
+    await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(findByEmailCalls[0]).toEqual({ email: 'dana.okafor@company.com', excludeId: UPDATE_INPUT.id });
+  });
+});
+
+describe('createUsersService.updateAccount — duplicate email (US-023/AC-02)', () => {
+  it('an active holder is refused before either write runs', async () => {
+    const { repository, usersAuth, updateProfileDetailsCalls, updateEmailCalls } = stubForUpdate({
+      findByEmailResults: [{ full_name: 'Existing Holder', is_active: true }],
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'duplicate', fullName: 'Existing Holder', isActive: true });
+    expect(updateProfileDetailsCalls).toEqual([]);
+    expect(updateEmailCalls).toEqual([]);
+  });
+
+  it('a deactivated holder is reported as such — the pre-check includes deactivated accounts (US-023/AC-02)', async () => {
+    const { repository, usersAuth } = stubForUpdate({
+      findByEmailResults: [{ full_name: 'Former Employee', is_active: false }],
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'duplicate', fullName: 'Former Employee', isActive: false });
+  });
+
+  it('a race the pre-check missed: user_profiles_email_key fires at write time, and the re-read composes the refusal', async () => {
+    const { repository, usersAuth } = stubForUpdate({
+      findByEmailResults: [undefined, { full_name: 'Concurrent Winner', is_active: true }],
+      updateProfileDetailsImpl: async () => ({ kind: 'duplicate' }),
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'duplicate', fullName: 'Concurrent Winner', isActive: true });
+  });
+
+  it('a write-time 23505 with no row visible on re-read resolves failed, not an undefined-named duplicate', async () => {
+    const { repository, usersAuth } = stubForUpdate({
+      findByEmailResults: [undefined, undefined],
+      updateProfileDetailsImpl: async () => ({ kind: 'duplicate' }),
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'failed' });
+  });
+});
+
+describe('createUsersService.updateAccount — the profile write reports not_found at write time (US-023)', () => {
+  it('resolves not_found — the account vanished between the read and the write', async () => {
+    const { repository, usersAuth } = stubForUpdate({
+      updateProfileDetailsImpl: async () => ({ kind: 'not_found' }),
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'not_found' });
+  });
+});
+
+describe('createUsersService.updateAccount — Auth write fails after the profile write succeeds (ADR-012, US-023/AC-01, AC-07, AC-08)', () => {
+  it('restores BOTH the old fullName and old email — never a partial revert (design note §2.7)', async () => {
+    const { repository, usersAuth, updateProfileDetailsCalls } = stubForUpdate({
+      findByIdResult: currentRow({ full_name: 'Dana Silva', email: 'dana@company.com' }),
+      updateEmailResult: { kind: 'unavailable' },
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    // The restore succeeded, so the ONLY thing surfaced is the original reason (`unavailable`,
+    // mirroring createAccount's own unavailable/failed split so the router can choose 503 over
+    // 500) — never a distinction about whether the compensation itself worked (ADR-011 item 3).
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    expect(updateProfileDetailsCalls).toEqual([
+      { id: UPDATE_INPUT.id, fullName: 'Dana Okafor', email: 'dana.okafor@company.com', updatedAt: new Date(NOW_MS) },
+      { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', updatedAt: new Date(NOW_MS) },
+    ]);
+  });
+
+  it('resolves failed even when the compensating restore ALSO fails — never thrown, never surfaced (ADR-012)', async () => {
+    let calls = 0;
+    const { repository, usersAuth } = stubForUpdate({
+      updateEmailResult: { kind: 'unavailable' },
+      updateProfileDetailsImpl: async (input) => {
+        calls += 1;
+        // First call (the happy-path write) succeeds; the second (the restore) fails.
+        if (calls === 1) return { kind: 'ok', profile: { id: input.id, full_name: input.fullName, email: input.email, role: 'employee', is_active: true } };
+        return { kind: 'not_found' };
+      },
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'failed' });
+  });
+
+  it('a GoTrue duplicate on the Auth write (a diverged/orphaned credential) still restores and resolves failed — never named as a ST-04 refusal (ADR-011 item 4)', async () => {
+    const { repository, usersAuth, updateProfileDetailsCalls } = stubForUpdate({
+      updateEmailResult: { kind: 'duplicate' },
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({ kind: 'failed' });
+    expect(updateProfileDetailsCalls).toHaveLength(2);
+  });
+});
+
+describe('createUsersService.updateAccount — AC-07: usersAuth.deleteAccount is unreachable from this path, on every branch', () => {
+  it.each([
+    ['account missing', { findByIdResult: null }],
+    ['duplicate at pre-check', { findByEmailResults: [{ full_name: 'Existing Holder', is_active: true }] }],
+    ['Auth write unavailable, restore succeeds', { updateEmailResult: { kind: 'unavailable' as const } }],
+    ['Auth write duplicate, restore succeeds', { updateEmailResult: { kind: 'duplicate' as const } }],
+  ])('%s', async (_label, options) => {
+    const { repository, usersAuth, deleteAccountCalls, createAccountCalls } = stubForUpdate(options);
+
+    await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(deleteAccountCalls).toEqual([]);
+    expect(createAccountCalls).toEqual([]);
+  });
+});
+
+describe('createUsersService.updateAccount — the happy path (US-023/AC-01, AC-05)', () => {
+  it('returns ok with the assembled account, and writes the Auth email exactly once', async () => {
+    const { repository, usersAuth, updateEmailCalls } = stubForUpdate({
+      findByIdResult: currentRow({ role: 'admin', is_active: true }),
+    });
+
+    const outcome = await service(repository, usersAuth).updateAccount(UPDATE_INPUT);
+
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: {
+        id: UPDATE_INPUT.id,
+        fullName: 'Dana Okafor',
+        email: 'dana.okafor@company.com',
+        role: 'admin',
+        isActive: true,
+      },
+    });
+    expect(updateEmailCalls).toEqual([{ userId: UPDATE_INPUT.id, email: 'dana.okafor@company.com' }]);
   });
 });

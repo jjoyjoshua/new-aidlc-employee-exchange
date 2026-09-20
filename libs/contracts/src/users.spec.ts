@@ -6,6 +6,8 @@ import {
   adminUsersResponseSchema,
   createAccountRequestSchema,
   emailTakenDetailsSchema,
+  userIdParamsSchema,
+  userUpdateSchema,
 } from './users.js';
 
 const VALID_USER = {
@@ -199,6 +201,72 @@ describe('createAccountRequestSchema (US-021/AC-01, AC-02, AC-03)', () => {
   it('rejects a missing password', () => {
     const { password: _password, ...rest } = VALID_CREATE_ACCOUNT;
     expect(createAccountRequestSchema.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe('userIdParamsSchema (US-023)', () => {
+  it('parses a well-formed uuid', () => {
+    expect(userIdParamsSchema.safeParse({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' }).success).toBe(true);
+  });
+
+  it('rejects a non-uuid id', () => {
+    expect(userIdParamsSchema.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('rejects an unknown field (.strict())', () => {
+    expect(
+      userIdParamsSchema.safeParse({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', extra: 1 }).success,
+    ).toBe(false);
+  });
+});
+
+const VALID_USER_UPDATE = { fullName: 'Dana Silva', email: 'dana@company.com' };
+
+describe('userUpdateSchema (US-023/AC-01, AC-02, AC-03, AC-04)', () => {
+  it('parses a well-formed body', () => {
+    expect(userUpdateSchema.safeParse(VALID_USER_UPDATE).success).toBe(true);
+  });
+
+  it('lower-cases and trims the email, the same as createAccountRequestSchema (US-021/D-01)', () => {
+    const result = userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, email: '  Dana@Company.com  ' });
+    expect(result.success).toBe(true);
+    expect(result.data?.email).toBe('dana@company.com');
+  });
+
+  it('trims fullName', () => {
+    const result = userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, fullName: '  Dana Silva  ' });
+    expect(result.success).toBe(true);
+    expect(result.data?.fullName).toBe('Dana Silva');
+  });
+
+  it('rejects an empty fullName (US-023/AC-04)', () => {
+    expect(userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, fullName: '' }).success).toBe(false);
+  });
+
+  it('rejects an empty email (US-023/AC-04)', () => {
+    expect(userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, email: '' }).success).toBe(false);
+  });
+
+  it('rejects an implausible email (US-023/AC-04)', () => {
+    expect(userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, email: 'not-an-email' }).success).toBe(false);
+  });
+
+  it('rejects a role field — this contract carries no role, a role change is a separate story (US-023/AC-07)', () => {
+    expect(userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, role: 'admin' }).success).toBe(false);
+  });
+
+  it('rejects a password field — this contract carries no password (US-023/AC-07)', () => {
+    expect(userUpdateSchema.safeParse({ ...VALID_USER_UPDATE, password: 'Correct-Horse7' }).success).toBe(false);
+  });
+
+  it('rejects a missing email', () => {
+    const { email: _email, ...rest } = VALID_USER_UPDATE;
+    expect(userUpdateSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it('rejects a missing fullName', () => {
+    const { fullName: _fullName, ...rest } = VALID_USER_UPDATE;
+    expect(userUpdateSchema.safeParse(rest).success).toBe(false);
   });
 });
 

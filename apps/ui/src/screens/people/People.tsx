@@ -35,11 +35,13 @@ import { useAuth } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
 import { createCreateAccount, type CreateAccountFetcher } from '../../lib/create-account.js';
 import { createFetchUsers, type FetchUsers } from '../../lib/fetch-users.js';
+import { createUpdateAccount, type UpdateAccountFetcher } from '../../lib/update-account.js';
 import { useUsers, type UsersFetcher } from '../../lib/use-users.js';
 import { AccountRow, AccountsTableHead } from './AccountRow.js';
 import { AccountSkeletonRow } from './AccountSkeletonRow.js';
 import {
   accountCreatedToast,
+  accountUpdatedToast,
   ADD_PERSON_LABEL,
   CLEAR_SEARCH_FIELD_LABEL,
   CLEAR_SEARCH_LABEL,
@@ -66,16 +68,26 @@ export interface PeopleProps {
   fetchUsers?: FetchUsers | undefined;
   /** Test seam for `POST /api/admin/users` (US-021). Defaults to the real call. */
   createAccount?: CreateAccountFetcher | undefined;
+  /** Test seam for `PATCH /api/admin/users/:id` (US-023). Defaults to the real call. */
+  updateAccount?: UpdateAccountFetcher | undefined;
 }
 
-export function People({ fetchUsers, createAccount }: PeopleProps) {
+export function People({ fetchUsers, createAccount, updateAccount }: PeopleProps) {
   const { api, user } = useAuth();
 
   // Behind RequireSession, `user` is always present by the time this screen renders — the same
   // reasoning every other admin screen states for its own guarded fields.
   if (!user) return null;
 
-  return <PeopleContent api={api} currentUserId={user.id} fetchUsers={fetchUsers} createAccount={createAccount} />;
+  return (
+    <PeopleContent
+      api={api}
+      currentUserId={user.id}
+      fetchUsers={fetchUsers}
+      createAccount={createAccount}
+      updateAccount={updateAccount}
+    />
+  );
 }
 
 function PeopleContent({
@@ -83,14 +95,17 @@ function PeopleContent({
   currentUserId,
   fetchUsers,
   createAccount,
+  updateAccount,
 }: {
   api: ApiClient;
   currentUserId: string;
   fetchUsers: FetchUsers | undefined;
   createAccount: CreateAccountFetcher | undefined;
+  updateAccount: UpdateAccountFetcher | undefined;
 }) {
   const resolvedFetch = useMemo(() => fetchUsers ?? createFetchUsers(api), [fetchUsers, api]);
   const resolvedCreateAccount = useMemo(() => createAccount ?? createCreateAccount(api), [createAccount, api]);
+  const resolvedUpdateAccount = useMemo(() => updateAccount ?? createUpdateAccount(api), [updateAccount, api]);
 
   const [typed, setTyped] = useState('');
   const [committedQ, setCommittedQ] = useState<string | undefined>(undefined);
@@ -116,7 +131,16 @@ function PeopleContent({
     },
     [users, committedQ],
   );
-  const userFormDialog = useUserFormDialog(resolvedCreateAccount, handleCreated);
+  // US-023/AC-01 (ST-07) — unlike `markAdded`, `markUpdated` replaces IN PLACE regardless of an
+  // active search (`use-users.ts`'s own module docblock states why the two diverge here).
+  const handleUpdated = useCallback(
+    (account: AdminUser) => {
+      if (users.status === 'ready') users.markUpdated(account);
+      setSavedMessage(accountUpdatedToast(account.fullName));
+    },
+    [users],
+  );
+  const userFormDialog = useUserFormDialog(resolvedCreateAccount, resolvedUpdateAccount, handleCreated, handleUpdated);
 
   // A9/§7.4: latches true on the first successful load and never resets — see the module
   // docblock for why this must not simply track `status === 'loading'`.
@@ -168,7 +192,12 @@ function PeopleContent({
       {savedMessage ? <Toast>{savedMessage}</Toast> : null}
 
       {userFormDialog.dialog ? (
-        <UserFormDialog dialog={userFormDialog.dialog} onSubmit={userFormDialog.submit} onDismiss={userFormDialog.dismiss} />
+        <UserFormDialog
+          dialog={userFormDialog.dialog}
+          onSubmit={userFormDialog.submit}
+          onDismiss={userFormDialog.dismiss}
+          currentUserId={currentUserId}
+        />
       ) : null}
 
       <div className="people__header">
@@ -244,6 +273,7 @@ function PeopleContent({
           currentUserId={currentUserId}
           onClearSearch={handleClear}
           onAddPerson={userFormDialog.openAdd}
+          onEdit={userFormDialog.openEdit}
         />
       ) : null}
     </>
@@ -256,12 +286,14 @@ function PeopleReady({
   currentUserId,
   onClearSearch,
   onAddPerson,
+  onEdit,
 }: {
   users: AdminUser[];
   committedQ: string | undefined;
   currentUserId: string;
   onClearSearch: () => void;
   onAddPerson: () => void;
+  onEdit: (account: AdminUser) => void;
 }) {
   if (users.length === 0) {
     // AC-08: this is the ONLY empty branch this screen ever reaches — the signed-in
@@ -291,14 +323,14 @@ function PeopleReady({
           <AccountsTableHead />
           <tbody>
             {users.map((account) => (
-              <AccountRow key={account.id} account={account} layout="table" currentUserId={currentUserId} />
+              <AccountRow key={account.id} account={account} layout="table" currentUserId={currentUserId} onEdit={onEdit} />
             ))}
           </tbody>
         </table>
       </div>
       <ul className="people-cards">
         {users.map((account) => (
-          <AccountRow key={account.id} account={account} layout="card" currentUserId={currentUserId} />
+          <AccountRow key={account.id} account={account} layout="card" currentUserId={currentUserId} onEdit={onEdit} />
         ))}
       </ul>
     </>

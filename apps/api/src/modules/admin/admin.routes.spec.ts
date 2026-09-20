@@ -113,10 +113,16 @@ const noUsers: UsersRepository = {
     return [];
   },
   async findByEmail() {
-    throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+    throw new Error('findByEmail not stubbed — this test does not exercise POST /users or PATCH /users/:id');
   },
   async insertProfile() {
     throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+  },
+  async findById() {
+    throw new Error('findById not stubbed — this test does not exercise PATCH /users/:id');
+  },
+  async updateProfileDetails() {
+    throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
   },
 };
 
@@ -126,6 +132,9 @@ const notUsedUsersAuth: UsersAuthAdapter = {
   },
   async deleteAccount() {
     throw new Error('deleteAccount not stubbed — this test does not exercise POST /users');
+  },
+  async updateEmail() {
+    throw new Error('updateEmail not stubbed — this test does not exercise PATCH /users/:id');
   },
 };
 
@@ -156,6 +165,47 @@ function accountRow(overrides: Partial<UserAccountRow> = {}): UserAccountRow {
     email: 'dana@company.com',
     role: 'employee',
     is_active: true,
+    ...overrides,
+  };
+}
+
+/** Shared by `POST /api/admin/users` and `PATCH /api/admin/users/:id` — one happy-path default
+ *  per method, overridden per test. */
+function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
+  return {
+    async listAccounts() {
+      throw new Error('not exercised');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised');
+    },
+    async findByEmail() {
+      return undefined;
+    },
+    async insertProfile() {
+      return undefined;
+    },
+    async findById() {
+      return accountRow();
+    },
+    async updateProfileDetails({ id, fullName, email }) {
+      return { kind: 'ok', profile: { id, full_name: fullName, email, role: 'employee', is_active: true } };
+    },
+    ...overrides,
+  };
+}
+
+function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapter {
+  return {
+    async createAccount() {
+      return { kind: 'ok', userId: 'new-user-id' };
+    },
+    async deleteAccount() {
+      return { kind: 'ok' };
+    },
+    async updateEmail() {
+      return { kind: 'ok' };
+    },
     ...overrides,
   };
 }
@@ -1145,10 +1195,16 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
         return SUMMARY_ROWS;
       },
       async findByEmail() {
-        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+        throw new Error('findByEmail not stubbed — this test does not exercise POST/PATCH /users');
       },
       async insertProfile() {
         throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
+      async findById() {
+        throw new Error('findById not stubbed — this test does not exercise PATCH /users/:id');
+      },
+      async updateProfileDetails() {
+        throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
       },
     };
     const app = appWith({ users });
@@ -1185,10 +1241,16 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
         return SUMMARY_ROWS;
       },
       async findByEmail() {
-        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+        throw new Error('findByEmail not stubbed — this test does not exercise POST/PATCH /users');
       },
       async insertProfile() {
         throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
+      async findById() {
+        throw new Error('findById not stubbed — this test does not exercise PATCH /users/:id');
+      },
+      async updateProfileDetails() {
+        throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
       },
     };
     const app = appWith({ users });
@@ -1209,10 +1271,16 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
         return SUMMARY_ROWS;
       },
       async findByEmail() {
-        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+        throw new Error('findByEmail not stubbed — this test does not exercise POST/PATCH /users');
       },
       async insertProfile() {
         throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
+      async findById() {
+        throw new Error('findById not stubbed — this test does not exercise PATCH /users/:id');
+      },
+      async updateProfileDetails() {
+        throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
       },
     };
     const app = appWith({ users });
@@ -1258,10 +1326,16 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
         return SUMMARY_ROWS;
       },
       async findByEmail() {
-        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+        throw new Error('findByEmail not stubbed — this test does not exercise POST/PATCH /users');
       },
       async insertProfile() {
         throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
+      async findById() {
+        throw new Error('findById not stubbed — this test does not exercise PATCH /users/:id');
+      },
+      async updateProfileDetails() {
+        throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
       },
     };
     const app = appWith({ users });
@@ -1291,36 +1365,6 @@ describe('POST /api/admin/users (US-021/AC-01, AC-02, AC-03, AC-06, AC-12)', () 
     role: 'employee',
     password: 'Correct-Horse7',
   };
-
-  function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
-    return {
-      async listAccounts() {
-        throw new Error('not exercised');
-      },
-      async getSummaryCounts() {
-        throw new Error('not exercised');
-      },
-      async findByEmail() {
-        return undefined;
-      },
-      async insertProfile() {
-        return undefined;
-      },
-      ...overrides,
-    };
-  }
-
-  function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapter {
-    return {
-      async createAccount() {
-        return { kind: 'ok', userId: 'new-user-id' };
-      },
-      async deleteAccount() {
-        return { kind: 'ok' };
-      },
-      ...overrides,
-    };
-  }
 
   it('a valid body creates the account and returns 201 with the exact shape — toEqual, never toMatchObject (US-021/AC-01)', async () => {
     const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
@@ -1476,6 +1520,277 @@ describe('POST /api/admin/users (US-021/AC-01, AC-02, AC-03, AC-06, AC-12)', () 
   it('refuses a request with no token at all', async () => {
     const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
     const response = await request(app).post('/api/admin/users').send(VALID_BODY);
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('PATCH /api/admin/users/:id (US-023/AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  const VALID_BODY = { fullName: 'Dana Okafor', email: 'dana.okafor@company.com' };
+
+  it('a valid body updates the account and returns 200 with the exact shape — toEqual, never toMatchObject (US-023/AC-01)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findById() {
+          return { id: USER_ID, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: USER_ID,
+      fullName: 'Dana Okafor',
+      email: 'dana.okafor@company.com',
+      role: 'employee',
+      isActive: true,
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('does NOT call the Auth adapter when the email is unchanged (US-023/AC-01, design note §2.3)', async () => {
+    const updateEmailCalls: unknown[] = [];
+    const app = appWith({
+      users: usersFor({
+        async findById() {
+          return { id: USER_ID, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true };
+        },
+      }),
+      usersAuth: usersAuthFor({
+        async updateEmail(userId, email) {
+          updateEmailCalls.push({ userId, email });
+          return { kind: 'ok' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ fullName: 'Dana Silva (corrected)', email: 'dana@company.com' });
+
+    expect(response.status).toBe(200);
+    expect(updateEmailCalls).toEqual([]);
+  });
+
+  it('an empty fullName is refused at the edge with 400 invalid_request (US-023/AC-04)', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ ...VALID_BODY, fullName: '' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('an implausible email is refused at the edge with 400 invalid_request (US-023/AC-04)', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ ...VALID_BODY, email: 'not-an-email' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('an unknown field is refused at the edge (.strict()), including role and password (US-023/AC-07)', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ ...VALID_BODY, role: 'admin', password: 'Correct-Horse7' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .patch('/api/admin/users/not-a-uuid')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('a duplicate active email gets 409 email_taken with details naming the holder (US-023/AC-02)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findByEmail() {
+          return { full_name: 'Existing Holder', is_active: true };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('email_taken');
+    expect(response.body.details).toEqual({ fullName: 'Existing Holder', isActive: true });
+  });
+
+  it('a duplicate DEACTIVATED email gets 409 email_taken with isActive: false (US-023/AC-02)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findByEmail() {
+          return { full_name: 'Former Employee', is_active: false };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(409);
+    expect(response.body.details).toEqual({ fullName: 'Former Employee', isActive: false });
+  });
+
+  it('saving with the email left unchanged is NOT refused as a self-collision (US-023/AC-03)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findById() {
+          return { id: USER_ID, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true };
+        },
+        async findByEmail() {
+          throw new Error('the unchanged-email guard must make this unreachable (US-023/AC-03)');
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ fullName: 'Dana Silva', email: 'dana@company.com' });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('an id matching no account gets 404 user_not_found (US-023)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findById() {
+          return undefined;
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('user_not_found');
+  });
+
+  it('an unreachable Supabase Auth on the email write returns 503 service_unavailable (US-023)', async () => {
+    const app = appWith({
+      users: usersFor(),
+      usersAuth: usersAuthFor({
+        async updateEmail() {
+          return { kind: 'unavailable' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(503);
+    expect(response.body.code).toBe('service_unavailable');
+  });
+
+  it('the profile write itself failing returns a bare 500 (US-023)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async updateProfileDetails() {
+          throw new Error('db unreachable');
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('never calls usersAuth.deleteAccount from this path (US-023/AC-07 — the re-provisioning trap)', async () => {
+    const deleteAccountCalls: string[] = [];
+    const app = appWith({
+      users: usersFor(),
+      usersAuth: usersAuthFor({
+        async deleteAccount(userId) {
+          deleteAccountCalls.push(userId);
+          return { kind: 'ok' };
+        },
+        async updateEmail() {
+          return { kind: 'unavailable' };
+        },
+      }),
+    });
+
+    await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(deleteAccountCalls).toEqual([]);
+  });
+
+  it('refuses an Employee session with 403 admin_only, through the REAL mount, and changes nothing (US-023/AC-09)', async () => {
+    const updateCalls: unknown[] = [];
+    const app = appWith({
+      users: usersFor({
+        async updateProfileDetails(input) {
+          updateCalls.push(input);
+          return { kind: 'ok', profile: { id: input.id, full_name: input.fullName, email: input.email, role: 'employee', is_active: true } };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .patch(`/api/admin/users/${USER_ID}`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    expect(updateCalls).toEqual([]);
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+    const response = await request(app).patch(`/api/admin/users/${USER_ID}`).send(VALID_BODY);
     expect(response.status).toBe(401);
   });
 });

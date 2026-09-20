@@ -24,6 +24,8 @@ import {
   deskCreateSchema,
   deskIdParamsSchema,
   deskUpdateSchema,
+  userIdParamsSchema,
+  userUpdateSchema,
 } from '@desk-booking/contracts';
 import {
   ERROR_CODES,
@@ -170,6 +172,57 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
 
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json(outcome.account);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-023/AC-01, AC-02, AC-03, AC-05, AC-06, AC-07, AC-08, AC-09. A plain field update on an
+   * existing resource — `PATCH /api/admin/desks/:id`'s own shape, not a refusable transition like
+   * `/desks/:id/deactivate` (`ai/standards/api-standards.md`). No role check here — the mount
+   * already decided who may reach this handler (AC-09 is inherited, not re-checked).
+   *
+   * `200` reuses `adminUserSchema` (the SAME shape `POST /users` and `GET /users` return) — no new
+   * response schema, because there is no field on it this write cannot supply (design note §3.2).
+   *
+   * `outcome.kind === 'duplicate'` carries the SAME `emailTakenDetailsSchema` shape `POST /users`
+   * does — ST-04 is one state, shared by both forms, and `copy.ts` composes it client-side either
+   * way. `not_found` is genuinely new here (`user_not_found` — no equivalent on create, since
+   * nothing can 404 a resource that does not exist yet). `unavailable`/`failed` split the same way
+   * `POST /users` does — different causes, different statuses, 503 vs 500.
+   */
+  router.patch('/users/:id', async (req, res, next) => {
+    try {
+      const parsedParams = userIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+      const parsedBody = userUpdateSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await users.updateAccount({ id: parsedParams.data.id, ...parsedBody.data });
+
+      if (outcome.kind === 'duplicate') {
+        throw conflict(ERROR_CODES.email_taken, 'That email address is already in use.', {
+          fullName: outcome.fullName,
+          isActive: outcome.isActive,
+        });
+      }
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.user_not_found, 'That account could not be found.');
+      }
+      if (outcome.kind === 'unavailable') {
+        throw serviceUnavailable('The account service is unavailable. Try again.');
+      }
+      if (outcome.kind === 'failed') {
+        throw new Error('account update failed');
+      }
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(outcome.account);
     } catch (error) {
       next(error);
     }

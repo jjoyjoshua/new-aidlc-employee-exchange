@@ -1,13 +1,21 @@
 /**
- * UserFormDialog — SCR-009, create mode only (US-021 builds ST-01, ST-03, ST-04, ST-06, ST-08,
- * ST-09; US-023/US-024 add ST-02/ST-05 when this component grows an edit mode).
+ * UserFormDialog — SCR-009, every state a form needs (US-021 built ST-01, ST-03, ST-04, ST-06,
+ * ST-08, ST-09; US-023 adds ST-02, the edit mode — ST-05's last-admin refusal is US-024's).
  *
- * Composes the shared `Dialog` shell exactly as `DeskFormDialog` does. Owns the four fields'
- * local state and CLIENT-side validation for fullName/email — parsed with the SAME
- * `createAccountRequestSchema` the route parses with (ADR-002's payoff, `SignIn.tsx`'s own
- * pattern for mapping zod issues to field errors). The password's validity is read straight
- * from `evaluatePasswordPolicy`, mirroring `SetPassword.tsx` — the checklist and the refusal
- * can never disagree because both call the one function.
+ * One component with a `dialog.mode: 'create' | 'edit'` switch rather than two components —
+ * `DeskFormDialog`'s own precedent (US-018 design note §6.1): ST-03, ST-04, ST-06 and ST-08 are
+ * byte-identical between modes, and the delta is small and declarative (title, prefilled values,
+ * confirm label, whether the password block renders). `mode`/`account` are read off `dialog`
+ * itself, not passed as separate props — `UserFormDialogState` already carries both, and a
+ * second source for the same fact is exactly what `AccountRow.tsx`'s own "(you)" reasoning
+ * argues against (design note §7.3, applied here to mode/subject instead of identity).
+ *
+ * Composes the shared `Dialog` shell exactly as `DeskFormDialog` does. Owns the fields' local
+ * state and CLIENT-side validation — parsed with the SAME `createAccountRequestSchema`/
+ * `userUpdateSchema` the route parses with (ADR-002's payoff, `SignIn.tsx`'s own pattern for
+ * mapping zod issues to field errors). The password's validity is read straight from
+ * `evaluatePasswordPolicy`, mirroring `SetPassword.tsx` — the checklist and the refusal can never
+ * disagree because both call the one function. Password/role exist only in create mode.
  *
  * `useUserFormDialog` (the caller) owns the server round trip, busy state and outcome.
  */
@@ -15,6 +23,7 @@ import { useId, useRef, useState, type FormEvent } from 'react';
 import {
   createAccountRequestSchema,
   evaluatePasswordPolicy,
+  userUpdateSchema,
   PASSWORD_RULE_IDS,
   type PasswordRuleId,
   type UserRole,
@@ -31,19 +40,23 @@ import {
   CANCEL_LABEL,
   CREATE_SUBMIT_LABEL,
   DELIVERY_WARNING,
+  editPersonTitle,
   EMAIL_HELPER,
   EMAIL_LABEL,
   EMAIL_TAKEN_FIELD_MESSAGE,
   emailTakenMessage,
   FULL_NAME_LABEL,
   INITIAL_PASSWORD_LABEL,
+  RESET_PASSWORD_NOTE,
+  ROLE_FIELD_DISABLED_REASON,
   ROLE_LEGEND,
   ROLE_OPTION_DESCRIPTION,
+  SAVE_CHANGES_LABEL,
   SAVE_FAILED,
   SUGGEST_PASSWORD_LABEL,
 } from './copy.js';
 import { RadioGroup } from './RadioGroup.js';
-import type { CreateAccountFields, UserFormDialogState } from './use-user-form-dialog.js';
+import type { CreateAccountFields, UpdateAccountFields, UserFormDialogState } from './use-user-form-dialog.js';
 import './user-form.css';
 
 /** SCR-010's copy for each V-12 rule (`RULE_LABELS`), reused verbatim — one vocabulary for the
@@ -58,8 +71,12 @@ const RULE_LABELS: Record<PasswordRuleId, string> = {
 
 export interface UserFormDialogProps {
   dialog: UserFormDialogState;
-  onSubmit: (fields: CreateAccountFields) => void;
+  onSubmit: (fields: CreateAccountFields | UpdateAccountFields) => void;
   onDismiss: () => void;
+  /** US-023/AC-01 (SCR-009:126). Compared against `dialog.account.id` for the "(you)" title
+   *  marker — the same `useAuth()`-derived value `AccountRow.tsx`'s own `displayName` compares
+   *  against, never a wire field (design note §7.3). Unused in create mode. */
+  currentUserId?: string;
 }
 
 interface FieldErrors {
@@ -67,10 +84,15 @@ interface FieldErrors {
   email?: string;
 }
 
-export function UserFormDialog({ dialog, onSubmit, onDismiss }: UserFormDialogProps) {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<UserRole>('employee');
+export function UserFormDialog({ dialog, onSubmit, onDismiss, currentUserId }: UserFormDialogProps) {
+  const isEdit = dialog.mode === 'edit';
+  // `dialog.account` is present iff `isEdit` (`UserFormDialogState`'s own invariant) — the `!` is
+  // the same shape `DeskFormDialog.tsx` accepts for its own edit-only fields.
+  const subject = dialog.account;
+
+  const [fullName, setFullName] = useState(isEdit ? subject!.fullName : '');
+  const [email, setEmail] = useState(isEdit ? subject!.email : '');
+  const [role, setRole] = useState<UserRole>(isEdit ? subject!.role : 'employee');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -93,9 +115,33 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss }: UserFormDialogPr
     setPasswordVisible(true);
   }
 
+  function focusFirstInvalid(next: FieldErrors) {
+    setErrors(next);
+    (next.fullName ? fullNameRef : next.email ? emailRef : fullNameRef).current?.focus();
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (dialog.busy) return;
+
+    if (isEdit) {
+      // US-023/AC-04 — the SAME schema the route parses with (ADR-002). No role, no password:
+      // this contract carries neither (design note §3.1).
+      const parsed = userUpdateSchema.safeParse({ fullName, email });
+      if (!parsed.success) {
+        const next: FieldErrors = {};
+        for (const issue of parsed.error.issues) {
+          const field = issue.path[0];
+          if (field === 'fullName' && !next.fullName) next.fullName = 'Enter a name.';
+          if (field === 'email' && !next.email) next.email = 'Enter a valid email address.';
+        }
+        focusFirstInvalid(next);
+        return;
+      }
+      setErrors({});
+      onSubmit({ fullName: parsed.data.fullName, email: parsed.data.email });
+      return;
+    }
 
     // Parsed with the SAME schema the route parses with (ADR-002) — never a second, hand-typed
     // rule that could drift from it. Role is a controlled radio and cannot itself be invalid.
@@ -108,9 +154,8 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss }: UserFormDialogPr
         if (field === 'fullName' && !next.fullName) next.fullName = 'Enter a name.';
         if (field === 'email' && !next.email) next.email = 'Enter a valid email address.';
       }
-      setErrors(next);
       setAttempted(true);
-      (next.fullName ? fullNameRef : next.email ? emailRef : fullNameRef).current?.focus();
+      focusFirstInvalid(next);
       return;
     }
 
@@ -119,10 +164,13 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss }: UserFormDialogPr
   }
 
   const duplicate = dialog.outcome === 'duplicate';
+  // Bound to the account AS LOADED, never the live `fullName` input — a title that tracked the
+  // field would rename itself mid-keystroke (`DeskFormDialog.tsx`'s own reasoning).
+  const title = isEdit ? editPersonTitle(subject!.fullName, subject!.id === currentUserId) : ADD_PERSON_TITLE;
 
   return (
     <Dialog
-      title={ADD_PERSON_TITLE}
+      title={title}
       role="dialog"
       busy={dialog.busy}
       onDismiss={onDismiss}
@@ -133,7 +181,7 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss }: UserFormDialogPr
             {CANCEL_LABEL}
           </Button>
           <Button variant="primary" type="submit" form="user-form" busy={dialog.busy}>
-            {CREATE_SUBMIT_LABEL}
+            {isEdit ? SAVE_CHANGES_LABEL : CREATE_SUBMIT_LABEL}
           </Button>
         </>
       }
@@ -176,42 +224,56 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss }: UserFormDialogPr
           autoComplete="off"
         />
 
+        {/* SCR-009 ST-02: the radios show the current role, but this form cannot save a role
+            change (US-024's). ariaDisabled, never native `disabled`, so they stay focusable and
+            announce why — ADR-010 (design note §4.3). */}
         <RadioGroup
           legend={ROLE_LEGEND}
           name="role"
           value={role}
           onChange={(value) => setRole(value as UserRole)}
           disabled={dialog.busy}
+          ariaDisabled={isEdit}
+          {...(isEdit ? { ariaDisabledReason: ROLE_FIELD_DISABLED_REASON } : {})}
           options={[
             { value: 'employee', label: ROLE_OPTION_DESCRIPTION.employee },
             { value: 'admin', label: ROLE_OPTION_DESCRIPTION.admin },
           ]}
         />
 
-        <PasswordField
-          label={INITIAL_PASSWORD_LABEL}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          visible={passwordVisible}
-          onVisibleChange={setPasswordVisible}
-          invalid={attempted && !allMet}
-          readOnly={dialog.busy}
-          autoComplete="new-password"
-          describedBy={noteId}
-        />
+        {isEdit ? (
+          // SCR-009's own design commitment: no password field and no password rules on the edit
+          // form. Changing a password is SCR-008's Reset password action (US-027), which carries
+          // BR-001.12's shown-once handling this dialog does not need to duplicate.
+          <p className="user-form__reset-password-note">{RESET_PASSWORD_NOTE}</p>
+        ) : (
+          <>
+            <PasswordField
+              label={INITIAL_PASSWORD_LABEL}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              visible={passwordVisible}
+              onVisibleChange={setPasswordVisible}
+              invalid={attempted && !allMet}
+              readOnly={dialog.busy}
+              autoComplete="new-password"
+              describedBy={noteId}
+            />
 
-        <div id={noteId}>
-          <PolicyChecklist rules={rules} label="Initial password must contain" />
-        </div>
+            <div id={noteId}>
+              <PolicyChecklist rules={rules} label="Initial password must contain" />
+            </div>
 
-        <Button type="button" variant="secondary" onClick={handleSuggest} disabled={dialog.busy}>
-          {SUGGEST_PASSWORD_LABEL}
-        </Button>
+            <Button type="button" variant="secondary" onClick={handleSuggest} disabled={dialog.busy}>
+              {SUGGEST_PASSWORD_LABEL}
+            </Button>
 
-        {/* AC-07 — stated before saving, never only after (BR-001.17, REQ-029). */}
-        <Alert tone="warning" live="off">
-          {DELIVERY_WARNING}
-        </Alert>
+            {/* AC-07 — stated before saving, never only after (BR-001.17, REQ-029). */}
+            <Alert tone="warning" live="off">
+              {DELIVERY_WARNING}
+            </Alert>
+          </>
+        )}
       </form>
     </Dialog>
   );
