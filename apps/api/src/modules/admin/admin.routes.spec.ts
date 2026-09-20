@@ -18,6 +18,7 @@ import type {
   SetDeskActiveOutcome,
   UpdateDeskOutcome,
 } from '../desks/desks.repository.js';
+import type { UserAccountRow, UsersRepository, UserSummaryRow } from '../users/users.repository.js';
 
 interface Row {
   id: string;
@@ -103,6 +104,15 @@ const noDesks: DesksRepository = {
   },
 };
 
+const noUsers: UsersRepository = {
+  async listAccounts() {
+    return [];
+  },
+  async getSummaryCounts() {
+    return [];
+  },
+};
+
 function bookingRow(overrides: Partial<AdminBookingRow> = {}): AdminBookingRow {
   return {
     id: '11111111-1111-4111-8111-111111111111',
@@ -123,10 +133,22 @@ function deskRow(overrides: Partial<DeskRow> = {}): DeskRow {
   };
 }
 
+function accountRow(overrides: Partial<UserAccountRow> = {}): UserAccountRow {
+  return {
+    id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+    full_name: 'Dana Silva',
+    email: 'dana@company.com',
+    role: 'employee',
+    is_active: true,
+    ...overrides,
+  };
+}
+
 function appWith(options: {
   rows?: Row[];
   adminBookings?: Pick<AdminBookingsRepository, 'listBookings'> & Partial<AdminBookingsRepository>;
   desks?: DesksRepository;
+  users?: UsersRepository;
 }) {
   const rows = options.rows ?? [ADMIN, EMPLOYEE];
 
@@ -152,6 +174,7 @@ function appWith(options: {
     nowMs: NOW_MS,
     adminBookings: options.adminBookings ? { ...NOT_USED_FOR_CANCEL, ...options.adminBookings } : noBookings,
     desks: options.desks ?? noDesks,
+    users: options.users ?? noUsers,
   });
 }
 
@@ -1081,6 +1104,140 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
   it('refuses a request with no token at all', async () => {
     const app = appWith({});
     const response = await request(app).post(`/api/admin/bookings/${BOOKING_ID}/cancel`);
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
+  const FIVE_ACCOUNTS: UserAccountRow[] = [
+    accountRow({ id: '1', full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true }),
+    accountRow({ id: '2', full_name: 'Sam Okoro', email: 'sam@company.com', role: 'employee', is_active: true }),
+    accountRow({ id: '3', full_name: 'Priya Sharma', email: 'priya2@company.com', role: 'employee', is_active: true }),
+    accountRow({ id: '4', full_name: 'Marcus Vale', email: 'vale@company.com', role: 'admin', is_active: true }),
+    accountRow({ id: '5', full_name: 'Alex Ito', email: 'alex@company.com', role: 'admin', is_active: false }),
+  ];
+  const SUMMARY_ROWS: UserSummaryRow[] = FIVE_ACCOUNTS.map((r) => ({ role: r.role, is_active: r.is_active }));
+
+  it('returns every account\'s exact shape plus the whole-list summary (US-020/AC-01, AC-02) — toEqual, never toMatchObject, per design note §7', async () => {
+    const users: UsersRepository = {
+      async listAccounts() {
+        return FIVE_ACCOUNTS;
+      },
+      async getSummaryCounts() {
+        return SUMMARY_ROWS;
+      },
+    };
+    const app = appWith({ users });
+
+    const response = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      users: [
+        { id: '1', fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: true },
+        { id: '2', fullName: 'Sam Okoro', email: 'sam@company.com', role: 'employee', isActive: true },
+        { id: '3', fullName: 'Priya Sharma', email: 'priya2@company.com', role: 'employee', isActive: true },
+        { id: '4', fullName: 'Marcus Vale', email: 'vale@company.com', role: 'admin', isActive: true },
+        { id: '5', fullName: 'Alex Ito', email: 'alex@company.com', role: 'admin', isActive: false },
+      ],
+      summary: { total: 5, employees: 3, admins: 2, deactivated: 1 },
+    });
+  });
+
+  it('sets Cache-Control: private, no-store — this route carries every account\'s name and email (design note §3.4)', async () => {
+    const app = appWith({ users: noUsers });
+    const response = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('filters by q — only the matching accounts are returned (US-020/AC-04)', async () => {
+    const matching = [FIVE_ACCOUNTS[0]!, FIVE_ACCOUNTS[3]!];
+    const users: UsersRepository = {
+      async listAccounts(q) {
+        expect(q).toBe('a');
+        return matching;
+      },
+      async getSummaryCounts() {
+        return SUMMARY_ROWS;
+      },
+    };
+    const app = appWith({ users });
+
+    const response = await request(app).get('/api/admin/users?q=a').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.users).toHaveLength(2);
+    expect(response.body.users.map((u: { id: string }) => u.id)).toEqual(['1', '4']);
+  });
+
+  it('the summary is UNCHANGED by an active search — re-counting it would delete the admin count at the moment it is load-bearing (US-020/AC-06)', async () => {
+    const users: UsersRepository = {
+      async listAccounts(q) {
+        return q === undefined ? FIVE_ACCOUNTS : [FIVE_ACCOUNTS[0]!];
+      },
+      async getSummaryCounts() {
+        return SUMMARY_ROWS;
+      },
+    };
+    const app = appWith({ users });
+
+    const withoutQ = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    const withQ = await request(app).get('/api/admin/users?q=dana').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(withQ.body.summary).toEqual(withoutQ.body.summary);
+    expect(withQ.body.summary).toEqual({ total: 5, employees: 3, admins: 2, deactivated: 1 });
+  });
+
+  it('an empty q is rejected at the edge with 400 invalid_request (.strict()/.min(1))', async () => {
+    const app = appWith({ users: noUsers });
+    const response = await request(app).get('/api/admin/users?q=').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('a q over 100 characters is rejected at the edge with 400 invalid_request (design note A15)', async () => {
+    const app = appWith({ users: noUsers });
+    const response = await request(app)
+      .get(`/api/admin/users?q=${'a'.repeat(101)}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('an unknown query field is rejected at the edge with 400 invalid_request (.strict())', async () => {
+    const app = appWith({ users: noUsers });
+    const response = await request(app)
+      .get('/api/admin/users?page=2')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('refuses an Employee session with 403 admin_only, revealing no other account name or email at all (US-020/AC-13)', async () => {
+    const users: UsersRepository = {
+      async listAccounts() {
+        return FIVE_ACCOUNTS;
+      },
+      async getSummaryCounts() {
+        return SUMMARY_ROWS;
+      },
+    };
+    const app = appWith({ users });
+
+    const response = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    const body = JSON.stringify(response.body);
+    for (const account of FIVE_ACCOUNTS) {
+      expect(body).not.toContain(account.full_name);
+      expect(body).not.toContain(account.email);
+    }
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: noUsers });
+    const response = await request(app).get('/api/admin/users');
     expect(response.status).toBe(401);
   });
 });

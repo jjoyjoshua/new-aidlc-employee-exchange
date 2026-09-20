@@ -1088,9 +1088,25 @@
         "AC-12",
         "AC-13"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/users.spec.ts",
+        "apps/api/src/modules/users/search-filter.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/admin/admin.concurrency.spec.ts",
+        "apps/ui/src/components/status-chip/StatusChip.spec.tsx",
+        "apps/ui/src/lib/use-users.spec.ts",
+        "apps/ui/src/screens/people/copy.spec.ts",
+        "apps/ui/src/screens/people/AccountRow.spec.tsx",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx",
+        "apps/ui/src/screens/people/People.spec.tsx"
+      ],
       "screens": [
         "SCR-008"
+      ],
+      "decisions": [
+        "ADR-010"
       ]
     },
     "US-021": {

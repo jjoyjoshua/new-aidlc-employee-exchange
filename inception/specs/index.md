@@ -23,6 +23,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-017 | Add a desk | Complex | implemented | [`US-017-add-a-desk/`](US-017-add-a-desk/) |
 | US-018 | Correct a desk number | Complex | implemented | [`US-018-correct-a-desk-number/`](US-018-correct-a-desk-number/) |
 | US-019 | Take a desk out of service, and put it back | Complex | implemented | [`US-019-take-a-desk-out-of-service/`](US-019-take-a-desk-out-of-service/) |
+| US-020 | Find an account in the people list | Complex | implemented | [`US-020-find-an-account/`](US-020-find-an-account/) |
 
 ## How to update
 

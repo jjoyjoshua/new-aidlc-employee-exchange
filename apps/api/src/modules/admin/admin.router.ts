@@ -18,6 +18,7 @@
 import { Router } from 'express';
 import {
   allBookingsQuerySchema,
+  adminUsersQuerySchema,
   cancelBookingParamsSchema,
   deskCreateSchema,
   deskIdParamsSchema,
@@ -26,11 +27,13 @@ import {
 import { ERROR_CODES, badRequest, conflict, notFound, unauthorized, unprocessable } from '../../http/errors.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
+import type { UsersService } from '../users/users.service.js';
 import '../../http/request-user.js';
 
 export interface AdminRouterDeps {
   bookings: AdminBookingsService;
   desks: DesksService;
+  users: UsersService;
 }
 
 /**
@@ -51,7 +54,7 @@ function requireActingAdmin(req: { user?: { id: string } }) {
   return user;
 }
 
-export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router {
+export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): Router {
   const router = Router();
 
   /**
@@ -60,6 +63,10 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
    * copy of `requireAdmin`. A repository failure propagates to `next(error)`, never caught into
    * an empty page — that is what keeps AC-08's real-empty-system `total: 0` distinguishable from
    * a load failure (ST-05), the same reasoning `bookings.router.ts`'s `GET /` states.
+   *
+   * Everybody's WHEREABOUTS, in one body, behind a date filter — sensitive, but see `/users`
+   * below for the read that carries everybody's NAME and EMAIL with no filter at all
+   * (US-020 design note §3.4/§8.2 item 4).
    */
   router.get('/bookings', async (req, res, next) => {
     try {
@@ -76,7 +83,37 @@ export function createAdminRouter({ bookings, desks }: AdminRouterDeps): Router 
         ...(deskId !== undefined && { deskId }),
       });
 
-      // This is the most sensitive read in the system — everybody's whereabouts, in one body.
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-020/AC-01, AC-02, AC-04, AC-06, AC-13. `modules/users`'s first route, read-only.
+   *
+   * This is the most sensitive read in the system — not `/bookings` above (that is filtered to a
+   * date window); this one returns every account's name and email, unfiltered, on any request
+   * that supplies no `q` at all. `adminUsersQuerySchema` bounds `q` to 100 characters and rejects
+   * an unknown field; a parse failure reuses the same `invalid_request` branch `/bookings` uses
+   * above — no new error code (design note §3.3).
+   *
+   * The trust control here is NOT this handler: `adminUsersResponseSchema` is deliberately not
+   * `.strict()`, so the only thing stopping a leaked column (`must_change_password`,
+   * `deactivated_at`, ...) is `users.repository.ts`'s explicit select list and
+   * `users.service.ts`'s explicit field mapping (design note §7). No role check here either — the
+   * mount already decided who may reach this handler.
+   */
+  router.get('/users', async (req, res, next) => {
+    try {
+      const parsed = adminUsersQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const result = await users.listAccounts(parsed.data.q);
+
       res.setHeader('Cache-Control', 'private, no-store');
       res.json(result);
     } catch (error) {
