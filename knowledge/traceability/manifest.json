@@ -1141,6 +1141,7 @@
         "apps/ui/src/lib/use-users.spec.ts",
         "apps/ui/src/screens/people/RadioGroup.spec.tsx",
         "apps/ui/src/screens/people/UserFormDialog.spec.tsx",
+        "apps/ui/src/screens/people/use-user-form-dialog.spec.ts",
         "apps/ui/src/screens/people/copy.spec.ts",
         "apps/ui/src/screens/people/People.spec.tsx"
       ],
