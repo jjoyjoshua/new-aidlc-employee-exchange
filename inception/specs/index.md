@@ -28,6 +28,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-022 | Suggest an initial password | Medium | implemented | [`US-022-suggest-an-initial-password/`](US-022-suggest-an-initial-password/) |
 | US-023 | Correct a person's name or email | Complex | implemented | [`US-023-correct-a-persons-details/`](US-023-correct-a-persons-details/) |
 | US-024 | Change a person's role | Complex | implemented | [`US-024-change-a-persons-role/`](US-024-change-a-persons-role/) |
+| US-025 | Deactivate an account and release the desks it holds | Complex | implemented (AC-08/AC-09 moved to US-029/US-032, issue #59) | [`US-025-deactivate-an-account/`](US-025-deactivate-an-account/) |
 
 ## How to update
 

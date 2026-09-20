@@ -11,10 +11,12 @@
  * because the foreign key that forces Auth-first on an insert constrains nothing on an update
  * (design note §2.1). See that function's own docblock for the restore-compensation shape.
  */
-import type { AdminUser, AdminUsersResponse, AdminSummary, UserRole } from '@desk-booking/contracts';
+import type { AdminUser, AdminUsersResponse, AdminSummary, DeactivationPreview, UserRole } from '@desk-booking/contracts';
 import type { UserAccountRow, UserSummaryRow, UsersRepository } from './users.repository.js';
 import type { UsersAuthAdapter } from './users.adapter.js';
 import { logger } from '../../infra/logger/index.js';
+import { officeToday } from '../../domain/booking-window.js';
+import { displayStatusPredicate } from '../../domain/booking-history.js';
 
 export interface UsersServiceDeps {
   users: UsersRepository;
@@ -22,6 +24,9 @@ export interface UsersServiceDeps {
   /** US-023 — `updated_at`'s first writer. One reading threaded through, so the repository never
    *  reads a clock itself (`desks.service.ts`'s own `DesksServiceDeps` shape). */
   nowMs: () => number;
+  /** US-025's first use — `deactivateAccount` computes the office's "today" the same way
+   *  `desksService`/`adminBookingsService` already do (design note §3.2, C9). */
+  officeTimezone: string;
 }
 
 export interface CreateAccountInput {
@@ -53,6 +58,17 @@ export type ChangeRoleOutcome =
   /** US-024/AC-04, AC-07 (BR-001.11, V-11). The trigger refused it — never an in-app count
    *  (design note §2.4, §5, `ADR-013`). */
   | { kind: 'blocked' };
+
+/**
+ * US-025/AC-01, AC-02, AC-04, AC-10, AC-12. Three kinds — `already_inactive` never reaches this
+ * far: it is the repository's, collapsed here into `ok` (design note §2.2, §3.2, C8), so every
+ * promise AC-13 makes (cannot sign in, chip reads Deactivated) stays true with no invented copy.
+ */
+export type DeactivateAccountOutcome =
+  | { kind: 'ok'; account: AdminUser; cancelledCount: number }
+  /** US-025/AC-10 (BR-001.11, V-11). The trigger refused it — never an in-app count. */
+  | { kind: 'blocked' }
+  | { kind: 'not_found' };
 
 export type UpdateAccountOutcome =
   | { kind: 'ok'; account: AdminUser }
@@ -116,7 +132,7 @@ function tallySummary(rows: UserSummaryRow[]): AdminSummary {
   return { total, employees, admins, deactivated };
 }
 
-export function createUsersService({ users, usersAuth, nowMs }: UsersServiceDeps) {
+export function createUsersService({ users, usersAuth, nowMs, officeTimezone }: UsersServiceDeps) {
   return {
     /**
      * US-020/AC-01, AC-02, AC-04, AC-06. `listAccounts` (filtered by `q` when present) and
@@ -295,6 +311,69 @@ export function createUsersService({ users, usersAuth, nowMs }: UsersServiceDeps
       const result = await users.setRole({ id, role, updatedAt: new Date(nowMs()) });
       if (result.kind !== 'ok') return result;
       return { kind: 'ok', account: mapAccount(result.profile) };
+    },
+
+    /**
+     * US-025/AC-05. Read-only, changes nothing. `officeToday`/`displayStatusPredicate('confirmed',
+     * today)` — the same reading `desks.service.ts:150-158` takes for desk deactivation, never a
+     * raw `>= now()`.
+     */
+    async previewDeactivation(id: string): Promise<DeactivationPreview> {
+      const today = officeToday(nowMs(), officeTimezone);
+      const predicate = displayStatusPredicate('confirmed', today);
+      if (predicate.from === undefined) {
+        throw new Error("displayStatusPredicate('confirmed', today) returned no floor — this is a bug");
+      }
+
+      const rows = await users.previewDeactivation(id, predicate.stored, predicate.from);
+      return {
+        bookings: rows.map((row) => ({ id: row.id, deskNumber: row.desk_number, date: row.booking_date })),
+      };
+    },
+
+    /**
+     * US-025/AC-01, AC-02, AC-03, AC-04, AC-10, AC-12. ONE `nowMs()` reading, threaded to both
+     * the RPC's `p_now` stamp and its `p_today` date floor (`deactivateDesk`'s own discipline:
+     * two readings could straddle office midnight and cancel a different set of bookings than
+     * the one the stamp claims). No in-app admin count on any branch — the trigger is the sole
+     * arbiter, `changeRole`'s own discipline, unchanged.
+     *
+     * `already_inactive` is collapsed to `ok` with `cancelledCount: 0`, logged rather than
+     * surfaced: the account IS deactivated and the person CANNOT sign in, which is every promise
+     * AC-13 makes — mapping it to `not_found` or a failure would ship copy that is false about
+     * an account that plainly exists (design note §2.2).
+     *
+     * `cancelledBookings` stops here, deliberately — reduced to a count. The rows exist for
+     * US-029/US-032 to consume when they land; a future caller widens this explicitly rather than
+     * finding a dead field (`desks.service.ts:113-115`'s own precedent for exactly this shape).
+     */
+    async deactivateAccount(id: string, actorId: string): Promise<DeactivateAccountOutcome> {
+      const now = nowMs();
+      const today = officeToday(now, officeTimezone);
+      const predicate = displayStatusPredicate('confirmed', today);
+      if (predicate.from === undefined) {
+        throw new Error("displayStatusPredicate('confirmed', today) returned no floor — this is a bug");
+      }
+
+      const result = await users.deactivateAccount({
+        id,
+        actorId,
+        now: new Date(now),
+        today: predicate.from,
+      });
+
+      if (result.kind === 'blocked' || result.kind === 'not_found') return result;
+
+      if (result.kind === 'already_inactive') {
+        logger.warn('deactivation found the account already inactive — nothing was changed', { id });
+        return { kind: 'ok', account: mapAccount(result.profile), cancelledCount: 0 };
+      }
+
+      return {
+        kind: 'ok',
+        account: mapAccount(result.profile),
+        cancelledCount: result.cancelledBookings.length,
+      };
     },
   };
 }

@@ -214,17 +214,98 @@ trigger sees one, and a demotion the screen gave no way to anticipate is refused
 "fix" this by filtering the summary to active admins only — AC-02/AC-06's own worked example
 (`"38 people · 36 employees, 2 admins · 1 deactivated"`) is the whole-table count, by design.
 
+## `deactivateAccount`/`previewDeactivation` (US-025/AC-01–AC-07, AC-10–AC-14 — the deactivation cascade)
+
+**Not a second Auth-crossing write.** The forward constraint below predicted `deactivateAccount`
+would cross the `user_profiles`/Auth seam the way `updateAccount`/`createAccount` do — it does
+not. Deactivating an account is a `user_profiles`-only flip (`is_active`, `deactivated_at`), plus
+a cascade into `bookings`, and Supabase Auth is never called on any branch. `ADR-011`/`ADR-012` do
+not apply here for the same reason `changeRole` above is exempt from them.
+
+**The first cross-table transactional write anywhere in this codebase, and the first thing this
+application calls through PostgREST's `/rpc/` path.** `supabase/migrations/
+0005_deactivate_account_cascade.sql` adds one PL/pgSQL function, `deactivate_account_cascade`,
+called via `.rpc()` from `usersRepository.deactivateAccount` — never orchestrated as two separate
+repository calls, because two PostgREST round trips are two separate implicit transactions and
+cannot deliver AC-12's "all or nothing." Architect design note:
+`inception/specs/US-025-deactivate-an-account/design-note.md` §2.
+
+**Four PostgREST argument names are a wire contract, spelled in exactly one place.**
+`p_target_id`, `p_actor_id`, `p_now`, `p_today` — `usersRepository.deactivateAccount`'s own
+`.rpc()` call is the only place in this codebase that names them. Renaming any one of them without
+also amending the migration is a breaking change that surfaces as `PGRST202` at runtime, never at
+typecheck (design note §2.1, §2.7). A future signature change must `drop function
+deactivate_account_cascade(uuid, uuid, timestamptz, date)` before re-creating it — PostgREST
+cannot disambiguate two overloads of the same name (`PGRST203`).
+
+**Reachable at a public URL by default, and this migration closes that.** Postgres grants
+`EXECUTE` on a new function to `PUBLIC`, and PostgREST publishes every function in the exposed
+schema at `/rest/v1/rpc/<name>` — reachable with the anon key that ships in the browser bundle.
+The migration ends with `revoke execute … from public, anon, authenticated; grant execute … to
+service_role`. It was harmless before that line only because `user_profiles`/`bookings` carry
+`force row level security` with no policies — a second control making a first mistake survivable,
+not the same as not making it (design note §2.7, C1).
+
+**No `EXCEPTION` block in the function, and none may ever be added.** BR-001.11's refusal is
+`0004`'s existing trigger firing from inside this function exactly as it fires from a plain
+`UPDATE` — its uncaught `Z0011` unwinds the whole function and rolls back both tables. Catching it
+here would roll back to a savepoint and return a "clean" answer with the refusal silently gone,
+losing AC-10 and AC-12 at once (design note §2.4, §2.8).
+
+**No new trigger — `0004_last_active_admin_guard.sql` is unmodified, exactly as its own comment
+forecast.** `is_active` is already in that trigger's `UPDATE OF role, is_active` event list and
+`WHEN` clause; a second trigger here would be a review finding (`ADR-013` Decision item 4, D-04).
+The reused `Z0011` SQLSTATE match (`LAST_ACTIVE_ADMIN_SQLSTATE`, the same constant `setRole` uses)
+is the identical discipline: match the code, never the message.
+
+**`STABLE`/`IMMUTABLE` breaks this function differently than it breaks `0004`'s trigger.**
+ADR-013 already records that a `STABLE` trigger function silently restores write skew. PostgREST
+additionally runs a `STABLE`/`IMMUTABLE` function inside a **read-only transaction**, so a
+one-word slip here fails loudly instead (`25006`) — a different symptom for the same mistake
+(design note §2.6).
+
+**`previewDeactivation` and the cascade's `bookings` write both cross a module boundary
+`app-architecture.md` §2 grants in writing, not merely tolerates.** *"`users` owns the
+deactivation cascade, not `bookings`. BR-001.18 makes cancelling the leaver's desks part of
+deactivating the account — one act, one transaction, refusable as a whole."* The **read**
+additionally has ADR-004's own "read across, write within" precedent
+(`desks.repository.ts`'s `countUpcomingConfirmedForDesk`); the cascade's **write** to `bookings`
+is the exception this architecture decision names by id, and `modules/bookings/README.md` records
+the other side of it.
+
+**One residual this migration does not close.** A booking `INSERT`ed in the milliseconds around
+the cascade's own `UPDATE` of `user_profiles` can survive its owner's deactivation — an `UPDATE`'s
+predicate does not lock rows that do not yet exist, and a booking insert never touches
+`user_profiles`, so advisory key `1001011` never sees it. The result is BR-001.18's own harm, one
+stranded desk, recoverable only by an administrator cancelling it through US-015. Named here and
+in the migration's own closing comment rather than fixed — closing it needs a `bookings`-side rule
+BRD-001 does not state (design note §4.3, open item 2).
+
+**AC-08 (cancellation email) and AC-09 (push alert) are not built here.** They were removed from
+`US-025-deactivate-an-account.md` and moved to US-029/US-032, which already specify the identical
+behaviour and cite this story by id (`decisions.md` D-01,
+[`jjoyjoshua/new-aidlc-employee-exchange#59`](https://github.com/jjoyjoshua/new-aidlc-employee-exchange/issues/59)).
+`deactivateAccount`'s repository-level `CancelledBookingRow[]` (id, desk id, desk number, booking
+date, `cancellation_source`) exists so those stories can compose their copy from the same call
+without a second query — the service reduces it to a plain count at its own boundary, and a future
+caller wiring notifications must widen that boundary explicitly rather than find a dead field.
+
+**`already_inactive` is a fourth outcome, not folded into `not_found`.** A target already inactive
+when the cascade runs (a race, or a stale row-menu list) is reported by the repository as its own
+kind — `not_found`'s approved 404 copy would be false about an account that plainly exists. The
+**service** collapses it to `ok` with `cancelledCount: 0`, logged (design note §2.2, §3.2, D-05).
+
 ## The forward constraint
 
-US-025/US-026 (Deactivate/Activate and BR-001.18's cascade) and US-027 (admin password reset) each
-add a route here, not to `bookings` or `desks`. **US-025 and US-026 depend on the IDENTICAL trigger
-US-024 just added and must not add a second one** — their `is_active` flips are already in that
-trigger's `UPDATE OF role, is_active` event list and `WHEN` clause, confirmed by `ADR-013`'s own
-Decision item 4. US-025 and US-027 are each also an UPDATE crossing the same Auth/profile seam
-US-023 settled, and apply `ADR-012` by name rather than re-deriving its ordering and compensation
-shape; a future story whose write *creates* a row (none currently forecast) would instead apply
-`ADR-011`, unchanged. The row-menu items US-020 renders disabled become live one at a time as each
-of these stories lands — **Edit landed first (US-023), the role item second (US-024)**
+US-026 (Activate) and US-027 (admin password reset) each add a route here, not to `bookings` or
+`desks`. **US-026's `is_active` flip depends on the IDENTICAL `0004` trigger US-024 added and
+US-025 confirmed, and must not add a second one** (`ADR-013` Decision item 4). US-027 is an UPDATE
+crossing the same Auth/profile seam US-023 settled, and applies `ADR-012` by name rather than
+re-deriving its ordering and compensation shape; a future story whose write *creates* a row (none
+currently forecast) would instead apply `ADR-011`, unchanged. The row-menu items US-020 renders
+disabled become live one at a time as each of these stories lands — **Edit landed first (US-023),
+the role item second (US-024), the deactivate branch of the fourth item third (US-025)** — only
+its **activate** branch (`!account.isActive`) and Reset password remain
 (design note §6, `ADR-010-unbuilt-destination-controls.md`).
 
 See `../README.md` for the module boundary this file must respect (`users` may import

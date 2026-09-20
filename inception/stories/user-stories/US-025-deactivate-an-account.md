@@ -60,17 +60,14 @@ So that a leaver's reservations do not sit empty until somebody notices.
 - **When** deactivation is confirmed
 - **Then** a distinct confirmation is shown that says they will not be able to sign in and their past bookings are kept, with no cancellation clause and no count (SCR-008 ST-05)
 
-### AC-08 A cancellation email is sent for each booking
-
-- **Given** bookings cancelled by the cascade
-- **When** the deactivation completes
-- **Then** one cancellation email is sent to that person for each cancelled booking (REQ-024, REQ-030, BR-001.13), each naming the office admin as the actor by role and **omitting any invitation to book another desk** — REQ-005 has already stopped them signing in (BR-001.20 variant, US-029/AC-04, US-029/AC-06)
-
-### AC-09 An opted-in person's push alert names the office admin
-
-- **Given** the person had opted in to browser push (US-031)
-- **When** the cascade cancels their bookings
-- **Then** each push alert states that the office admin cancelled it, rather than reporting a cancellation with no cause (REQ-027, BR-001.20 — delivered by US-032)
+> **AC-08 and AC-09 moved out 2026-09-20** (change-request, Gate 1): the cancellation email and push
+> alert for each cascade-cancelled booking are fully specified and owned by
+> [US-029/AC-03, AC-04, AC-06](US-029-booking-cancellation-email.md) and
+> [US-032/AC-02, AC-03, AC-09](US-032-push-alerts-on-book-and-cancel.md), which already cite this
+> story by id. Restating them here was duplication, not a second requirement. This story's own scope
+> is the cascade itself — the flip, the cancellation, and what the administrator sees — and it must
+> return enough about each cancelled booking (desk, date, the fact that it was cascade-caused) for
+> those two stories' triggers to compose their own copy, without this story sending anything itself.
 
 ### AC-10 Deactivating the only active administrator is refused
 
@@ -122,11 +119,10 @@ Design commitments this story must honour: ST-05 and ST-06 stay two states, beca
 
 - AC-12 is the one worth designing the test around first: a partial cascade is the failure mode that leaves the data in a state no screen can explain. Force a cancellation failure mid-cascade.
 - AC-02 must count **Confirmed** and dated today-or-later only. Seed a past **Confirmed** booking and a **Cancelled** future one, and assert neither is touched — and that AC-07's simpler dialog is the one shown.
-- AC-08's count of emails equals the count in AC-06's label. Assert both against the same fixture.
 - AC-10 needs the same deactivated-admin fixture as US-024/AC-07.
-- AC-09 needs an opted-in person, and the wording must differ from a self-initiated cancellation (US-011).
-- Data setup: a person with 3 upcoming bookings, one past and one cancelled; a person with none; the only active admin; two admins with one deactivated; one opted-in to push.
+- Data setup: a person with 3 upcoming bookings, one past and one cancelled; a person with none; the only active admin; two admins with one deactivated.
+- AC-08/AC-09's own tests (the email count, the opted-in push wording) live in US-029 and US-032's own QA notes, not here — see the note after AC-07.
 
 ## API impacts
 
-Needs a deactivation endpoint, Admin-only, that evaluates BR-001.11 transactionally, cancels the qualifying bookings atomically with the state change, emits one cancellation notification per booking, and exposes the affected bookings **before** the act so AC-05 can list them. Shape is `/architect`'s to settle — no OpenAPI contract exists in this repository yet.
+Needs a deactivation endpoint, Admin-only, that evaluates BR-001.11 transactionally, cancels the qualifying bookings atomically with the state change, and exposes the affected bookings **before** the act so AC-05 can list them, and **after** so US-029/US-032's cancellation-triggered sends have what they need (desk, date, that the source was the cascade) without a second query. Shape is `/architect`'s to settle — no OpenAPI contract exists in this repository yet.

@@ -118,6 +118,9 @@ export function buildApp(options: BuildAppOptions = {}): Express {
     users: options.users ?? usersRepository,
     usersAuth: options.usersAuth ?? usersAuthAdapter,
     nowMs,
+    // US-025's first use — deactivateAccount computes the office's "today" the same way
+    // desksService/adminBookingsService already do (design note §3.2, C9).
+    officeTimezone,
   });
 
   return createApp({

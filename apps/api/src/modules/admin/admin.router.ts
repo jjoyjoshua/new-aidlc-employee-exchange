@@ -27,6 +27,7 @@ import {
   roleChangeRequestSchema,
   userIdParamsSchema,
   userUpdateSchema,
+  type DeactivationPreview,
 } from '@desk-booking/contracts';
 import {
   ERROR_CODES,
@@ -254,6 +255,64 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
       }
 
       const outcome = await users.changeRole(parsedParams.data.id, parsedBody.data.role);
+
+      if (outcome.kind === 'blocked') {
+        throw unprocessable(ERROR_CODES.last_active_admin, 'That change would leave no active administrator.');
+      }
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.user_not_found, 'That account could not be found.');
+      }
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(outcome.account);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-025/AC-05. Read-only, changes nothing — the confirmation dialog's own data source, listing
+   * the account's upcoming Confirmed bookings before the administrator commits to anything
+   * (design note §3.3). No `404` on a missing account: the `POST` below is the sole arbiter
+   * regardless (`deactivateDesk`'s own rule, "the count is a prediction, the server is the rule"),
+   * so a preview of a nonexistent account simply lists no bookings.
+   */
+  router.get('/users/:id/deactivation-preview', async (req, res, next) => {
+    try {
+      const parsedParams = userIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const preview: DeactivationPreview = await users.previewDeactivation(parsedParams.data.id);
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(preview);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-025/AC-01, AC-02, AC-03, AC-04, AC-10, AC-12. No body — the verb sub-resource shape
+   * `/desks/:id/deactivate` already established (`api-standards.md`), not a `PATCH`. Deliberately
+   * unlike the role route above, `requireActingAdmin(req)` IS used here for `cancelled_by` — this
+   * write has a real attribution column and `/bookings/:id/cancel` is the standing precedent
+   * (design note §0, C19).
+   *
+   * `blocked` → `422 last_active_admin`, no `details` payload, same as the role route. `not_found`
+   * reuses `user_not_found`. No `already_inactive` branch here — the service already collapsed it
+   * to `ok` (design note §2.2, §3.2, C8).
+   */
+  router.post('/users/:id/deactivate', async (req, res, next) => {
+    try {
+      const parsedParams = userIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const admin = requireActingAdmin(req);
+      const outcome = await users.deactivateAccount(parsedParams.data.id, admin.id);
 
       if (outcome.kind === 'blocked') {
         throw unprocessable(ERROR_CODES.last_active_admin, 'That change would leave no active administrator.');

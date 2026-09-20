@@ -13,6 +13,7 @@ import type { FetchUsers } from '../../lib/fetch-users.js';
 import type { CreateAccountFetcher, CreateAccountOutcome } from '../../lib/create-account.js';
 import type { UpdateAccountFetcher, UpdateAccountOutcome } from '../../lib/update-account.js';
 import type { ChangeRoleFetcher } from '../../lib/change-role.js';
+import type { DeactivateAccountFetcher, DeactivationPreviewFetcher } from '../../lib/deactivate-account.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -36,6 +37,8 @@ function SignedIn({
   createAccount,
   updateAccount,
   changeRole,
+  previewDeactivation,
+  deactivateAccount,
   user = ADMIN,
   guarded = false,
 }: {
@@ -43,6 +46,8 @@ function SignedIn({
   createAccount?: CreateAccountFetcher;
   updateAccount?: UpdateAccountFetcher;
   changeRole?: ChangeRoleFetcher;
+  previewDeactivation?: DeactivationPreviewFetcher;
+  deactivateAccount?: DeactivateAccountFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -54,7 +59,16 @@ function SignedIn({
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screenEl = <People fetchUsers={fetchUsers} createAccount={createAccount} updateAccount={updateAccount} changeRole={changeRole} />;
+  const screenEl = (
+    <People
+      fetchUsers={fetchUsers}
+      createAccount={createAccount}
+      updateAccount={updateAccount}
+      changeRole={changeRole}
+      previewDeactivation={previewDeactivation}
+      deactivateAccount={deactivateAccount}
+    />
+  );
 
   return (
     <MemoryRouter initialEntries={['/admin/people']}>
@@ -416,6 +430,88 @@ async function openRoleChangeFor(fullName: string) {
   await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${fullName}` })[0]!);
   await userEvent.click(await screen.findByRole('menuitem', { name: /^Make an/ }));
 }
+
+async function openDeactivateFor(fullName: string) {
+  await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${fullName}` })[0]!);
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Deactivate' }));
+}
+
+describe('People — deactivate an account, row menu route (US-025/AC-05, AC-06, AC-07, AC-10, AC-13)', () => {
+  it('opening Deactivate fetches the preview and renders ST-06 when bookings are upcoming (US-025/AC-05, AC-06)', async () => {
+    const previewDeactivation: DeactivationPreviewFetcher = async () => ({
+      kind: 'ok',
+      bookings: [{ id: 'b-1', deskNumber: 'A-01', date: '2026-09-22' }],
+    });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} previewDeactivation={previewDeactivation} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openDeactivateFor('Dana Silva');
+
+    expect(await screen.findByRole('alertdialog', { name: 'Deactivate Dana Silva?' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Deactivate and cancel 1 booking' })).toBeInTheDocument();
+    expect(screen.getByText(/A-01 on Tue 22 Sep/)).toBeInTheDocument();
+  });
+
+  it('renders ST-05 when the preview has no upcoming bookings (US-025/AC-07)', async () => {
+    const previewDeactivation: DeactivationPreviewFetcher = async () => ({ kind: 'ok', bookings: [] });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} previewDeactivation={previewDeactivation} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openDeactivateFor('Dana Silva');
+
+    expect(await screen.findByText("They won't be able to sign in. Their past bookings are kept.")).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Deactivate' })).toBeInTheDocument();
+  });
+
+  it('a successful deactivation closes the dialog, updates the row and the deactivated count, shows the toast, and returns focus to the row trigger (US-025/AC-13)', async () => {
+    let fetchCalls = 0;
+    const fetchUsers: FetchUsers = async () => {
+      fetchCalls += 1;
+      return okUsers([DANA, MARCUS], SUMMARY);
+    };
+    const previewDeactivation: DeactivationPreviewFetcher = async () => ({ kind: 'ok', bookings: [] });
+    const deactivateAccount: DeactivateAccountFetcher = async () => ({ kind: 'ok', account: { ...DANA, isActive: false } });
+    render(
+      <SignedIn fetchUsers={fetchUsers} previewDeactivation={previewDeactivation} deactivateAccount={deactivateAccount} />,
+    );
+    await screen.findAllByText('Dana Silva');
+
+    await openDeactivateFor('Dana Silva');
+    await userEvent.click(await screen.findByRole('button', { name: 'Deactivate' }));
+
+    expect(await screen.findByText('Dana Silva can no longer sign in.')).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByText('38 people · 36 employees, 2 admins · 2 deactivated')).toBeInTheDocument();
+    expect(fetchCalls).toBe(1);
+    expect(screen.getAllByRole('button', { name: 'Actions for Dana Silva' })[0]).toHaveFocus();
+  });
+
+  it('a blocked deactivation shows the fuller refusal, and Make someone an admin dismisses it and focuses the search field (US-025/AC-10)', async () => {
+    const previewDeactivation: DeactivationPreviewFetcher = async () => ({ kind: 'ok', bookings: [] });
+    const deactivateAccount: DeactivateAccountFetcher = async () => ({ kind: 'blocked' });
+    render(
+      <SignedIn
+        fetchUsers={async () => okUsers([DANA, MARCUS])}
+        previewDeactivation={previewDeactivation}
+        deactivateAccount={deactivateAccount}
+      />,
+    );
+    await screen.findAllByText('Dana Silva');
+
+    await openDeactivateFor('Marcus Vale');
+    await userEvent.click(await screen.findByRole('button', { name: 'Deactivate' }));
+
+    expect(await screen.findByRole('alertdialog', { name: 'Marcus Vale is the only active admin.' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Deactivating this account would leave nobody able to manage desks, bookings or people/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Make someone an admin' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Search name or email')).toHaveFocus();
+  });
+});
 
 describe('People — change a role, row menu route (US-024/AC-01, AC-02, AC-04, AC-05, AC-11)', () => {
   it('opening the role item renders the confirmation, named for the direction (US-024/AC-02)', async () => {

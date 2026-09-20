@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createUsersService } from './users.service.js';
 import type {
+  CancelledBookingRow,
   EmailLookupRow,
   InsertProfileInput,
+  PreviewDeactivationRow,
   ProfileDetailsRow,
   UpdateProfileDetailsInput,
   UpdateProfileDetailsOutcome,
@@ -53,6 +55,12 @@ function stubRepository({ accountsByQuery, summaryRows }: StubOptions): {
       async setRole() {
         throw new Error('setRole not stubbed — this suite does not exercise changeRole');
       },
+      async previewDeactivation() {
+        throw new Error('previewDeactivation not stubbed — this suite does not exercise previewDeactivation');
+      },
+      async deactivateAccount() {
+        throw new Error('deactivateAccount not stubbed — this suite does not exercise deactivateAccount');
+      },
     },
   };
 }
@@ -71,8 +79,10 @@ function notStubbedUsersAuth(): UsersAuthAdapter {
   };
 }
 
+const OFFICE_TIMEZONE = 'Asia/Kolkata';
+
 function service(repository: UsersRepository, usersAuth: UsersAuthAdapter = notStubbedUsersAuth()) {
-  return createUsersService({ users: repository, usersAuth, nowMs: () => NOW_MS });
+  return createUsersService({ users: repository, usersAuth, nowMs: () => NOW_MS, officeTimezone: OFFICE_TIMEZONE });
 }
 
 function row(overrides: Partial<UserAccountRow> = {}): UserAccountRow {
@@ -258,6 +268,12 @@ function stubForCreate({
     },
     async setRole() {
       throw new Error('setRole not stubbed — this suite does not exercise changeRole');
+    },
+    async previewDeactivation() {
+      throw new Error('previewDeactivation not stubbed — this suite does not exercise previewDeactivation');
+    },
+    async deactivateAccount() {
+      throw new Error('deactivateAccount not stubbed — this suite does not exercise deactivateAccount');
     },
   };
 
@@ -471,6 +487,12 @@ function stubForUpdate({
       return (updateProfileDetailsImpl ?? echoImpl)(input);
     },
     async setRole() {
+      throw new Error('not exercised by updateAccount tests');
+    },
+    async previewDeactivation() {
+      throw new Error('not exercised by updateAccount tests');
+    },
+    async deactivateAccount() {
       throw new Error('not exercised by updateAccount tests');
     },
   };
@@ -766,6 +788,12 @@ function stubForRoleChange(setRoleImpl?: (input: { id: string; role: 'employee' 
       setRoleCalls.push(input);
       return (setRoleImpl ?? echoImpl)(input);
     },
+    async previewDeactivation() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async deactivateAccount() {
+      throw new Error('not exercised by changeRole tests');
+    },
   };
 
   return { repository, setRoleCalls };
@@ -824,5 +852,217 @@ describe('createUsersService.changeRole (US-024/AC-01, AC-04, AC-07, AC-12)', ()
       kind: 'ok',
       account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin', isActive: false },
     });
+  });
+});
+
+function stubForPreview(
+  previewImpl: (id: string, status: 'confirmed' | 'cancelled', from: string) => Promise<PreviewDeactivationRow[]>,
+): { repository: UsersRepository; calls: Array<{ id: string; status: string; from: string }> } {
+  const calls: Array<{ id: string; status: string; from: string }> = [];
+  const repository: UsersRepository = {
+    async listAccounts() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async findByEmail() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async insertProfile() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async findById() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async updateProfileDetails() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async setRole() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+    async previewDeactivation(id, status, from) {
+      calls.push({ id, status, from });
+      return previewImpl(id, status, from);
+    },
+    async deactivateAccount() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
+  };
+  return { repository, calls };
+}
+
+describe('createUsersService.previewDeactivation (US-025/AC-05)', () => {
+  it('computes "today" the office\'s way and reads the confirmed-from-today floor — the same discipline deactivateDesk uses', async () => {
+    const { repository, calls } = stubForPreview(async () => []);
+
+    await service(repository).previewDeactivation(UPDATE_INPUT.id);
+
+    expect(calls).toEqual([{ id: UPDATE_INPUT.id, status: 'confirmed', from: '2026-09-20' }]);
+  });
+
+  it('maps each row to { id, deskNumber, date } — no count field on the wire (design note §3.3, C15)', async () => {
+    const { repository } = stubForPreview(async () => [
+      { id: 'b-1', desk_number: 'A-01', booking_date: '2026-09-20' },
+      { id: 'b-2', desk_number: 'B-02', booking_date: '2026-09-22' },
+    ]);
+
+    const result = await service(repository).previewDeactivation(UPDATE_INPUT.id);
+
+    expect(result).toEqual({
+      bookings: [
+        { id: 'b-1', deskNumber: 'A-01', date: '2026-09-20' },
+        { id: 'b-2', deskNumber: 'B-02', date: '2026-09-22' },
+      ],
+    });
+    expect('count' in result).toBe(false);
+  });
+
+  it('returns an empty bookings array for a person with nothing upcoming (US-025/AC-07\'s population)', async () => {
+    const { repository } = stubForPreview(async () => []);
+
+    expect(await service(repository).previewDeactivation(UPDATE_INPUT.id)).toEqual({ bookings: [] });
+  });
+});
+
+function stubForDeactivate(
+  impl: (input: { id: string; actorId: string; now: Date; today: string }) => Promise<
+    | { kind: 'ok'; profile: ProfileDetailsRow; cancelledBookings: CancelledBookingRow[] }
+    | { kind: 'already_inactive'; profile: ProfileDetailsRow }
+    | { kind: 'blocked' }
+    | { kind: 'not_found' }
+  >,
+): { repository: UsersRepository; calls: Array<{ id: string; actorId: string; now: Date; today: string }> } {
+  const calls: Array<{ id: string; actorId: string; now: Date; today: string }> = [];
+  const repository: UsersRepository = {
+    async listAccounts() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async findByEmail() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async insertProfile() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async findById() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async updateProfileDetails() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async setRole() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async previewDeactivation() {
+      throw new Error('not exercised by deactivateAccount tests');
+    },
+    async deactivateAccount(input) {
+      calls.push(input);
+      return impl(input);
+    },
+  };
+  return { repository, calls };
+}
+
+function cancelledBookingRow(overrides: Partial<CancelledBookingRow> = {}): CancelledBookingRow {
+  return {
+    id: 'b-1',
+    deskId: 'd-1',
+    deskNumber: 'A-01',
+    bookingDate: '2026-09-20',
+    cancellationSource: 'deactivation_cascade',
+    ...overrides,
+  };
+}
+
+describe('createUsersService.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-10, AC-12)', () => {
+  const ACTOR_ID = 'actor-1';
+
+  it('threads ONE nowMs() reading to both now and today — the same discipline deactivateDesk uses (US-025/AC-01, AC-02)', async () => {
+    const { repository, calls } = stubForDeactivate(async () => ({
+      kind: 'ok',
+      profile: currentRow({ is_active: false }),
+      cancelledBookings: [],
+    }));
+
+    await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
+
+    expect(calls).toEqual([{ id: UPDATE_INPUT.id, actorId: ACTOR_ID, now: new Date(NOW_MS), today: '2026-09-20' }]);
+  });
+
+  it('returns ok with the deactivated account and the cancelled count (US-025/AC-02, AC-13)', async () => {
+    const { repository } = stubForDeactivate(async () => ({
+      kind: 'ok',
+      profile: currentRow({ is_active: false }),
+      cancelledBookings: [
+        cancelledBookingRow({ id: 'b-1' }),
+        cancelledBookingRow({ id: 'b-2' }),
+        cancelledBookingRow({ id: 'b-3' }),
+      ],
+    }));
+
+    const outcome = await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
+
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false },
+      cancelledCount: 3,
+    });
+  });
+
+  it('returns cancelledCount: 0 for a person with nothing upcoming (US-025/AC-07)', async () => {
+    const { repository } = stubForDeactivate(async () => ({
+      kind: 'ok',
+      profile: currentRow({ is_active: false }),
+      cancelledBookings: [],
+    }));
+
+    const outcome = await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false },
+      cancelledCount: 0,
+    });
+  });
+
+  it('collapses already_inactive to ok with cancelledCount: 0 — a race or a stale list, not a failure (design note §2.2, §3.2, D-05)', async () => {
+    const { repository } = stubForDeactivate(async () => ({
+      kind: 'already_inactive',
+      profile: currentRow({ is_active: false }),
+    }));
+
+    const outcome = await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
+
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false },
+      cancelledCount: 0,
+    });
+  });
+
+  it('returns blocked when the trigger refuses it — the only active admin (US-025/AC-10)', async () => {
+    const { repository } = stubForDeactivate(async () => ({ kind: 'blocked' }));
+
+    expect(await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID)).toEqual({ kind: 'blocked' });
+  });
+
+  it('returns not_found when the repository reports no such account', async () => {
+    const { repository } = stubForDeactivate(async () => ({ kind: 'not_found' }));
+
+    expect(await service(repository).deactivateAccount('missing-id', ACTOR_ID)).toEqual({ kind: 'not_found' });
+  });
+
+  it('no in-app admin count on any branch — the trigger is the sole arbiter, changeRole\'s own discipline', async () => {
+    // Structural: this test asserts the SHAPE of the call, not a count. The repository stub above
+    // never receives anything but { id, actorId, now, today } — no admins/summary argument exists
+    // for a service-side count to have been threaded through, mirroring changeRole's own proof.
+    const { repository, calls } = stubForDeactivate(async () => ({ kind: 'blocked' }));
+
+    await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
+
+    expect(Object.keys(calls[0] ?? {})).toEqual(['id', 'actorId', 'now', 'today']);
   });
 });

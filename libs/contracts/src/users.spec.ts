@@ -5,6 +5,7 @@ import {
   adminUsersQuerySchema,
   adminUsersResponseSchema,
   createAccountRequestSchema,
+  deactivationPreviewSchema,
   emailTakenDetailsSchema,
   roleChangeRequestSchema,
   userIdParamsSchema,
@@ -290,6 +291,39 @@ describe('userUpdateSchema (US-023/AC-01, AC-02, AC-03, AC-04)', () => {
   it('rejects a missing fullName', () => {
     const { fullName: _fullName, ...rest } = VALID_USER_UPDATE;
     expect(userUpdateSchema.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe('deactivationPreviewSchema (US-025/AC-05 — GET /api/admin/users/:id/deactivation-preview)', () => {
+  it('parses an empty bookings list (US-025/AC-07\'s population)', () => {
+    expect(deactivationPreviewSchema.safeParse({ bookings: [] }).success).toBe(true);
+  });
+
+  it('parses one or more bookings, each with an id, desk number and date', () => {
+    const result = deactivationPreviewSchema.safeParse({
+      bookings: [
+        { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', deskNumber: 'A-01', date: '2026-09-08' },
+        { id: '4a3504e0-4f89-41d3-9a0c-0305e82c3302', deskNumber: 'B-02', date: '2026-09-10' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a missing bookings field', () => {
+    expect(deactivationPreviewSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('rejects a booking missing a date', () => {
+    const result = deactivationPreviewSchema.safeParse({
+      bookings: [{ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', deskNumber: 'A-01' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('has no count field — the browser reads bookings.length (design note §3.3, C15)', () => {
+    const result = deactivationPreviewSchema.safeParse({ bookings: [], count: 0 });
+    expect(result.success).toBe(true);
+    expect(result.success && 'count' in result.data).toBe(false);
   });
 });
 

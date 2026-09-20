@@ -3,6 +3,14 @@ import type { AdminSummary } from '@desk-booking/contracts';
 import {
   accountCreatedToast,
   accountUpdatedToast,
+  deactivateAndCancelLabel,
+  deactivateBookingListItem,
+  deactivateConfirmBodyWithBookings,
+  deactivateConfirmTitle,
+  DEACTIVATE_CONFIRM_BODY_NO_BOOKINGS,
+  DEACTIVATE_LAST_ACTIVE_ADMIN_REFUSAL_BODY,
+  deactivatedToast,
+  deactivateFailedAlert,
   disabledMenuItemReason,
   editPersonTitle,
   emailTakenMessage,
@@ -153,5 +161,75 @@ describe('roleChangedToast (US-024/AC-11, ST-14)', () => {
 
   it('states a demotion', () => {
     expect(roleChangedToast('Priya Raman', 'employee')).toBe('Priya Raman is now an employee.');
+  });
+});
+
+describe('deactivateConfirmTitle (US-025/AC-05, AC-07, ST-05, ST-06)', () => {
+  it('asks the question, naming the account', () => {
+    expect(deactivateConfirmTitle('Dana Silva')).toBe('Deactivate Dana Silva?');
+  });
+});
+
+describe('DEACTIVATE_CONFIRM_BODY_NO_BOOKINGS (US-025/AC-07, ST-05)', () => {
+  it('states no sign-in and that past bookings are kept — no cancellation clause, no count', () => {
+    expect(DEACTIVATE_CONFIRM_BODY_NO_BOOKINGS).toBe("They won't be able to sign in. Their past bookings are kept.");
+  });
+});
+
+describe('deactivateBookingListItem (US-025/AC-05, ST-06)', () => {
+  it('joins the desk and the date with "on"', () => {
+    expect(deactivateBookingListItem('A-01', 'Tue 8 Sep')).toBe('A-01 on Tue 8 Sep');
+  });
+});
+
+describe('deactivateConfirmBodyWithBookings (US-025/AC-05, ST-06)', () => {
+  it('lists every booking individually, states the desk return and the email, using the FIRST name only', () => {
+    const body = deactivateConfirmBodyWithBookings('Dana Silva', [
+      'A-01 on Tue 8 Sep',
+      'B-02 on Thu 10 Sep',
+      'A-01 on Mon 14 Sep',
+    ]);
+    expect(body).toBe(
+      "They won't be able to sign in, and their 3 upcoming bookings will be cancelled — A-01 on Tue 8 Sep, B-02 on Thu 10 Sep, A-01 on Mon 14 Sep. Those desks go back into the pool and Dana is emailed about each one. Past bookings are kept.",
+    );
+  });
+
+  it('singularises "upcoming booking" for exactly one', () => {
+    const body = deactivateConfirmBodyWithBookings('Dana Silva', ['A-01 on Tue 8 Sep']);
+    expect(body).toContain('their upcoming booking will be cancelled — A-01 on Tue 8 Sep.');
+  });
+});
+
+describe('deactivateAndCancelLabel (US-025/AC-06, ST-06)', () => {
+  it('carries the count in the label — a habitual click cannot hide what it does', () => {
+    expect(deactivateAndCancelLabel(3)).toBe('Deactivate and cancel 3 bookings');
+  });
+
+  it('singularises for exactly one', () => {
+    expect(deactivateAndCancelLabel(1)).toBe('Deactivate and cancel 1 booking');
+  });
+});
+
+describe('lastActiveAdminRefusalTitle / DEACTIVATE_LAST_ACTIVE_ADMIN_REFUSAL_BODY (US-025/AC-10, ST-07)', () => {
+  it('the title is reused verbatim from the role-change refusal — the frames render the identical sentence for both doors', () => {
+    expect(lastActiveAdminRefusalTitle('Marcus Vale')).toBe('Marcus Vale is the only active admin.');
+  });
+
+  it('the body names desks, bookings, people and that nobody could undo it — the fuller BR-001.11 consequence', () => {
+    expect(DEACTIVATE_LAST_ACTIVE_ADMIN_REFUSAL_BODY).toBe(
+      'Deactivating this account would leave nobody able to manage desks, bookings or people — including nobody able to undo it. Make someone else an admin first.',
+    );
+  });
+});
+
+describe('deactivateFailedAlert (US-025/AC-11, ST-13)', () => {
+  it('names the person and states nothing changed', () => {
+    expect(deactivateFailedAlert('Dana Silva')).toBe("We couldn't deactivate Dana Silva just now. Nothing has changed. Try again.");
+  });
+});
+
+describe('deactivatedToast (US-025/AC-13, ST-14)', () => {
+  it('states the effect, with no count (AC-06\'s count was the preview\'s, not this toast\'s)', () => {
+    expect(deactivatedToast('Dana Silva')).toBe('Dana Silva can no longer sign in.');
   });
 });

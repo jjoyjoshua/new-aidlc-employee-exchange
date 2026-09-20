@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import { userRoleSchema } from './auth.js';
 import { newPasswordSchema } from './password.js';
+import { officeDateSchema } from './booking-window.js';
 
 /**
  * One account in the people list (US-020/AC-01). `id`, `fullName`, `email`, `role`, `isActive` —
@@ -153,3 +154,22 @@ export type UserUpdateRequest = z.input<typeof userUpdateSchema>;
  */
 export const emailTakenDetailsSchema = z.object({ fullName: z.string(), isActive: z.boolean() }).strict();
 export type EmailTakenDetails = z.infer<typeof emailTakenDetailsSchema>;
+
+/**
+ * `GET /api/admin/users/:id/deactivation-preview`'s `200` body (US-025/AC-05). Not `.strict()` —
+ * every response in this package is additive-safe. `userIdParamsSchema` is reused verbatim for
+ * the route param; there is no query.
+ *
+ * Deliberately NO `count` field — it would be `bookings.length` restated on a payload that is
+ * never paginated (design note §3.3, C15), and AC-06's counted label reads the array's own length.
+ */
+export const deactivationPreviewSchema = z.object({
+  bookings: z.array(
+    z.object({
+      id: z.string().uuid(),
+      deskNumber: z.string().min(1),
+      date: officeDateSchema,
+    }),
+  ),
+});
+export type DeactivationPreview = z.infer<typeof deactivationPreviewSchema>;

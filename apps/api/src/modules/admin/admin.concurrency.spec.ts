@@ -212,58 +212,63 @@ describe.runIf(RUN)('usersRepository.listAccounts — real Postgres (US-020/AC-0
 });
 
 /**
+ * Shared by every `describe.runIf(RUN)` block below that exercises BR-001.11's whole-table
+ * invariant (US-024's `setRole`, US-025's `deactivateAccount`) — module scope, not nested inside
+ * one block, so both can use the identical device. **The `exists` the trigger evaluates is over
+ * the WHOLE table**, so every case must first neutralise the project's own seeded admin(s) —
+ * demoting them AFTER a fixture admin exists to replace them (never before, which the rule under
+ * test would itself refuse), and restoring them in `finally` regardless of outcome. Each test
+ * snapshots `activeAdminIds()` BEFORE creating its own fixtures — reading the snapshot any later
+ * would include the fixtures themselves, and bulk-demoting fixture-and-seed together in one
+ * statement trips the very guard under test.
+ */
+async function activeAdminIds(): Promise<string[]> {
+  const { data, error } = await supabase().from('user_profiles').select('id').eq('role', 'admin').eq('is_active', true);
+  if (error) throw new Error(`could not read active admins: ${error.message}`);
+  return (data ?? []).map((r) => (r as { id: string }).id);
+}
+
+/**
+ * Demotes exactly the admin ids named — meant to be called with a snapshot taken BEFORE any
+ * fixture admin is created, never a fresh read at call time. Reading the snapshot late is the
+ * bug this comment exists to prevent: `activeAdminIds()` called after a fixture admin already
+ * exists returns the fixture too, and bulk-demoting fixture-and-seed together in one statement
+ * trips the very guard under test (each row's own trigger sees the OTHER row already changed
+ * earlier in the same statement, by Postgres's own per-row `AFTER` trigger ordering).
+ */
+async function demote(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await supabase().from('user_profiles').update({ role: 'employee' }).in('id', ids);
+  if (error) throw new Error(`fixture setup: could not demote pre-existing admin(s): ${error.message}`);
+}
+
+/** The mirror of `demote` — always called in `finally`, regardless of the test's outcome. */
+async function restore(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await supabase().from('user_profiles').update({ role: 'admin' }).in('id', ids);
+  if (error) {
+    // A cleanup failure must be loud, but must not replace whatever the test itself threw —
+    // `finally` re-throwing here would do exactly that (`bookings.repository.concurrency
+    // .spec.ts`'s own `cleanUp` uses the same non-throwing discipline for the same reason).
+    console.error(`fixture cleanup FAILED — pre-existing admin(s) [${ids.join(', ')}] were NOT restored to admin`, error.message);
+  }
+}
+
+async function deactivateRow(id: string): Promise<void> {
+  const { error } = await supabase().from('user_profiles').update({ is_active: false }).eq('id', id);
+  if (error) throw new Error(`fixture setup: could not deactivate ${id}: ${error.message}`);
+}
+
+/**
  * US-024/AC-04, AC-07, AC-12, edge case (Architect design note §3.5, `ADR-013`). Proves the ONE
  * thing a recording fake cannot: that the write-skew race `db-design.md` §3 named — two admins
  * demoting each other in the same instant — is actually closed by the trigger's advisory lock
  * (`supabase/migrations/0004_last_active_admin_guard.sql`), and that its rejection really does
  * surface through supabase-js as SQLSTATE `Z0011` (design note §3.1's one unverifiable
  * assumption, proven here rather than merely asserted by a fake).
- *
- * **The `exists` this trigger evaluates is over the WHOLE table**, so every case here must first
- * neutralise the project's own seeded admin(s) — demoting them AFTER a fixture admin exists to
- * replace them (never before, which the rule under test would itself refuse), and restoring them
- * in `finally` regardless of outcome. `demote`/`restore` below are that device, shared by every
- * case in this block. Each test snapshots `activeAdminIds()` BEFORE creating its own fixtures —
- * reading the snapshot any later would include the fixtures themselves, and bulk-demoting
- * fixture-and-seed together in one statement trips the very guard under test.
  */
 describe.runIf(RUN)('usersRepository.setRole — real Postgres, BR-001.11 (US-024/AC-04, AC-07, AC-12, edge case)', () => {
-  async function activeAdminIds(): Promise<string[]> {
-    const { data, error } = await supabase().from('user_profiles').select('id').eq('role', 'admin').eq('is_active', true);
-    if (error) throw new Error(`could not read active admins: ${error.message}`);
-    return (data ?? []).map((r) => (r as { id: string }).id);
-  }
-
-  /**
-   * Demotes exactly the admin ids named — meant to be called with a snapshot taken BEFORE any
-   * fixture admin is created, never a fresh read at call time. Reading the snapshot late is the
-   * bug this comment exists to prevent: `activeAdminIds()` called after a fixture admin already
-   * exists returns the fixture too, and bulk-demoting fixture-and-seed together in one statement
-   * trips the very guard under test (each row's own trigger sees the OTHER row already changed
-   * earlier in the same statement, by Postgres's own per-row `AFTER` trigger ordering).
-   */
-  async function demote(ids: string[]): Promise<void> {
-    if (!ids.length) return;
-    const { error } = await supabase().from('user_profiles').update({ role: 'employee' }).in('id', ids);
-    if (error) throw new Error(`fixture setup: could not demote pre-existing admin(s): ${error.message}`);
-  }
-
-  /** The mirror of `demote` — always called in `finally`, regardless of the test's outcome. */
-  async function restore(ids: string[]): Promise<void> {
-    if (!ids.length) return;
-    const { error } = await supabase().from('user_profiles').update({ role: 'admin' }).in('id', ids);
-    if (error) {
-      // A cleanup failure must be loud, but must not replace whatever the test itself threw —
-      // `finally` re-throwing here would do exactly that (`bookings.repository.concurrency
-      // .spec.ts`'s own `cleanUp` uses the same non-throwing discipline for the same reason).
-      console.error(`fixture cleanup FAILED — pre-existing admin(s) [${ids.join(', ')}] were NOT restored to admin`, error.message);
-    }
-  }
-
-  async function deactivate(id: string): Promise<void> {
-    const { error } = await supabase().from('user_profiles').update({ is_active: false }).eq('id', id);
-    if (error) throw new Error(`fixture setup: could not deactivate ${id}: ${error.message}`);
-  }
+  const deactivate = deactivateRow;
 
   it('case 1 — demoting the only active admin is refused, and the raw rejected error carries SQLSTATE Z0011 (US-024/AC-04)', async () => {
     const cleanup = newCleanup();
@@ -385,6 +390,228 @@ describe.runIf(RUN)('usersRepository.setRole — real Postgres, BR-001.11 (US-02
         // The active admin is untouched throughout.
         const remaining = await activeAdminIds();
         expect(remaining).toEqual([activeAdminId]);
+      } finally {
+        await restore(preExisting);
+      }
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+});
+
+/**
+ * US-025/AC-02, AC-04, AC-10, AC-12, edge case (Architect design note §2.4, §3.5). Proves what a
+ * recording fake cannot: that the `0004` trigger fires correctly from INSIDE
+ * `deactivate_account_cascade` exactly as it fires from a plain `UPDATE` (case 4, the design's
+ * whole proof for this story — the trigger aborting the function must also roll back the
+ * BOOKINGS half of the transaction, not just `user_profiles`), and that the cascade's own
+ * predicate (`status = 'confirmed' AND booking_date >= p_today`) agrees with the service's
+ * `displayStatusPredicate` (case 2).
+ *
+ * `today`/`now` are passed to `usersRepository.deactivateAccount` explicitly by every case here —
+ * this method takes them as parameters (design note §2.1) rather than reading a clock, so the
+ * fixture dates below and the RPC's own comparison can never disagree about what "today" means.
+ */
+describe.runIf(RUN)('usersRepository.deactivateAccount — real Postgres, cascade atomicity (US-025/AC-02, AC-04, AC-10, AC-12, edge case)', () => {
+  const TODAY_DATE = '2026-09-16'; // A Wednesday, matching this file's own `DATE` convention.
+  const PAST_DATE = '2026-09-14'; // A Monday — before TODAY_DATE, never touched.
+  const FUTURE_DATE = '2026-09-17'; // A Thursday — after TODAY_DATE, always touched.
+  const FUTURE_DATE_2 = '2026-09-18'; // A Friday — a SECOND future date, distinct from FUTURE_DATE
+  // (bookings_one_confirmed_per_user_per_day forbids two confirmed bookings for the same person
+  // on the same day, so case 2's four fixture bookings need four distinct dates).
+  const NOW = new Date('2026-09-16T09:00:00.000Z');
+
+  interface BookingRow {
+    id: string;
+    status: string;
+    cancelled_by: string | null;
+    cancellation_source: string | null;
+  }
+
+  async function readBooking(id: string): Promise<BookingRow> {
+    const { data, error } = await supabase()
+      .from('bookings')
+      .select('id, status, cancelled_by, cancellation_source')
+      .eq('id', id)
+      .single();
+    if (error || !data) throw new Error(`could not read fixture booking ${id}: ${error?.message}`);
+    return data as BookingRow;
+  }
+
+  async function readIsActive(id: string): Promise<boolean> {
+    const { data, error } = await supabase().from('user_profiles').select('is_active').eq('id', id).single();
+    if (error || !data) throw new Error(`could not read fixture account ${id}: ${error?.message}`);
+    return (data as { is_active: boolean }).is_active;
+  }
+
+  /** Inserts and registers the booking for cleanup IMMEDIATELY on success — never batched after
+   *  a later check that might throw first, which would leak the booking (and, via
+   *  `on delete restrict`, its desk) past this test's own `finally`. */
+  async function bookOrThrow(cleanup: Cleanup, userId: string, deskId: string, date: string): Promise<string> {
+    const result = await availabilityRepository.insertConfirmedBooking(userId, deskId, date);
+    if (result.kind !== 'ok') throw new Error(`fixture booking could not be created: ${result.kind}`);
+    cleanup.bookingIds.push(result.id);
+    return result.id;
+  }
+
+  it('case 1 — deactivating the only active admin is refused, and NOTHING is touched: account stays active, booking stays confirmed (US-025/AC-04, US-025/AC-10, US-025/AC-12)', async () => {
+    const cleanup = newCleanup();
+    const preExisting = await activeAdminIds();
+    try {
+      const adminId = await createAccountWithProfile(cleanup, 'US025 Only Admin', 'us025-only-admin', 'admin');
+      const deskId = await createDesk(cleanup, 'Z-25');
+      const bookingId = await bookOrThrow(cleanup, adminId, deskId, FUTURE_DATE);
+      await demote(preExisting);
+      try {
+        // The raw client call first — the §2.7/§3.1 assumption itself, that Z0011 survives the
+        // `/rpc/` path exactly as it survives a plain table UPDATE (a DIFFERENT code path,
+        // untested by US-024's own proof).
+        const { error } = await supabase().rpc('deactivate_account_cascade', {
+          p_target_id: adminId,
+          p_actor_id: adminId,
+          p_now: NOW.toISOString(),
+          p_today: TODAY_DATE,
+        });
+        expect(error).not.toBeNull();
+        expect(error?.code).toBe('Z0011');
+
+        const result = await usersRepository.deactivateAccount({ id: adminId, actorId: adminId, now: NOW, today: TODAY_DATE });
+        expect(result).toEqual({ kind: 'blocked' });
+
+        // AC-12's "all or nothing", proven directly: NEITHER half of the transaction landed.
+        expect(await readIsActive(adminId)).toBe(true);
+        expect((await readBooking(bookingId)).status).toBe('confirmed');
+      } finally {
+        await restore(preExisting);
+      }
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+
+  it('case 2 — cancels exactly the upcoming Confirmed bookings, dated today or later; a past Confirmed and an already-Cancelled booking are untouched (US-025/AC-02, US-025/AC-03)', async () => {
+    const cleanup = newCleanup();
+    try {
+      const employeeId = await createEmployee(cleanup, 'US025 Cascade Fixture');
+      const admin = await createAccountWithProfile(cleanup, 'US025 Acting Admin', 'us025-acting-admin', 'admin');
+      const deskA = await createDesk(cleanup, 'Z-26');
+      const deskB = await createDesk(cleanup, 'Z-27');
+      const deskC = await createDesk(cleanup, 'Z-28');
+      const deskD = await createDesk(cleanup, 'Z-29');
+
+      const upcoming1Id = await bookOrThrow(cleanup, employeeId, deskA, TODAY_DATE);
+      const upcoming2Id = await bookOrThrow(cleanup, employeeId, deskB, FUTURE_DATE);
+      const pastId = await bookOrThrow(cleanup, employeeId, deskC, PAST_DATE);
+      const alreadyCancelledId = await bookOrThrow(cleanup, employeeId, deskD, FUTURE_DATE_2);
+
+      // Pre-cancel the fourth booking BY THE OWNER, before the cascade runs — it must stay exactly
+      // as it is, not be re-stamped with `deactivation_cascade`.
+      const { error: preCancelError } = await supabase()
+        .from('bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: employeeId, cancellation_source: 'owner' })
+        .eq('id', alreadyCancelledId);
+      if (preCancelError) throw new Error(`fixture pre-cancel failed: ${preCancelError.message}`);
+
+      const result = await usersRepository.deactivateAccount({ id: employeeId, actorId: admin, now: NOW, today: TODAY_DATE });
+
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.profile.is_active).toBe(false);
+        const cancelledIds = result.cancelledBookings.map((b) => b.id).sort();
+        expect(cancelledIds).toEqual([upcoming1Id, upcoming2Id].sort());
+        for (const row of result.cancelledBookings) {
+          expect(row.cancellationSource).toBe('deactivation_cascade');
+        }
+      }
+
+      // Direct reads confirm both cancelled rows, and prove the other two were left alone.
+      const upcoming1Row = await readBooking(upcoming1Id);
+      expect(upcoming1Row.status).toBe('cancelled');
+      expect(upcoming1Row.cancelled_by).toBe(admin);
+      expect(upcoming1Row.cancellation_source).toBe('deactivation_cascade');
+
+      const upcoming2Row = await readBooking(upcoming2Id);
+      expect(upcoming2Row.status).toBe('cancelled');
+      expect(upcoming2Row.cancellation_source).toBe('deactivation_cascade');
+
+      const pastRow = await readBooking(pastId);
+      expect(pastRow.status).toBe('confirmed');
+      expect(pastRow.cancellation_source).toBeNull();
+
+      const alreadyCancelledRow = await readBooking(alreadyCancelledId);
+      expect(alreadyCancelledRow.cancellation_source).toBe('owner');
+      expect(alreadyCancelledRow.cancelled_by).toBe(employeeId);
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+
+  it('case 3 — deactivating an admin with zero upcoming bookings succeeds while another active admin remains, and touches no booking (US-025/AC-07\'s data shape)', async () => {
+    const cleanup = newCleanup();
+    const preExisting = await activeAdminIds();
+    try {
+      const targetAdminId = await createAccountWithProfile(cleanup, 'US025 Target Admin', 'us025-target-admin', 'admin');
+      const anotherAdminId = await createAccountWithProfile(cleanup, 'US025 Another Admin', 'us025-another-admin', 'admin');
+      const deactivatedAdminId = await createAccountWithProfile(cleanup, 'US025 Deactivated Admin', 'us025-deactivated-admin', 'admin');
+      await deactivateRow(deactivatedAdminId);
+      await demote(preExisting);
+      try {
+        const result = await usersRepository.deactivateAccount({ id: targetAdminId, actorId: anotherAdminId, now: NOW, today: TODAY_DATE });
+
+        expect(result.kind).toBe('ok');
+        if (result.kind === 'ok') {
+          expect(result.profile.is_active).toBe(false);
+          expect(result.cancelledBookings).toEqual([]);
+        }
+
+        // anotherAdminId's own active status is untouched — it is what made the deactivation legal.
+        expect(await readIsActive(anotherAdminId)).toBe(true);
+      } finally {
+        await restore(preExisting);
+      }
+    } finally {
+      await cleanUp(cleanup);
+    }
+  });
+
+  it('case 4 — two active admins (the last two), both holding upcoming bookings, deactivated AT THE SAME INSTANT: exactly one succeeds, its bookings cancelled; the loser stays active with its bookings still Confirmed (US-025 edge case, the design\'s whole proof)', async () => {
+    const cleanup = newCleanup();
+    const preExisting = await activeAdminIds();
+    try {
+      const adminA = await createAccountWithProfile(cleanup, 'US025 Admin A', 'us025-concurrent-a', 'admin');
+      const adminB = await createAccountWithProfile(cleanup, 'US025 Admin B', 'us025-concurrent-b', 'admin');
+      const deskA = await createDesk(cleanup, 'Z-30');
+      const deskB = await createDesk(cleanup, 'Z-31');
+      const bookingAId = await bookOrThrow(cleanup, adminA, deskA, FUTURE_DATE);
+      const bookingBId = await bookOrThrow(cleanup, adminB, deskB, FUTURE_DATE);
+      await demote(preExisting);
+      try {
+        const [resultA, resultB] = await Promise.all([
+          usersRepository.deactivateAccount({ id: adminA, actorId: adminA, now: NOW, today: TODAY_DATE }),
+          usersRepository.deactivateAccount({ id: adminB, actorId: adminB, now: NOW, today: TODAY_DATE }),
+        ]);
+
+        const kinds = [resultA.kind, resultB.kind].sort();
+        // This is the assertion that FAILS if the trigger did not fire correctly from inside the
+        // new function, or if the advisory lock's serialisation did not carry over the `/rpc/`
+        // path: without it, BOTH could read the other's row as still-admin-and-active and BOTH
+        // would commit, leaving zero active admins.
+        expect(kinds).toEqual(['blocked', 'ok']);
+
+        const remaining = await activeAdminIds();
+        expect(remaining).toHaveLength(1);
+        const [winner, winnerBookingId] = resultA.kind === 'ok' ? [adminA, bookingAId] : [adminB, bookingBId];
+        const [loser, loserBookingId] = resultA.kind === 'ok' ? [adminB, bookingBId] : [adminA, bookingAId];
+        expect(remaining[0]).toBe(loser);
+
+        // The winner's cascade actually ran...
+        expect(await readIsActive(winner)).toBe(false);
+        expect((await readBooking(winnerBookingId)).status).toBe('cancelled');
+
+        // ...and the loser's did not — proving the abort rolled back BOTH tables, not just
+        // user_profiles (design note §2.4, the whole point of this case).
+        expect(await readIsActive(loser)).toBe(true);
+        expect((await readBooking(loserBookingId)).status).toBe('confirmed');
       } finally {
         await restore(preExisting);
       }
