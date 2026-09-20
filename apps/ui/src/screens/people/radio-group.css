@@ -1,0 +1,52 @@
+/*
+ * SCR-009's Role control. Tokens only, no new colour — the same field/label vocabulary
+ * `text-field.css` already establishes for this screen's other controls.
+ */
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.radio-group__legend {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+  padding: 0;
+}
+
+.radio-group__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-8);
+  cursor: pointer;
+}
+
+.radio-group__input {
+  margin-top: 2px;
+  accent-color: var(--c-action);
+}
+
+.radio-group__input:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+.radio-group__label {
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  color: var(--c-text);
+}
+
+.radio-group:disabled .radio-group__label,
+fieldset.radio-group[disabled] .radio-group__label {
+  color: var(--c-text-disabled);
+}

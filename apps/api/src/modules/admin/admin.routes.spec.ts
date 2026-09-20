@@ -19,6 +19,7 @@ import type {
   UpdateDeskOutcome,
 } from '../desks/desks.repository.js';
 import type { UserAccountRow, UsersRepository, UserSummaryRow } from '../users/users.repository.js';
+import type { UsersAuthAdapter } from '../users/users.adapter.js';
 
 interface Row {
   id: string;
@@ -111,6 +112,21 @@ const noUsers: UsersRepository = {
   async getSummaryCounts() {
     return [];
   },
+  async findByEmail() {
+    throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+  },
+  async insertProfile() {
+    throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+  },
+};
+
+const notUsedUsersAuth: UsersAuthAdapter = {
+  async createAccount() {
+    throw new Error('createAccount not stubbed — this test does not exercise POST /users');
+  },
+  async deleteAccount() {
+    throw new Error('deleteAccount not stubbed — this test does not exercise POST /users');
+  },
 };
 
 function bookingRow(overrides: Partial<AdminBookingRow> = {}): AdminBookingRow {
@@ -149,6 +165,7 @@ function appWith(options: {
   adminBookings?: Pick<AdminBookingsRepository, 'listBookings'> & Partial<AdminBookingsRepository>;
   desks?: DesksRepository;
   users?: UsersRepository;
+  usersAuth?: UsersAuthAdapter;
 }) {
   const rows = options.rows ?? [ADMIN, EMPLOYEE];
 
@@ -175,6 +192,7 @@ function appWith(options: {
     adminBookings: options.adminBookings ? { ...NOT_USED_FOR_CANCEL, ...options.adminBookings } : noBookings,
     desks: options.desks ?? noDesks,
     users: options.users ?? noUsers,
+    usersAuth: options.usersAuth ?? notUsedUsersAuth,
   });
 }
 
@@ -1126,6 +1144,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async getSummaryCounts() {
         return SUMMARY_ROWS;
       },
+      async findByEmail() {
+        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+      },
+      async insertProfile() {
+        throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
     };
     const app = appWith({ users });
 
@@ -1160,6 +1184,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async getSummaryCounts() {
         return SUMMARY_ROWS;
       },
+      async findByEmail() {
+        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+      },
+      async insertProfile() {
+        throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
     };
     const app = appWith({ users });
 
@@ -1177,6 +1207,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async getSummaryCounts() {
         return SUMMARY_ROWS;
+      },
+      async findByEmail() {
+        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+      },
+      async insertProfile() {
+        throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
       },
     };
     const app = appWith({ users });
@@ -1221,6 +1257,12 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async getSummaryCounts() {
         return SUMMARY_ROWS;
       },
+      async findByEmail() {
+        throw new Error('findByEmail not stubbed — this test does not exercise POST /users');
+      },
+      async insertProfile() {
+        throw new Error('insertProfile not stubbed — this test does not exercise POST /users');
+      },
     };
     const app = appWith({ users });
 
@@ -1238,6 +1280,202 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
   it('refuses a request with no token at all', async () => {
     const app = appWith({ users: noUsers });
     const response = await request(app).get('/api/admin/users');
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/users (US-021/AC-01, AC-02, AC-03, AC-06, AC-12)', () => {
+  const VALID_BODY = {
+    fullName: 'Dana Silva',
+    email: 'dana@company.com',
+    role: 'employee',
+    password: 'Correct-Horse7',
+  };
+
+  function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
+    return {
+      async listAccounts() {
+        throw new Error('not exercised');
+      },
+      async getSummaryCounts() {
+        throw new Error('not exercised');
+      },
+      async findByEmail() {
+        return undefined;
+      },
+      async insertProfile() {
+        return undefined;
+      },
+      ...overrides,
+    };
+  }
+
+  function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapter {
+    return {
+      async createAccount() {
+        return { kind: 'ok', userId: 'new-user-id' };
+      },
+      async deleteAccount() {
+        return { kind: 'ok' };
+      },
+      ...overrides,
+    };
+  }
+
+  it('a valid body creates the account and returns 201 with the exact shape — toEqual, never toMatchObject (US-021/AC-01)', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({
+      id: 'new-user-id',
+      fullName: 'Dana Silva',
+      email: 'dana@company.com',
+      role: 'employee',
+      isActive: true,
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('rejects a role outside employee/admin with 400 invalid_request (US-021/AC-02)', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ ...VALID_BODY, role: 'superadmin' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('rejects a password failing V-12 with 400 invalid_request and creates nothing (US-021/AC-03)', async () => {
+    const created: unknown[] = [];
+    const app = appWith({
+      users: usersFor(),
+      usersAuth: usersAuthFor({
+        async createAccount() {
+          created.push('called');
+          return { kind: 'ok', userId: 'new-user-id' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ ...VALID_BODY, password: 'tooweak' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+    expect(created).toEqual([]);
+  });
+
+  it('a duplicate active email returns 409 email_taken with details naming the holder (US-021/AC-06)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findByEmail() {
+          return { full_name: 'Existing Holder', is_active: true };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('email_taken');
+    expect(response.body.details).toEqual({ fullName: 'Existing Holder', isActive: true });
+  });
+
+  it('a duplicate DEACTIVATED email returns 409 email_taken with isActive: false (US-021/AC-06 — the natural implementation filters to active accounts and lets this through)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async findByEmail() {
+          return { full_name: 'Former Employee', is_active: false };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(409);
+    expect(response.body.details).toEqual({ fullName: 'Former Employee', isActive: false });
+  });
+
+  it('an unreachable Supabase Auth returns 503 service_unavailable, distinct from a profile-insert failure (US-021/AC-11)', async () => {
+    const app = appWith({
+      users: usersFor(),
+      usersAuth: usersAuthFor({
+        async createAccount() {
+          return { kind: 'unavailable' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(503);
+    expect(response.body.code).toBe('service_unavailable');
+  });
+
+  it('a profile-insert failure (after the credential was minted) returns a bare 500 (US-021/AC-11, ADR-011)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async insertProfile() {
+          throw new Error('db unreachable');
+        },
+      }),
+      usersAuth: usersAuthFor(),
+    });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('refuses an Employee session with 403 admin_only, and creates nothing (US-021/AC-12)', async () => {
+    const created: unknown[] = [];
+    const app = appWith({
+      users: usersFor(),
+      usersAuth: usersAuthFor({
+        async createAccount() {
+          created.push('called');
+          return { kind: 'ok', userId: 'new-user-id' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`)
+      .send(VALID_BODY);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    expect(created).toEqual([]);
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+    const response = await request(app).post('/api/admin/users').send(VALID_BODY);
     expect(response.status).toBe(401);
   });
 });

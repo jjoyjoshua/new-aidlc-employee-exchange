@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -10,6 +10,7 @@ import type { ApiClient } from '../../lib/api-client.js';
 import type { AdminSummary, AdminUser, AuthenticatedUser, Office } from '@desk-booking/contracts';
 import type { UsersOutcome } from '../../lib/use-users.js';
 import type { FetchUsers } from '../../lib/fetch-users.js';
+import type { CreateAccountFetcher, CreateAccountOutcome } from '../../lib/create-account.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -30,10 +31,12 @@ const SUMMARY: AdminSummary = { total: 38, employees: 36, admins: 2, deactivated
 
 function SignedIn({
   fetchUsers,
+  createAccount,
   user = ADMIN,
   guarded = false,
 }: {
   fetchUsers: FetchUsers;
+  createAccount?: CreateAccountFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -45,7 +48,7 @@ function SignedIn({
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screenEl = <People fetchUsers={fetchUsers} />;
+  const screenEl = <People fetchUsers={fetchUsers} createAccount={createAccount} />;
 
   return (
     <MemoryRouter initialEntries={['/admin/people']}>
@@ -241,5 +244,82 @@ describe('People — admin only (US-020/AC-13)', () => {
     render(<SignedIn fetchUsers={async () => okUsers([DANA])} user={ADMIN} guarded />);
 
     expect(await screen.findAllByText('Dana Silva')).not.toHaveLength(0);
+  });
+});
+
+const NEW_ACCOUNT: AdminUser = { id: 'new', fullName: 'Amy Ito', email: 'amy@company.com', role: 'employee', isActive: true };
+
+async function fillAndSubmitValidUserForm() {
+  const dialog = screen.getByRole('dialog', { name: 'Add person' });
+  await userEvent.type(within(dialog).getByLabelText('Full name'), 'Amy Ito');
+  await userEvent.type(within(dialog).getByLabelText('Email'), 'amy@company.com');
+  await userEvent.type(within(dialog).getByLabelText('Initial password'), 'Correct-Horse7');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Add person' }));
+}
+
+describe('People — create an account (US-021/AC-01, AC-09, design note §4.2/A6)', () => {
+  it('opening Add person renders the dialog', async () => {
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} />);
+    await screen.findAllByText('Dana Silva');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Add person' })).toBeInTheDocument();
+  });
+
+  it('with NO active search, a successful create closes the dialog, shows the toast, and inserts the row at its sorted position without a refetch', async () => {
+    let fetchCalls = 0;
+    const fetchUsers: FetchUsers = async () => {
+      fetchCalls += 1;
+      return okUsers([DANA, MARCUS]);
+    };
+    const createAccount: CreateAccountFetcher = async () => ({ kind: 'ok', account: NEW_ACCOUNT });
+    render(<SignedIn fetchUsers={fetchUsers} createAccount={createAccount} />);
+    await screen.findAllByText('Dana Silva');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    await fillAndSubmitValidUserForm();
+
+    expect(await screen.findByText(/Amy Ito added/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Amy Ito').length).toBeGreaterThan(0);
+    expect(fetchCalls).toBe(1);
+  });
+
+  it('WITH an active search the new name does not match, the row does NOT appear and the match line is unaffected (A6)', async () => {
+    const fetchUsers: FetchUsers = async (q) => (q ? okUsers([DANA], SUMMARY) : okUsers([DANA, MARCUS], SUMMARY));
+    const createAccount: CreateAccountFetcher = async () => ({ kind: 'ok', account: NEW_ACCOUNT });
+    render(<SignedIn fetchUsers={fetchUsers} createAccount={createAccount} />);
+    await screen.findAllByText('Dana Silva');
+
+    await userEvent.type(screen.getByLabelText('Search name or email'), 'dana{Enter}');
+    await screen.findByText('Showing 1 of 38');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    await fillAndSubmitValidUserForm();
+
+    expect(await screen.findByText(/Amy Ito added/)).toBeInTheDocument();
+    expect(screen.queryByText('Amy Ito')).not.toBeInTheDocument();
+    // The summary (and its total, which the match line's denominator reads) DOES increment —
+    // A6 requires it, since `summary` is whole-table and correct under any filter. Only the
+    // FILTERED array is left alone. 1 of 39, not 1 of 38: the new account is real, it simply
+    // does not match the active search term.
+    expect(screen.getByText('Showing 1 of 39')).toBeInTheDocument();
+  });
+
+  it('a duplicate email keeps the dialog open, naming the holder', async () => {
+    const createAccount: CreateAccountFetcher = async (): Promise<CreateAccountOutcome> => ({
+      kind: 'duplicate',
+      fullName: 'Existing Holder',
+      isActive: true,
+    });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} createAccount={createAccount} />);
+    await screen.findAllByText('Dana Silva');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    await fillAndSubmitValidUserForm();
+
+    expect(await screen.findByText('already belongs to Existing Holder.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

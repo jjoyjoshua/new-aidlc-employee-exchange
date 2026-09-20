@@ -73,7 +73,15 @@ export const notFound = (code: string, message: string) => new HttpError(404, co
  * else already cancelled (US-011/AC-09, design note §1.3). Retryability is carried by the `code`,
  * not by the status class: the screen decides what to offer.
  */
-export const conflict = (code: string, message: string) => new HttpError(409, code, message);
+/**
+ * `details` (US-021/AC-06, ADR-009's second application) is for the same reason
+ * `unprocessable`'s own carries one: the browser must RENDER a fact from the refusal, not merely
+ * switch on it. `email_taken` is the first caller — the composed sentence lives in
+ * `screens/people/copy.ts`, never in this `message`. Omitted by every other `conflict()` call
+ * site, which stay byte-identical (ADR-009).
+ */
+export const conflict = (code: string, message: string, details?: Record<string, unknown>) =>
+  new HttpError(409, code, message, details);
 
 /**
  * The request is well-formed but the rule refuses it (V-06, V-09, V-11).

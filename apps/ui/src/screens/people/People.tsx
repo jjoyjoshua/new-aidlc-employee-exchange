@@ -30,13 +30,16 @@ import { Alert } from '../../components/alert/Alert.js';
 import { Button } from '../../components/button/Button.js';
 import { EmptyState } from '../../components/empty-state/EmptyState.js';
 import { TextField } from '../../components/text-field/TextField.js';
+import { Toast } from '../../components/toast/Toast.js';
 import { useAuth } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
+import { createCreateAccount, type CreateAccountFetcher } from '../../lib/create-account.js';
 import { createFetchUsers, type FetchUsers } from '../../lib/fetch-users.js';
 import { useUsers, type UsersFetcher } from '../../lib/use-users.js';
 import { AccountRow, AccountsTableHead } from './AccountRow.js';
 import { AccountSkeletonRow } from './AccountSkeletonRow.js';
 import {
+  accountCreatedToast,
   ADD_PERSON_LABEL,
   CLEAR_SEARCH_FIELD_LABEL,
   CLEAR_SEARCH_LABEL,
@@ -48,6 +51,8 @@ import {
   summaryLine,
   TRY_AGAIN_LABEL,
 } from './copy.js';
+import { UserFormDialog } from './UserFormDialog.js';
+import { useUserFormDialog } from './use-user-form-dialog.js';
 import './people.css';
 
 /** 300ms — the plan's own default (Open question 1), confirmed reasonable by the design note
@@ -59,28 +64,33 @@ export interface PeopleProps {
   /** Test seam. Defaults to the real `GET /api/admin/users` call over the authenticated client
    *  from `useAuth()`. `| undefined` (not just `?`), matching every other screen's own seam. */
   fetchUsers?: FetchUsers | undefined;
+  /** Test seam for `POST /api/admin/users` (US-021). Defaults to the real call. */
+  createAccount?: CreateAccountFetcher | undefined;
 }
 
-export function People({ fetchUsers }: PeopleProps) {
+export function People({ fetchUsers, createAccount }: PeopleProps) {
   const { api, user } = useAuth();
 
   // Behind RequireSession, `user` is always present by the time this screen renders — the same
   // reasoning every other admin screen states for its own guarded fields.
   if (!user) return null;
 
-  return <PeopleContent api={api} currentUserId={user.id} fetchUsers={fetchUsers} />;
+  return <PeopleContent api={api} currentUserId={user.id} fetchUsers={fetchUsers} createAccount={createAccount} />;
 }
 
 function PeopleContent({
   api,
   currentUserId,
   fetchUsers,
+  createAccount,
 }: {
   api: ApiClient;
   currentUserId: string;
   fetchUsers: FetchUsers | undefined;
+  createAccount: CreateAccountFetcher | undefined;
 }) {
   const resolvedFetch = useMemo(() => fetchUsers ?? createFetchUsers(api), [fetchUsers, api]);
+  const resolvedCreateAccount = useMemo(() => createAccount ?? createCreateAccount(api), [createAccount, api]);
 
   const [typed, setTyped] = useState('');
   const [committedQ, setCommittedQ] = useState<string | undefined>(undefined);
@@ -94,6 +104,19 @@ function PeopleContent({
   );
   const users = useUsers(stableFetch);
   const retry = useCallback(() => setRetryKey((key) => key + 1), []);
+
+  // US-021/AC-01, AC-09 (design note §4.2, A6): the row only joins the visible list when no
+  // search is active — under a committed search, the toast is the whole of the confirmation,
+  // never a row forced into a filtered view only the server can evaluate correctly.
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const handleCreated = useCallback(
+    (account: AdminUser) => {
+      if (users.status === 'ready') users.markAdded(account, { appendToList: committedQ === undefined });
+      setSavedMessage(accountCreatedToast(account.fullName));
+    },
+    [users, committedQ],
+  );
+  const userFormDialog = useUserFormDialog(resolvedCreateAccount, handleCreated);
 
   // A9/§7.4: latches true on the first successful load and never resets — see the module
   // docblock for why this must not simply track `status === 'loading'`.
@@ -142,9 +165,19 @@ function PeopleContent({
 
   return (
     <>
+      {savedMessage ? <Toast>{savedMessage}</Toast> : null}
+
+      {userFormDialog.dialog ? (
+        <UserFormDialog dialog={userFormDialog.dialog} onSubmit={userFormDialog.submit} onDismiss={userFormDialog.dismiss} />
+      ) : null}
+
       <div className="people__header">
         <h1>{PAGE_TITLE}</h1>
-        {users.status !== 'error' ? <Button variant="primary">{ADD_PERSON_LABEL}</Button> : null}
+        {users.status !== 'error' ? (
+          <Button variant="primary" onClick={userFormDialog.openAdd}>
+            {ADD_PERSON_LABEL}
+          </Button>
+        ) : null}
       </div>
 
       <div className="people__search">
@@ -205,7 +238,13 @@ function PeopleContent({
       ) : null}
 
       {users.status === 'ready' ? (
-        <PeopleReady users={users.users} committedQ={committedQ} currentUserId={currentUserId} onClearSearch={handleClear} />
+        <PeopleReady
+          users={users.users}
+          committedQ={committedQ}
+          currentUserId={currentUserId}
+          onClearSearch={handleClear}
+          onAddPerson={userFormDialog.openAdd}
+        />
       ) : null}
     </>
   );
@@ -216,11 +255,13 @@ function PeopleReady({
   committedQ,
   currentUserId,
   onClearSearch,
+  onAddPerson,
 }: {
   users: AdminUser[];
   committedQ: string | undefined;
   currentUserId: string;
   onClearSearch: () => void;
+  onAddPerson: () => void;
 }) {
   if (users.length === 0) {
     // AC-08: this is the ONLY empty branch this screen ever reaches — the signed-in
@@ -234,7 +275,9 @@ function PeopleReady({
             <Button variant="secondary" onClick={onClearSearch}>
               {CLEAR_SEARCH_LABEL}
             </Button>
-            <Button variant="primary">{ADD_PERSON_LABEL}</Button>
+            <Button variant="primary" onClick={onAddPerson}>
+              {ADD_PERSON_LABEL}
+            </Button>
           </>
         }
       />

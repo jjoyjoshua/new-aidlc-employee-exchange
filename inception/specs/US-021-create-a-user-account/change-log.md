@@ -1,0 +1,11 @@
+# US-021 — change log
+
+> The curated history of this spec: what changed and why, in the words of whoever changed it. Git holds every edit; this holds the ones that mattered. A Medium-tier change to an existing package appends a row here.
+
+| Date       | Change                                                              | Why                                                              | Requirements affected |
+| ---------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------ |
+| 2026-09-20 | Spec package created (spec, impact analysis, decisions, traceability, implementation plan) | US-021 is next in the approved backlog after US-020; confirmed the Figma hi-fi frames for SCR-009 exist and match the written spec before drafting | FR-01–FR-13 added        |
+| 2026-09-20 | Gate D1 approved (Joy Joshua). Architect design note received (`design-note.md`) and applied: corrected D-02's framing, refined D-03 to screen-private, added D-08/D-09, fixed three blockers (A1–A3) and two majors (A5, A6) in `implementation-plan.md` Steps 3/4/6/7/9/10/12/13, added `ADR-011-cross-system-write-compensation.md` (proposed), added an Out of scope line for orphan cleanup (A14) | Complex tier requires the design note before the risky step (Step 4) proceeds; the plan was approved before the note existed, per the framework's own D1-then-design-note ordering | Out of scope updated (A14); Steps 3/4/6/7/9/10/12/13 amended; Open questions resolved/added |
+| 2026-09-20 | Added D-10, D-11, D-12: fixed a shared `Dialog` height/scroll bug, a shared `Alert` icon/text misalignment, and the form's own missing field spacing — all found by the human running the built form in a browser | Manual testing surfaced three real defects no unit test caught: `Dialog`'s CSS had never been exercised by a form tall enough to overflow the viewport, and `Alert`'s default `<p>` margin had never been stacked three-deep before | None — CSS-only fixes, no FR added or changed |
+
+A plan edited after its Gate D1 approval **must** have a row here **dated on or after the approval date**. Check 16 compares the plan against the approved SHA and fails a silent change; an older row does not cover a newer edit.

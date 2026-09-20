@@ -1,0 +1,15 @@
+/*
+ * SCR-009's field rhythm — a consistent gap between the form's direct children (name, email,
+ * role, password, checklist, suggest button, delivery warning). `Dialog.tsx`'s own
+ * `.dialog__body` only spaces ITS direct children (the alerts and this one `<form>`); nothing
+ * spaced the form's own children, which sat flush against each other with zero gap until this
+ * rule existed — found by measuring the rendered form, not assumed.
+ *
+ * 16px, matching the design note's own stated rhythm ("at the body's 16px rhythm") — a field's
+ * own label-to-control gap (8px, `text-field.css`) stays tighter than the gap BETWEEN fields.
+ */
+.user-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-16);
+}

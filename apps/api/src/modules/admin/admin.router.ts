@@ -20,11 +20,20 @@ import {
   allBookingsQuerySchema,
   adminUsersQuerySchema,
   cancelBookingParamsSchema,
+  createAccountRequestSchema,
   deskCreateSchema,
   deskIdParamsSchema,
   deskUpdateSchema,
 } from '@desk-booking/contracts';
-import { ERROR_CODES, badRequest, conflict, notFound, unauthorized, unprocessable } from '../../http/errors.js';
+import {
+  ERROR_CODES,
+  badRequest,
+  conflict,
+  notFound,
+  serviceUnavailable,
+  unauthorized,
+  unprocessable,
+} from '../../http/errors.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
 import type { UsersService } from '../users/users.service.js';
@@ -93,11 +102,14 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
   /**
    * US-020/AC-01, AC-02, AC-04, AC-06, AC-13. `modules/users`'s first route, read-only.
    *
-   * This is the most sensitive read in the system — not `/bookings` above (that is filtered to a
+   * This is the most sensitive READ in the system — not `/bookings` above (that is filtered to a
    * date window); this one returns every account's name and email, unfiltered, on any request
    * that supplies no `q` at all. `adminUsersQuerySchema` bounds `q` to 100 characters and rejects
    * an unknown field; a parse failure reuses the same `invalid_request` branch `/bookings` uses
    * above — no new error code (design note §3.3).
+   *
+   * `POST /users` below is its WRITE sibling (US-021): same PII on the way out, plus a
+   * credential minted on the way in (US-021 design note A12/§3.4).
    *
    * The trust control here is NOT this handler: `adminUsersResponseSchema` is deliberately not
    * `.strict()`, so the only thing stopping a leaked column (`must_change_password`,
@@ -116,6 +128,48 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
 
       res.setHeader('Cache-Control', 'private, no-store');
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-021/AC-01, AC-02, AC-03, AC-06, AC-07, AC-08, AC-12. `modules/users`'s first WRITE — a
+   * sibling to `/users` GET above, carrying the same PII and additionally MINTING a credential
+   * (design note A12/§3.4). No role check here either — the mount already decided who may reach
+   * this handler.
+   *
+   * `outcome.kind === 'duplicate'` carries structured `details`, never a server-composed
+   * sentence (`conflict()`'s optional fourth argument, ADR-009's second application, design note
+   * §3.1) — `screens/people/copy.ts` composes SCR-009 ST-04's copy client-side. `unavailable`
+   * (Supabase Auth unreachable) and `failed` (the profile write failed, compensated per
+   * ADR-011) are DIFFERENT causes at DIFFERENT statuses — 503 vs 500 — even though the browser
+   * collapses both to one `failed` outcome (`decisions.md` D-09).
+   */
+  router.post('/users', async (req, res, next) => {
+    try {
+      const parsed = createAccountRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await users.createAccount(parsed.data);
+
+      if (outcome.kind === 'duplicate') {
+        throw conflict(ERROR_CODES.email_taken, 'That email address is already in use.', {
+          fullName: outcome.fullName,
+          isActive: outcome.isActive,
+        });
+      }
+      if (outcome.kind === 'unavailable') {
+        throw serviceUnavailable('The account service is unavailable. Try again.');
+      }
+      if (outcome.kind === 'failed') {
+        throw new Error('account creation failed after the credential was minted');
+      }
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(201).json(outcome.account);
     } catch (error) {
       next(error);
     }

@@ -61,13 +61,51 @@ requires the summary to report the *whole* table's composition, unchanged — a 
 journey (finding another admin to promote before the last-admin refusal fires) the counts exist
 to serve.
 
+## `createAccount` (US-021/AC-01, AC-06, AC-08 — this module's first WRITE)
+
+**Two systems, one write each, no shared transaction.** Creating an account means minting a
+credential in Supabase Auth (`auth.users`, via the service-role admin API) and inserting a row
+into this module's own `user_profiles`. `ADR-011-cross-system-write-compensation.md` is the
+standing answer for every story that faces this — US-023 (an email edit touches both), US-025
+(deactivation's cascade), and US-027 (an admin password reset) all apply it by name rather than
+re-deriving it.
+
+**The write order is FORCED, not chosen.** `user_profiles.id references auth.users(id) on delete
+cascade` (`0001_user_profiles.sql:28`) means a profile row cannot exist before its Auth row.
+Auth is always written first.
+
+**On a profile-insert failure after the credential was minted, the service compensates with a
+hard delete** (`usersAuthAdapter.deleteAccount`, `auth.admin.deleteUser(userId)` with no second
+argument — a soft delete would leave the email occupied, exactly the harm being undone). The
+cascade above makes one call sufficient. The compensation is logged, never thrown, and never
+surfaced to the caller — a failure always looks like nothing happened (AC-11), regardless of
+which of the two writes actually broke.
+
+**What arbitrates a real concurrent duplicate is NOT `findByEmail`.** Two indexes do: GoTrue's
+own uniqueness on `auth.users.email`, and this table's own `user_profiles_email_key`
+(`0001_user_profiles.sql:48`) — the identical property `insertDesk` states for its own insert
+(`desks.repository.ts:56-58`), and `security-standards.md`'s own Gate-2 review question ("what
+arbitrates — the code, or an index?") applied here. `findByEmail` is a **message-composition
+read**: it exists only to let AC-06/ST-04's refusal name the colliding account and say whether it
+is deactivated, information neither index's own violation error carries. When a race slips past
+it — the adapter's own `createAccount` reports `duplicate` even though the pre-check found
+nothing — the service re-reads once more to tell a genuine concurrent success (found on the
+second read) from an orphaned credential left by an earlier failed compensation (still absent on
+the second read); the orphan case logs and refuses rather than deleting or adopting a resource it
+did not create in that request (ADR-011).
+
+**`modules/users` may not import `modules/auth`** (`eslint.config.mjs:16-22`,
+`../README.md`'s own boundary). The Supabase Auth calls this write needs live in this module's
+own `users.adapter.ts`, calling `infra/supabase` directly — not reused from `auth/auth.adapter.ts`,
+which is off limits.
+
 ## The forward constraint
 
-This module's writes do not exist yet. US-023 (Edit), US-024 (role change), US-025/US-026
-(Deactivate/Activate and BR-001.18's cascade), and US-027 (admin password reset) each add a
-route here, not to `bookings` or `desks`. The four-item row menu US-020 renders is disabled at
-every item for exactly this reason (design note §6, `ADR-010-unbuilt-destination-controls.md`):
-none of those destinations exist in this module yet.
+US-023 (Edit), US-024 (role change), US-025/US-026 (Deactivate/Activate and BR-001.18's
+cascade), and US-027 (admin password reset) each add a route here, not to `bookings` or `desks`,
+and each is a second application of `ADR-011`'s cross-system write rule. The row-menu items
+US-020 renders disabled become live one at a time as each of these stories lands (design note §6,
+`ADR-010-unbuilt-destination-controls.md`).
 
 See `../README.md` for the module boundary this file must respect (`users` may import
 `notifications`; nothing else).

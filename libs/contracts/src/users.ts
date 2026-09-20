@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { userRoleSchema } from './auth.js';
+import { newPasswordSchema } from './password.js';
 
 /**
  * One account in the people list (US-020/AC-01). `id`, `fullName`, `email`, `role`, `isActive` —
@@ -77,3 +78,40 @@ export const adminUsersResponseSchema = z.object({
   summary: adminSummarySchema,
 });
 export type AdminUsersResponse = z.infer<typeof adminUsersResponseSchema>;
+
+/**
+ * `POST /api/admin/users`'s one legitimate body (US-021/AC-01, AC-02, AC-03). `.strict()` —
+ * matching every request schema in this package.
+ *
+ * `email`'s `.trim().toLowerCase()` runs in THIS schema, not in the service, the same shape
+ * `deskNumberSchema` (`desks.ts`) uses for desk numbers: the parsed value is both what the
+ * duplicate check reads and what gets stored, so there is no second place to remember to
+ * normalise (US-021/D-01). `password` reuses `newPasswordSchema` verbatim — the same V-12
+ * evaluator the browser's `PolicyChecklist` runs, so the checklist and this refusal cannot
+ * disagree (`password.ts`'s own stated reason for existing).
+ *
+ * No `id`: the database mints it via Supabase Auth. No `isActive`/`mustChangePassword`: both are
+ * `user_profiles` column defaults (`true` and `true` respectively) that this request has no way
+ * to override — creating an inactive account, or one that skips the forced first-sign-in change,
+ * is not a capability BRD-001 gives an administrator.
+ */
+export const createAccountRequestSchema = z
+  .object({
+    fullName: z.string().trim().min(1).max(200),
+    email: z.string().trim().toLowerCase().max(320).email(),
+    role: userRoleSchema,
+    password: newPasswordSchema,
+  })
+  .strict();
+export type CreateAccountRequest = z.input<typeof createAccountRequestSchema>;
+
+/**
+ * The `details` payload on a `409 email_taken` refusal (US-021/AC-06, ADR-009's second
+ * application — design note §3.1). SCR-009 ST-04's approved copy bolds the email inside a
+ * composed sentence and gives the field its own short message; sending the FACTS and composing
+ * both sentences client-side (`screens/people/copy.ts`) is what lets that copy render as
+ * written, rather than either losing the emphasis or regex-parsing prose back out of a
+ * server-authored string — the two options ADR-009 already rejected for a different refusal.
+ */
+export const emailTakenDetailsSchema = z.object({ fullName: z.string(), isActive: z.boolean() }).strict();
+export type EmailTakenDetails = z.infer<typeof emailTakenDetailsSchema>;

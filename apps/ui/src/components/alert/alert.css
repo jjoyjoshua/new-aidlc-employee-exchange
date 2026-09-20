@@ -55,7 +55,11 @@
 
 /* The optional title leads with the fact. Off by default, so every existing single-message
    alert is unchanged (SCR-007 ST-04 is what wanted it, PRIN-3). */
+/* Both are <p> elements — reset the browser's default paragraph margin (~14px), which
+ * otherwise pushes the text down relative to the icon it sits beside (verified: a bare <p>'s
+ * default top margin was the entire visible offset, on every alert in the app, not only here). */
 .alert__title {
+  margin: 0;
   font-family: var(--f-body);
   font-size: var(--t-body-sm);
   line-height: var(--lh-body-sm);
@@ -63,6 +67,7 @@
 }
 
 .alert__message {
+  margin: 0;
   font-family: var(--f-body);
   font-size: var(--t-body-sm);
   line-height: var(--lh-body-sm);

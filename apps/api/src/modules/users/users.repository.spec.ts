@@ -21,7 +21,10 @@ interface RecordedCall {
   table: string;
   select?: string;
   or?: string;
+  eq: Array<[string, unknown]>;
   order: Array<{ column: string; ascending: boolean }>;
+  insert?: unknown;
+  maybeSingle?: true;
 }
 
 type FakeResponse = { data: unknown; error: { code?: string; message: string } | null };
@@ -30,7 +33,7 @@ function fakeSupabase(response: FakeResponse) {
   const calls: RecordedCall[] = [];
 
   function from(table: string) {
-    const call: RecordedCall = { table, order: [] };
+    const call: RecordedCall = { table, eq: [], order: [] };
     const builder = {
       select(columns: string) {
         call.select = columns;
@@ -40,9 +43,22 @@ function fakeSupabase(response: FakeResponse) {
         call.or = filter;
         return builder;
       },
+      eq(column: string, value: unknown) {
+        call.eq.push([column, value]);
+        return builder;
+      },
       order(column: string, opts?: { ascending?: boolean }) {
         call.order.push({ column, ascending: opts?.ascending ?? true });
         return builder;
+      },
+      insert(row: unknown) {
+        call.insert = row;
+        return builder;
+      },
+      maybeSingle() {
+        call.maybeSingle = true;
+        calls.push(call);
+        return Promise.resolve(response);
       },
       then(onFulfilled: (value: FakeResponse) => unknown, onRejected?: (reason: unknown) => unknown) {
         calls.push(call);
@@ -70,6 +86,7 @@ describe('usersRepository.listAccounts — no search term (US-020/AC-01)', () =>
         {
           table: 'user_profiles',
           select: 'id, full_name, email, role, is_active',
+          eq: [],
           order: [{ column: 'full_name', ascending: true }],
         },
       ]);
@@ -125,6 +142,7 @@ describe('usersRepository.listAccounts — a search term (US-020/AC-04)', () => 
         {
           table: 'user_profiles',
           select: 'id, full_name, email, role, is_active',
+          eq: [],
           order: [{ column: 'full_name', ascending: true }],
           or: buildSearchFilter('dana'),
         },
@@ -155,7 +173,7 @@ describe('usersRepository.getSummaryCounts — the whole-list composition read (
     try {
       await usersRepository.getSummaryCounts();
 
-      expect(calls).toEqual([{ table: 'user_profiles', select: 'role, is_active', order: [] }]);
+      expect(calls).toEqual([{ table: 'user_profiles', select: 'role, is_active', eq: [], order: [] }]);
     } finally {
       setSupabaseForTesting(undefined);
     }
@@ -208,6 +226,113 @@ describe('usersRepository.getSummaryCounts — the whole-list composition read (
 
     try {
       await expect(usersRepository.getSummaryCounts()).rejects.toThrow(/user summary lookup failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('usersRepository.findByEmail (US-021/AC-06, D-02)', () => {
+  it('selects full_name, is_active ONLY, matched on the given email — no id, no role', async () => {
+    const { calls, client } = fakeSupabase({ data: { full_name: 'Dana Silva', is_active: true }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await usersRepository.findByEmail('dana@company.com');
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          select: 'full_name, is_active',
+          eq: [['email', 'dana@company.com']],
+          order: [],
+          maybeSingle: true,
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns the row when the email is already held', async () => {
+    const { client } = fakeSupabase({ data: { full_name: 'Dana Silva', is_active: false }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.findByEmail('dana@company.com');
+      expect(result).toEqual({ full_name: 'Dana Silva', is_active: false });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined, not null, when nobody holds the email', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      expect(await usersRepository.findByEmail('nobody@company.com')).toBeUndefined();
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(usersRepository.findByEmail('dana@company.com')).rejects.toThrow(/email lookup failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('usersRepository.insertProfile (US-021/AC-01, AC-08)', () => {
+  it('inserts id, email, full_name, role ONLY — no is_active, no must_change_password (both are column defaults)', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await usersRepository.insertProfile({
+        id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+        email: 'dana@company.com',
+        fullName: 'Dana Silva',
+        role: 'employee',
+      });
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          eq: [],
+          order: [],
+          insert: {
+            id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+            email: 'dana@company.com',
+            full_name: 'Dana Silva',
+            role: 'employee',
+          },
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.insertProfile({
+          id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+          email: 'dana@company.com',
+          fullName: 'Dana Silva',
+          role: 'employee',
+        }),
+      ).rejects.toThrow(/profile insert failed/);
     } finally {
       setSupabaseForTesting(undefined);
     }

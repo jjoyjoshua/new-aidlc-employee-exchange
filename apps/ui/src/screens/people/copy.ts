@@ -82,3 +82,48 @@ export function roleActionLabel(currentRole: UserRole): string {
 export function rowMenuTriggerLabel(fullName: string): string {
   return `Actions for ${fullName}`;
 }
+
+// ── SCR-009 — User form (US-021) ────────────────────────────────────────────
+
+export const ADD_PERSON_TITLE = 'Add person';
+export const FULL_NAME_LABEL = 'Full name';
+export const EMAIL_LABEL = 'Email';
+export const EMAIL_HELPER = "They'll sign in with this.";
+export const ROLE_LEGEND = 'Role';
+export const ROLE_OPTION_DESCRIPTION: Record<UserRole, string> = {
+  employee: 'Employee — books a desk for themselves',
+  admin: 'Admin — manages bookings, desks and people',
+};
+export const INITIAL_PASSWORD_LABEL = 'Initial password';
+export const SUGGEST_PASSWORD_LABEL = 'Suggest a password';
+export const CREATE_SUBMIT_LABEL = 'Add person';
+export const CANCEL_LABEL = 'Cancel';
+
+/** ST-01/AC-07 — stated before saving, not only after (BR-001.12, REQ-029). */
+export const DELIVERY_WARNING =
+  "Give this password to them yourself — it isn't emailed. They'll be asked to change it when they first sign in.";
+
+/** ST-08/AC-11 — everything typed, including the password, is retained on this path. */
+export const SAVE_FAILED = "We couldn't save that just now. Nothing has changed. Try again.";
+
+/**
+ * ST-04/AC-06, ADR-009's second application (design note §3.1). The server sends the FACTS
+ * (`fullName`, `isActive`) in `details`; this composes the exact sentence SCR-009 approved,
+ * bolding no longer possible in plain text but the two clauses are exactly as specified —
+ * naming the holder, and, only when deactivated, pointing at reactivation instead of a second
+ * account.
+ */
+export function emailTakenMessage(fullName: string, isActive: boolean): string {
+  const holderSentence = `already belongs to ${fullName}.`;
+  if (isActive) return holderSentence;
+  return `${holderSentence} That account is deactivated — reactivate it on the people list instead of creating a new one.`;
+}
+
+/** The email field's own short message (SCR-009 ST-04's note: a blank message would leave an
+ *  error icon alone on an empty line — `Text field` always renders its message row in error state). */
+export const EMAIL_TAKEN_FIELD_MESSAGE = 'Already in use.';
+
+/** ST-07/AC-09 — repeats the delivery instruction at the moment of success, naming the person. */
+export function accountCreatedToast(fullName: string): string {
+  return `${fullName} added. Give them the password you set — it hasn't been emailed, and they'll change it when they sign in.`;
+}

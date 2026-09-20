@@ -26,6 +26,7 @@ import { desksRepository, type DesksRepository } from './modules/desks/desks.rep
 import { createDesksService } from './modules/desks/desks.service.js';
 import { usersRepository, type UsersRepository } from './modules/users/users.repository.js';
 import { createUsersService } from './modules/users/users.service.js';
+import { usersAuthAdapter, type UsersAuthAdapter } from './modules/users/users.adapter.js';
 import { SIGN_IN_MIN_FAILURE_MS } from './domain/sign-in-failure-delay.js';
 import { supabase } from './infra/supabase/index.js';
 import { config } from './config/index.js';
@@ -66,6 +67,8 @@ export interface BuildAppOptions {
   desks?: DesksRepository;
   /** US-020 test seam — overrides the real `user_profiles` account read. */
   users?: UsersRepository;
+  /** US-021 test seam — overrides the real Supabase Auth create/delete calls. */
+  usersAuth?: UsersAuthAdapter;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -111,7 +114,10 @@ export function buildApp(options: BuildAppOptions = {}): Express {
 
   const desksService = createDesksService({ desks: options.desks ?? desksRepository, nowMs, officeTimezone });
 
-  const usersService = createUsersService({ users: options.users ?? usersRepository });
+  const usersService = createUsersService({
+    users: options.users ?? usersRepository,
+    usersAuth: options.usersAuth ?? usersAuthAdapter,
+  });
 
   return createApp({
     authRouter: createAuthRouter({
