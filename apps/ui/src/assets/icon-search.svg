@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="presentation" aria-hidden="true">
+  <!--
+    Icon / search — Figma node 236:40 (file xjFVgBbMrJUl7Ys3EX3Cbn), SCR-008's search field.
+    Geometry only, same convention as icon-close.svg/icon-block.svg: stroke is `currentColor`, so
+    the caller sets it from a text token (`--c-text-muted` per the field's default state) and both
+    themes work without a second file. Coordinates scaled 1.2x from the source's 20x20 viewBox to
+    this codebase's 24x24 convention; the source export's #7A6F62 stroke was the Figma field's
+    placeholder-ink colour, not part of the icon.
+  -->
+  <path d="M16 9.5C16 13.09 13.09 16 9.5 16C5.91 16 3 13.09 3 9.5C3 5.91 5.91 3 9.5 3C13.09 3 16 5.91 16 9.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M15 15L20.5 20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

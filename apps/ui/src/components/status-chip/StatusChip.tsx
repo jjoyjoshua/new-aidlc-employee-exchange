@@ -28,6 +28,19 @@
  * `--c-state-inactive-*` (quiet neutral, never the danger family, AC-03); the Active variant
  * binds `--c-state-available-*` — the same role the desk-availability chip uses, because the
  * Figma component itself binds it there and no `--c-state-active-*` role exists or is needed.
+ *
+ * **`kind: 'account'`, added by US-020/AC-01** (design note §4, correcting US-016's own §4.2
+ * prediction). US-016 §4.2 predicted this future variant would be
+ * `{ kind: 'account'; status: 'active' | 'deactivated' }` — taken literally that would render
+ * `.status-chip--deactivated`, a class `status-chip.css` never defines (only `--active` and
+ * `--inactive` exist), so the chip would ship unstyled. The class is keyed on `status` ALONE, not
+ * on `kind` — US-016 §4.2's own next paragraph said so — so `kind: 'account'` reuses the SAME
+ * `status: 'active' | 'inactive'` values `kind: 'inventory'` uses, and therefore the SAME
+ * `.status-chip--active`/`--inactive` classes, with no new CSS and no new icon. Only the WORD
+ * differs: `ACCOUNT_LABEL.inactive` is `"Deactivated"`, not `"Inactive"` — a desk is inactive, a
+ * person is deactivated. `INVENTORY_LABEL` is not reused directly because AC-01 requires the
+ * different word, and this component's label maps are exported precisely so a caller cannot fork
+ * one label map to say something a sibling kind's map does not (§4's own reasoning, restated).
  */
 import personMarkup from '../../assets/icon-person.svg?raw';
 import clockMarkup from '../../assets/icon-clock.svg?raw';
@@ -38,11 +51,17 @@ import './status-chip.css';
 export type DeskStatus = 'available' | 'taken' | 'selected';
 export type BookingLifecycleStatus = 'confirmed' | 'completed' | 'cancelled';
 export type InventoryStatus = 'active' | 'inactive';
+/** US-020/AC-01. Same two values `InventoryStatus` carries — a desk's lifecycle and a person's
+ *  are the same shape, only the WORD differs (`ACCOUNT_LABEL` vs `INVENTORY_LABEL`, design note
+ *  §4). A separate alias, not a reuse of `InventoryStatus` by name, so the two kinds can diverge
+ *  later without one edit changing the other's type. */
+export type AccountStatus = 'active' | 'inactive';
 
 export type StatusChipProps =
   | { kind?: 'desk'; status: DeskStatus }
   | { kind: 'booking'; status: BookingLifecycleStatus }
-  | { kind: 'inventory'; status: InventoryStatus };
+  | { kind: 'inventory'; status: InventoryStatus }
+  | { kind: 'account'; status: AccountStatus };
 
 /** Exported for `DeskRow` (US-008/FR-06): the composed `aria-label` needs the same word this chip
  *  renders, so the accessible name and the visible chip never say different things. */
@@ -59,6 +78,10 @@ export const BOOKING_LABEL: Record<BookingLifecycleStatus, string> = {
  *  the word this constant carries is exactly what AC-02 requires, and `LABEL.available` would
  *  say "Available" instead. */
 export const INVENTORY_LABEL: Record<InventoryStatus, string> = { active: 'Active', inactive: 'Inactive' };
+
+/** Exported for `AccountRow` (US-020/AC-01), the same reason `LABEL` is exported above — "Deactivated,"
+ *  never `INVENTORY_LABEL.inactive`'s "Inactive" (design note §4). */
+export const ACCOUNT_LABEL: Record<AccountStatus, string> = { active: 'Active', inactive: 'Deactivated' };
 
 function CheckCircleIcon() {
   // Figma `Icon / check-circle` (node 11:5) — "the desk is free for the selected date". Same
@@ -105,6 +128,13 @@ const INVENTORY_ICON: Record<InventoryStatus, () => React.JSX.Element> = {
   inactive: BlockIcon,
 };
 
+/** Same two icons `INVENTORY_ICON` uses — the block icon is the signal for "cannot sign in" just
+ *  as it is for "cannot be booked" (US-020/AC-01, design note §4). */
+const ACCOUNT_ICON: Record<AccountStatus, () => React.JSX.Element> = {
+  active: CheckCircleIcon,
+  inactive: BlockIcon,
+};
+
 export function StatusChip(props: StatusChipProps) {
   if (props.kind === 'booking') {
     const Icon = BOOKING_ICON[props.status];
@@ -122,6 +152,16 @@ export function StatusChip(props: StatusChipProps) {
       <span className={`status-chip status-chip--${props.status}`}>
         <Icon />
         <span>{INVENTORY_LABEL[props.status]}</span>
+      </span>
+    );
+  }
+
+  if (props.kind === 'account') {
+    const Icon = ACCOUNT_ICON[props.status];
+    return (
+      <span className={`status-chip status-chip--${props.status}`}>
+        <Icon />
+        <span>{ACCOUNT_LABEL[props.status]}</span>
       </span>
     );
   }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="presentation" aria-hidden="true">
+  <!--
+    Icon / more — Figma node 192:42 (file xjFVgBbMrJUl7Ys3EX3Cbn). "Row overflow trigger on the
+    admin tables (SCR-006, SCR-008)" per its own documentation; used here for the People screen's
+    row menu trigger (US-020/AC-10) — the trigger's own accessible name comes from `aria-label`
+    (`rowMenuTriggerLabel`), not from this icon.
+
+    Geometry only, same convention as icon-close.svg/icon-block.svg: stroke is `currentColor`, so
+    the caller sets it from a text token and both themes work without a second file. The source
+    export's #4A4239 stroke was the Figma artboard's flattened colour, not part of the icon.
+  -->
+  <path d="M4.99 12H5M11.99 12H12M18.99 12H19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

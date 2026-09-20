@@ -15,6 +15,7 @@ import { MyBookings } from './screens/my-bookings/MyBookings.js';
 import { BookADesk } from './screens/book-a-desk/BookADesk.js';
 import { AllBookings } from './screens/all-bookings/AllBookings.js';
 import { Desks } from './screens/desks/Desks.js';
+import { People } from './screens/people/People.js';
 import { SetPassword } from './screens/set-password/SetPassword.js';
 import { AppShell } from './components/app-shell/AppShell.js';
 import { RequireRole } from './lib/auth/require-role.js';
@@ -68,6 +69,18 @@ export function AppRoutes() {
           element={
             <RequireRole role="admin">
               <Desks />
+            </RequireRole>
+          }
+        />
+        {/* US-020. `AppShell.tsx`'s ADMIN_NAV has carried this address since US-001's hi-fi
+            pass; it fell through to the catch-all below until this route existed — the same
+            live-wrong-behaviour-fixed-as-a-consequence US-016 corrected for `/admin/desks`
+            (design note §9.1). */}
+        <Route
+          path="/admin/people"
+          element={
+            <RequireRole role="admin">
+              <People />
             </RequireRole>
           }
         />

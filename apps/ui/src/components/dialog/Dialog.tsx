@@ -12,6 +12,19 @@
  * + close icon), the focus trap, focus capture/restore, and Escape-suppressed-while-busy. Does NOT
  * own: what the footer's buttons are, or what the body contains — those are the caller's, exactly
  * as `Desk form popup`'s own two component sets (one shared chrome) are.
+ *
+ * **US-020 evaluated a `scrim?: boolean` prop here, for SCR-008 ST-15's row-overflow menu, and
+ * declined it (design note §5.1, §5.2, §8.2 item 1).** An anchored, non-modal menu is a different
+ * widget from this one, on six counts at once, not just the scrim: `role="menu"` with `menuitem`
+ * children rather than `role="dialog"`/`"alertdialog"`; no `aria-modal` (a popover hanging off its
+ * trigger is not modal, at any width); no focus trap (arrow keys move between items, Tab is free
+ * to leave); no required `title`/header/close icon (the ≥768px popover has none); no required
+ * `footer` (a menu has no footer at all); and it is anchored to its trigger, never centred or
+ * bottom-sheeted by this component's own layout rules. `scrim`, `anchor` and `modal` props are
+ * refused BY DESIGN here, not overlooked — `AccountRowMenu` (`screens/people/`) was built beside
+ * this component rather than through it. If a second screen ever needs a menu, extracting a
+ * shared one is that story's call (`components/README.md:6`'s two-real-consumers bar), not a prop
+ * added to `Dialog`.
  */
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 import closeIconMarkup from '../../assets/icon-close.svg?raw';

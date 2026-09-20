@@ -1,0 +1,426 @@
+/*
+ * SCR-008 — People (US-020). TWO independent breakpoints, not one (design note §7.4, A11):
+ *
+ *   - 1024px — table shown / card list shown, mirroring `desks.css`'s own single boundary
+ *   - 768px  — the row menu's scrim/anchor switch, a SEPARATE concern from the table/card switch
+ *
+ * 768px–1023px therefore renders CARDS carrying an ANCHORED (not scrimmed) popover — the band a
+ * single-breakpoint implementation gets wrong. Zero `matchMedia`, matching every other screen in
+ * this codebase: both the table and the card tree always render in the DOM, and CSS alone shows
+ * one; the menu is likewise one DOM at every width, styled differently by the 768px query below.
+ */
+
+.people__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-16);
+  margin-bottom: var(--s-24);
+}
+
+.people__search {
+  position: relative;
+  max-width: 480px;
+  margin-bottom: var(--s-16);
+}
+
+/* The icon (`.people__search-icon`) is a SIBLING of `<TextField>`'s whole rendered output in the
+ * JSX (`People.tsx`), not a descendant of `.field__control` — `.field` is TextField's own root
+ * and is not reachable to attach a class to. So `position: relative` belongs on `.people__search`
+ * itself (their nearest common positioned ancestor), never on `.field__control` — that was tried
+ * and produced a WORSE bug than the one it fixed: with no positioned ancestor in between, the
+ * icon's containing block became some ancestor much further up the tree (the app shell), and it
+ * rendered off in the sidebar, nowhere near the field at all.
+ *
+ * Anchored from `bottom`, not `top`: `.field` is `display: flex; flex-direction: column` with no
+ * third child in this field's default (no `error`, no `helper`) state, so `.field__control` — the
+ * bordered input box — is always flush against `.people__search`'s own bottom edge, regardless of
+ * the label's height above it. Centring within `.field__control`'s known `min-height`
+ * (`--control-lg`, `text-field.css`) is therefore an exact calculation, not a guess — unlike the
+ * `top: 38px` this replaced, which guessed at the label's height from the top and drifted the
+ * moment that guess was wrong. */
+.people__search-icon {
+  position: absolute;
+  left: var(--s-12);
+  bottom: calc((var(--control-lg) - var(--icon-sm)) / 2);
+  display: inline-flex;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--c-text-muted);
+  pointer-events: none;
+}
+
+/* The injected `icon-search.svg` markup (`dangerouslySetInnerHTML`) carries no width/height of
+ * its own, only a viewBox — without this, the browser falls back to its default replaced-element
+ * size (300x150) instead of filling this span, which is what actually produced the misaligned
+ * icon: `status-chip.css`'s own `.status-chip__icon--person svg` rule is the precedent this
+ * mirrors. */
+.people__search-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.people__search .field__input {
+  padding-left: calc(var(--s-12) * 2 + var(--icon-sm));
+}
+
+.people__clear {
+  border: none;
+  background: transparent;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  padding: 0 var(--s-4);
+  font-size: var(--t-body);
+}
+
+.people__summary {
+  color: var(--c-text);
+  font-size: var(--t-body-lg);
+  line-height: var(--lh-body-lg);
+  margin-bottom: var(--s-8);
+}
+
+.people__summary--skeleton {
+  display: inline-block;
+  width: 320px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  background: var(--c-fill-muted);
+}
+
+.people__match-line {
+  color: var(--c-text-secondary);
+  font-size: var(--t-body);
+  margin-bottom: var(--s-16);
+}
+
+/* ---- the table (1024px and above) --------------------------------------------------------- */
+
+/* `border-radius` on a `<table>` with `border-collapse: collapse` does not reliably clip cell
+ * backgrounds to the rounded corners the way a plain block element does — the header's square
+ * `--c-fill-subtle` fill paints straight through where the corner should curve, and per-cell
+ * `border-radius` on `<th>`/`<td>` is exactly as unreliable under collapsed borders, so rounding
+ * the header/last-row cells individually does not fix it either (tried, still square in the
+ * browsers this was checked against). `overflow: hidden` here — `desks.css`'s own fix for the
+ * identical look — clips it correctly and is safe now that `AccountRowMenu` is portalled to
+ * `document.body` rather than rendered inside this box (see that file); it no longer needs this
+ * wrapper to stay unclipped. */
+.people-table-wrapper {
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.people-table {
+  display: none;
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--c-surface-raised);
+}
+
+.people-table thead {
+  background: var(--c-fill-subtle);
+}
+
+.people-table th {
+  text-align: left;
+  padding: var(--s-12) var(--s-24);
+  font-size: var(--t-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text-on-fill);
+}
+
+.people-table__row {
+  height: 64px;
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.people-table__row td {
+  padding: var(--s-8) var(--s-24);
+}
+
+.people-table__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- the card list (below 1024px) --------------------------------------------------------- */
+
+.people-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--c-surface-raised);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  overflow: visible;
+}
+
+.people-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-16);
+  min-height: 80px;
+  padding: var(--s-16) var(--s-24);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.people-card:first-child {
+  border-top: none;
+}
+
+.people-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.people-card__actions {
+  margin-left: auto;
+}
+
+/* ---- the row overflow trigger — Figma's "Icon button" (node 196:128), no shared component
+ * exists yet ("built from Type=Secondary... at 1280, where the action set does not fit as
+ * explicit buttons"), so this is screen-private, matching its 48px square geometry. */
+
+.people-row__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-md);
+  color: var(--c-text-secondary);
+  cursor: pointer;
+}
+
+.people-row__trigger:hover {
+  background: var(--c-fill-subtle);
+}
+
+.people-row__trigger:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+.people-row__trigger-icon {
+  display: inline-flex;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+@media (max-width: 767.98px) {
+  .people-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-8);
+    min-height: 152px;
+    justify-content: center;
+    position: relative;
+  }
+
+  .people-card__actions {
+    position: absolute;
+    top: var(--s-16);
+    right: var(--s-16);
+  }
+}
+
+@media (min-width: 1024px) {
+  .people-table {
+    display: table;
+  }
+
+  .people-cards {
+    display: none;
+  }
+}
+
+/* ---- skeleton rows (ST-02) --------------------------------------------------------------- */
+
+.people-skeleton-row__bar {
+  display: block;
+  height: 20px;
+  border-radius: var(--r-sm);
+  background: var(--c-fill-muted);
+}
+
+.people-skeleton-row--table {
+  height: 64px;
+}
+
+.people-skeleton-row--table td {
+  padding: var(--s-8) var(--s-24);
+}
+
+.people-skeleton-row--card {
+  display: flex;
+  align-items: center;
+  min-height: 80px;
+  padding: var(--s-16) var(--s-24);
+  border-top: var(--bw-1) solid var(--c-border);
+}
+
+.people-skeleton-row--card:first-child {
+  border-top: none;
+}
+
+@media (max-width: 767.98px) {
+  .people-skeleton-row--card {
+    min-height: 152px;
+  }
+}
+
+/* ---- the row menu (ST-15) — 768px is a SEPARATE boundary from the 1024px one above --------
+ *
+ * Mobile-first: the default rules below ARE the 360px bottom sheet (scrimmed, viewport-fixed).
+ * The >=768px query overrides it into a transparent, anchored popover — the same mobile-first
+ * override shape `dialog.css` uses for its own single boundary, applied here to a second,
+ * independent one (design note §7.4, A11).
+ */
+
+.people-row__menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.people-menu__overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--c-scrim);
+  z-index: 100;
+}
+
+.people-menu {
+  width: 100%;
+  max-width: 360px;
+  background: var(--c-surface-overlay);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-sheet);
+  padding: var(--s-8) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.people-menu__title {
+  padding: var(--s-12) var(--s-16);
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+.people-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: var(--s-12) var(--s-16);
+  font-family: var(--f-body);
+  font-size: var(--t-body);
+  color: var(--c-text);
+  cursor: not-allowed;
+}
+
+/* `--c-text-disabled` (the palette's faintest text token) is right for `Button`'s own disabled
+ * state, but only because that control also carries a distinct fill and border — the shape reads
+ * as "disabled" so the label can afford to be quiet. A plain menu item has no such shape, so the
+ * same token here just reads as unreadable. `--c-text-secondary` keeps the item legible; the
+ * disabled semantics (not clickable, no tab-order gap — ADR-010) come from `aria-disabled`,
+ * `cursor: not-allowed` above, and the reason text, not from the colour. */
+.people-menu__item[aria-disabled='true'] {
+  color: var(--c-text-secondary);
+}
+
+/* Deactivate/Activate: the one destructive item, and Figma's own enabled-state mockup (ST-15)
+ * renders it in the danger ink even before US-025/US-026 build it. `--c-danger-ink` is the
+ * text-on-light-surface danger role (`--c-state-cancelled-ink` uses the same token) — not
+ * `--c-danger-action`, which is a filled button's surface colour, not a text colour. */
+.people-menu__item--danger[aria-disabled='true'] {
+  color: var(--c-danger-ink);
+}
+
+.people-menu__item:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: calc(var(--bw-2) * -1);
+}
+
+.people-menu__divider {
+  border: none;
+  border-top: var(--bw-1) solid var(--c-border);
+  margin: var(--s-8) 0;
+}
+
+@media (min-width: 768px) {
+  /* `AccountRowMenu` is portalled to `document.body` (design note §5.2 still holds — one
+   * component, one DOM at every width; only WHERE that DOM mounts changed) so that
+   * `.people-table-wrapper` can safely clip to its rounded corners (`overflow: hidden`, above)
+   * without clipping this popover too. A portalled node can no longer anchor itself via CSS to
+   * `.people-row__menu-anchor` — the two are siblings of `document.body` now, not ancestor and
+   * descendant — so `AccountRowMenu` measures the trigger's `getBoundingClientRect()` once on
+   * open and writes it here as `--menu-anchor-*` custom properties, which only this block reads.
+   * The mobile rule above is untouched: it never referenced the anchor and stays a plain
+   * viewport-fixed sheet regardless of where in the DOM it mounts. */
+  .people-menu__overlay {
+    position: fixed;
+    inset: auto;
+    top: var(--menu-anchor-bottom, 0px);
+    left: var(--menu-anchor-right, 0px);
+    width: 0;
+    height: 0;
+    display: block;
+    background: transparent;
+    z-index: 100;
+  }
+
+  .people-menu {
+    position: absolute;
+    top: var(--s-4);
+    right: 0;
+    width: max-content;
+    min-width: 220px;
+    max-width: 280px;
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-2);
+  }
+
+  /* AC-11: the title still LABELS the menu at every width (`aria-labelledby`), but is only
+   * visually shown at 360px — this codebase's own screen-private visually-hidden utility, not a
+   * global `sr-only` class (none exists here). */
+  .people-menu__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* ---- accessibility utility (US-020/AC-10, AC-11) -------------------------------------------
+ *
+ * No global visually-hidden utility exists in this codebase (`desks.css`, `all-bookings.css`
+ * each state the same reasoning) — this screen's own, per that convention.
+ */
+.people__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

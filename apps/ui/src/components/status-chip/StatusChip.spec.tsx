@@ -72,6 +72,36 @@ describe('StatusChip — booking-lifecycle variants (US-010/AC-05, design note �
   });
 });
 
+describe('StatusChip — account variants (US-020/AC-01)', () => {
+  it('renders the word "Active" plus an icon for an active account (US-020/AC-01)', () => {
+    const { container } = render(<StatusChip kind="account" status="active" />);
+
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
+  });
+
+  it('renders the word "Deactivated" (not "Inactive") plus an icon for a deactivated account (US-020/AC-01)', () => {
+    const { container } = render(<StatusChip kind="account" status="inactive" />);
+
+    expect(screen.getByText('Deactivated')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/^Inactive$/);
+    expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
+  });
+
+  it('the deactivated variant reuses the existing quiet-neutral class, never a danger-family one (US-020/AC-01)', () => {
+    const { container } = render(<StatusChip kind="account" status="inactive" />);
+
+    expect(container.querySelector('.status-chip--inactive')).toBeInTheDocument();
+    expect(container.querySelector('[class*="danger"]')).not.toBeInTheDocument();
+  });
+
+  it('the active variant reuses the same class the inventory chip uses (US-020/AC-01)', () => {
+    const { container } = render(<StatusChip kind="account" status="active" />);
+
+    expect(container.querySelector('.status-chip--active')).toBeInTheDocument();
+  });
+});
+
 describe('StatusChip — inventory variants (US-016/AC-02, AC-03)', () => {
   it('renders the word "Active" plus an icon (US-016/AC-02)', () => {
     const { container } = render(<StatusChip kind="inventory" status="active" />);
