@@ -22,7 +22,7 @@
 | REQ-016 | US-018 | 9/9 | delivered |
 | REQ-017 | US-006, US-016, US-019 | 32/32 | delivered |
 | REQ-018 | US-021 | 12/12 | delivered |
-| REQ-019 | US-023 | 0/9 | planned |
+| REQ-019 | US-023 | 9/9 | delivered |
 | REQ-020 | US-025, US-026 | 0/22 | planned |
 | REQ-021 | US-027 | 0/11 | planned |
 | REQ-022 | US-024 | 0/13 | planned |

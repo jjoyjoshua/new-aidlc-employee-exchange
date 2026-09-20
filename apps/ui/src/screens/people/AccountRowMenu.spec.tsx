@@ -26,14 +26,22 @@ const DEACTIVATED_ADMIN: AdminUser = {
   isActive: false,
 };
 
-function Harness({ account, onDismiss = vi.fn() }: { account: AdminUser; onDismiss?: () => void }) {
+function Harness({
+  account,
+  onDismiss = vi.fn(),
+  onEdit = vi.fn(),
+}: {
+  account: AdminUser;
+  onDismiss?: () => void;
+  onEdit?: (account: AdminUser) => void;
+}) {
   const triggerRef = createRef<HTMLButtonElement>();
   return (
     <div>
       <button type="button" ref={triggerRef}>
         {`Actions for ${account.fullName}`}
       </button>
-      <AccountRowMenu account={account} triggerRef={triggerRef} onDismiss={onDismiss} />
+      <AccountRowMenu account={account} triggerRef={triggerRef} onDismiss={onDismiss} onEdit={onEdit} />
     </div>
   );
 }
@@ -82,9 +90,8 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
   // `spec.md`'s Out of scope section and `decisions.md` D-03, not here — a bare `US-###` in this
   // file's source (title or comment) obliges that story's own manifest entry to list this file
   // (`aidlc-check`'s stale-manifest rule), which would be premature for a story that doesn't
-  // exist yet.
+  // exist yet. `Edit` is no longer in this list — US-023 is the destination that landed.
   it.each([
-    ['Edit', 'Edit is built'],
     ['Make an admin', 'the role-change action is built'],
     ['Reset password', 'password reset is built'],
     ['Deactivate', 'deactivate/activate is built'],
@@ -107,10 +114,31 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
     const onDismiss = vi.fn();
     render(<Harness account={EMPLOYEE} onDismiss={onDismiss} />);
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /^Edit/ }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Reset password/ }));
 
     expect(screen.getByRole('menu')).toBeInTheDocument();
     expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('Edit is a real, live item — no aria-disabled, no title reason (US-023)', () => {
+    render(<Harness account={EMPLOYEE} />);
+    const edit = screen.getByRole('menuitem', { name: 'Edit' });
+
+    expect(edit).not.toHaveAttribute('aria-disabled');
+    expect(edit).not.toHaveAttribute('title');
+    expect(edit).not.toBeDisabled();
+  });
+
+  it('clicking Edit calls onEdit with the account, dismisses the menu, and returns focus to the trigger (US-023)', async () => {
+    const onDismiss = vi.fn();
+    const onEdit = vi.fn();
+    render(<Harness account={EMPLOYEE} onDismiss={onDismiss} onEdit={onEdit} />);
+
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+
+    expect(onEdit).toHaveBeenCalledWith(EMPLOYEE);
+    expect(onDismiss).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Actions for Dana Silva' })).toHaveFocus();
   });
 });
 

@@ -149,3 +149,76 @@ describe('usersAuthAdapter.deleteAccount (ADR-011 — the compensating delete)',
     setSupabaseForTesting(undefined);
   });
 });
+
+describe('usersAuthAdapter.updateEmail (US-023/AC-05, AC-07)', () => {
+  it('calls admin.updateUserById with ONE attribute plus email_confirm — never a password key (US-023/AC-05, AC-07)', async () => {
+    const calls: unknown[][] = [];
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById(...args: unknown[]) {
+            calls.push(args);
+            return { data: { user: { id: 'a-user-id' } }, error: null };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.updateEmail('a-user-id', 'dana.okafor@company.com');
+
+    expect(outcome).toEqual({ kind: 'ok' });
+    expect(calls).toEqual([['a-user-id', { email: 'dana.okafor@company.com', email_confirm: true }]]);
+    setSupabaseForTesting(undefined);
+  });
+
+  it("resolves duplicate on GoTrue's own email_exists code (US-023, reusing createAccount's branch)", async () => {
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            return { data: { user: null }, error: { message: 'already registered', code: 'email_exists' } };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.updateEmail('a-user-id', 'dana.okafor@company.com');
+
+    expect(outcome).toEqual({ kind: 'duplicate' });
+    setSupabaseForTesting(undefined);
+  });
+
+  it('resolves unavailable, never throws, on any other admin error', async () => {
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            return { data: { user: null }, error: { message: 'network error', code: undefined } };
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.updateEmail('a-user-id', 'dana.okafor@company.com');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    setSupabaseForTesting(undefined);
+  });
+
+  it('resolves unavailable when the admin call throws outright', async () => {
+    setSupabaseForTesting({
+      auth: {
+        admin: {
+          async updateUserById() {
+            throw new Error('boom');
+          },
+        },
+      },
+    } as never);
+
+    const outcome = await usersAuthAdapter.updateEmail('a-user-id', 'dana.okafor@company.com');
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    setSupabaseForTesting(undefined);
+  });
+});

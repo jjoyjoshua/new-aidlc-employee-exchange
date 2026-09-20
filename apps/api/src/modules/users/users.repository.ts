@@ -43,6 +43,33 @@ export interface InsertProfileInput {
   role: UserRole;
 }
 
+/** The row `findById`/`updateProfileDetails` read and return (US-023). `role`/`is_active` ride
+ *  along so the service can build the `200` body without a second read. */
+export interface ProfileDetailsRow {
+  id: string;
+  full_name: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+}
+
+/** What `updateProfileDetails` writes (US-023/AC-01, AC-07). Exactly `full_name`, `email`,
+ *  `updated_at` — no index signature, so `must_change_password`/`is_active` are unrepresentable
+ *  here, the same discipline `insertProfile`'s own docblock states for leaving them unnamed. */
+export interface UpdateProfileDetailsInput {
+  id: string;
+  fullName: string;
+  email: string;
+  updatedAt: Date;
+}
+
+export type UpdateProfileDetailsOutcome =
+  | { kind: 'ok'; profile: ProfileDetailsRow }
+  | { kind: 'duplicate' }
+  /** Zero rows matched `id` (US-023 design note §3.5, `updateDeskNumber`'s own reasoning: a
+   *  write that applied to nothing must answer something, not a 500). */
+  | { kind: 'not_found' };
+
 export interface UsersRepository {
   /**
    * US-020/AC-01, AC-04 (REQ-032, `db-design.md:351-355`). Every account — `id, full_name,
@@ -76,8 +103,12 @@ export interface UsersRepository {
    * "already registered" error carries neither the colliding account's name nor whether it is
    * deactivated, and both are what ST-04's refusal must say. `undefined` when no account holds
    * the email — the common case, and the only one that proceeds to create an account.
+   *
+   * `excludeId` (US-023/AC-02, AC-03) is defence in depth, NOT why AC-03 holds — the service's
+   * own unchanged-email guard is load-bearing for that (design note §2.8). Both existing US-021
+   * call sites omit it and are unaffected.
    */
-  findByEmail(email: string): Promise<EmailLookupRow | undefined>;
+  findByEmail(email: string, excludeId?: string): Promise<EmailLookupRow | undefined>;
   /**
    * US-021/AC-01, AC-08. Inserts the row for an account whose Auth credential already exists
    * (`id` is the Auth user's own id — this repository never mints one). Deliberately does NOT
@@ -86,6 +117,26 @@ export interface UsersRepository {
    * uses for leaving `is_active` unnamed.
    */
   insertProfile(input: InsertProfileInput): Promise<void>;
+  /**
+   * US-023. The current row, read BEFORE any write (design note §2.6). Four jobs in one read:
+   * existence (404), the old `fullName`/`email` a failed Auth write restores, whether the email
+   * actually changed at all, and the `role`/`isActive` the `200` body carries. A second `findById`
+   * beside `modules/auth`'s own is correct, not duplication: `eslint.config.mjs`'s MAY_IMPORT
+   * forbids `users` importing `auth`, and that method's select list serves a session, not an edit.
+   */
+  findById(id: string): Promise<ProfileDetailsRow | undefined>;
+  /**
+   * US-023/AC-01, AC-07. This module's first `UPDATE`. Names `email`, `full_name`, `updated_at`
+   * and NOTHING else — never `must_change_password`, never `is_active` (design note §3.3). Also
+   * the COMPENSATING restore's own statement: one method, two callers — the happy path writes the
+   * new values, a failed Auth write calls it again with the remembered old ones (ADR-012).
+   *
+   * `.maybeSingle()`, never `.single()` — `updateDeskNumber`'s own stated reason: `.single()`
+   * turns zero matched rows into a thrown Postgres error and loses the 404. A `23505` naming
+   * `user_profiles_email_key` maps to `duplicate`; any other `23505` throws rather than being
+   * mapped to a refusal it is not — `updateDeskNumber`'s own precedent, unchanged.
+   */
+  updateProfileDetails(input: UpdateProfileDetailsInput): Promise<UpdateProfileDetailsOutcome>;
 }
 
 export const usersRepository: UsersRepository = {
@@ -108,12 +159,9 @@ export const usersRepository: UsersRepository = {
     return (data ?? []) as UserSummaryRow[];
   },
 
-  async findByEmail(email) {
-    const { data, error } = await supabase()
-      .from('user_profiles')
-      .select('full_name, is_active')
-      .eq('email', email)
-      .maybeSingle();
+  async findByEmail(email, excludeId) {
+    const builder = supabase().from('user_profiles').select('full_name, is_active').eq('email', email);
+    const { data, error } = await (excludeId === undefined ? builder : builder.neq('id', excludeId)).maybeSingle();
 
     if (error) throw new Error(`email lookup failed: ${error.message}`);
     return (data as EmailLookupRow | null) ?? undefined;
@@ -125,5 +173,30 @@ export const usersRepository: UsersRepository = {
       .insert({ id, email, full_name: fullName, role });
 
     if (error) throw new Error(`profile insert failed: ${error.message}`);
+  },
+
+  async findById(id) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .select('id, full_name, email, role, is_active')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw new Error(`user lookup failed: ${error.message}`);
+    return (data as ProfileDetailsRow | null) ?? undefined;
+  },
+
+  async updateProfileDetails({ id, fullName, email, updatedAt }) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .update({ full_name: fullName, email, updated_at: updatedAt.toISOString() })
+      .eq('id', id)
+      .select('id, full_name, email, role, is_active')
+      .maybeSingle();
+
+    if (!error) return data ? { kind: 'ok', profile: data as ProfileDetailsRow } : { kind: 'not_found' };
+    if (error.code !== '23505') throw new Error(`user update failed: ${error.message}`);
+    if (error.message.includes('user_profiles_email_key')) return { kind: 'duplicate' };
+    throw new Error(`unrecognised unique violation: ${error.message}`);
   },
 };

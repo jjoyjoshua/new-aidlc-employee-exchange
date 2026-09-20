@@ -11,6 +11,7 @@ import type { AdminSummary, AdminUser, AuthenticatedUser, Office } from '@desk-b
 import type { UsersOutcome } from '../../lib/use-users.js';
 import type { FetchUsers } from '../../lib/fetch-users.js';
 import type { CreateAccountFetcher, CreateAccountOutcome } from '../../lib/create-account.js';
+import type { UpdateAccountFetcher, UpdateAccountOutcome } from '../../lib/update-account.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -32,11 +33,13 @@ const SUMMARY: AdminSummary = { total: 38, employees: 36, admins: 2, deactivated
 function SignedIn({
   fetchUsers,
   createAccount,
+  updateAccount,
   user = ADMIN,
   guarded = false,
 }: {
   fetchUsers: FetchUsers;
   createAccount?: CreateAccountFetcher;
+  updateAccount?: UpdateAccountFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -48,7 +51,7 @@ function SignedIn({
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screenEl = <People fetchUsers={fetchUsers} createAccount={createAccount} />;
+  const screenEl = <People fetchUsers={fetchUsers} createAccount={createAccount} updateAccount={updateAccount} />;
 
   return (
     <MemoryRouter initialEntries={['/admin/people']}>
@@ -318,6 +321,87 @@ describe('People — create an account (US-021/AC-01, AC-09, design note §4.2/A
 
     await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
     await fillAndSubmitValidUserForm();
+
+    expect(await screen.findByText('already belongs to Existing Holder.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+// The table AND card trees both render in jsdom (no media-query layout hiding) — the same reason
+// other tests in this file use `findAllByText`. Only the table row's trigger is used.
+async function openEditFor(fullName: string) {
+  await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${fullName}` })[0]!);
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+}
+
+describe('People — edit an account (US-023/AC-01, AC-09, design note §4.2)', () => {
+  it('opening Edit from the row menu renders the dialog, prefilled', async () => {
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openEditFor('Dana Silva');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Edit person — Dana Silva' });
+    expect(within(dialog).getByLabelText('Full name')).toHaveValue('Dana Silva');
+    expect(within(dialog).getByLabelText('Email')).toHaveValue('dana@company.com');
+    expect(within(dialog).queryByLabelText('Initial password')).not.toBeInTheDocument();
+  });
+
+  it('a successful save closes the dialog, shows the toast, and replaces the row IN PLACE — no refetch (US-023/AC-01)', async () => {
+    let fetchCalls = 0;
+    const fetchUsers: FetchUsers = async () => {
+      fetchCalls += 1;
+      return okUsers([DANA, MARCUS]);
+    };
+    const updateAccount: UpdateAccountFetcher = async () => ({
+      kind: 'ok',
+      account: { ...DANA, fullName: 'Dana Okafor', email: 'dana.okafor@company.com' },
+    });
+    render(<SignedIn fetchUsers={fetchUsers} updateAccount={updateAccount} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openEditFor('Dana Silva');
+    const dialog = screen.getByRole('dialog', { name: 'Edit person — Dana Silva' });
+    await userEvent.clear(within(dialog).getByLabelText('Full name'));
+    await userEvent.type(within(dialog).getByLabelText('Full name'), 'Dana Okafor');
+    await userEvent.clear(within(dialog).getByLabelText('Email'));
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'dana.okafor@company.com');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Dana Okafor updated.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Dana Okafor').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Dana Silva')).not.toBeInTheDocument();
+    expect(fetchCalls).toBe(1);
+  });
+
+  it('leaves the summary UNCHANGED — a name/email correction moves no count (US-023, design note §4.2)', async () => {
+    const updateAccount: UpdateAccountFetcher = async () => ({
+      kind: 'ok',
+      account: { ...DANA, fullName: 'Dana Okafor' },
+    });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, MARCUS], SUMMARY)} updateAccount={updateAccount} />);
+    await screen.findAllByText('Dana Silva');
+    const summaryText = 'Dana Okafor updated.';
+
+    await openEditFor('Dana Silva');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await screen.findByText(summaryText);
+    expect(screen.getByText('38 people · 36 employees, 2 admins · 1 deactivated')).toBeInTheDocument();
+  });
+
+  it('a duplicate email keeps the dialog open, naming the holder (US-023/AC-02)', async () => {
+    const updateAccount: UpdateAccountFetcher = async (): Promise<UpdateAccountOutcome> => ({
+      kind: 'duplicate',
+      fullName: 'Existing Holder',
+      isActive: true,
+    });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} updateAccount={updateAccount} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openEditFor('Dana Silva');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('already belongs to Existing Holder.')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();

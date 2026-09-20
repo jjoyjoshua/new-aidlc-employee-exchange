@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AdminUser } from '@desk-booking/contracts';
 import { AccountRow } from './AccountRow.js';
 
@@ -23,7 +23,7 @@ function renderTableRow(account: AdminUser, currentUserId = 'nobody') {
   return render(
     <table>
       <tbody>
-        <AccountRow account={account} layout="table" currentUserId={currentUserId} />
+        <AccountRow account={account} layout="table" currentUserId={currentUserId} onEdit={vi.fn()} />
       </tbody>
     </table>,
   );
@@ -32,7 +32,7 @@ function renderTableRow(account: AdminUser, currentUserId = 'nobody') {
 function renderCardRow(account: AdminUser, currentUserId = 'nobody') {
   return render(
     <ul>
-      <AccountRow account={account} layout="card" currentUserId={currentUserId} />
+      <AccountRow account={account} layout="card" currentUserId={currentUserId} onEdit={vi.fn()} />
     </ul>,
   );
 }

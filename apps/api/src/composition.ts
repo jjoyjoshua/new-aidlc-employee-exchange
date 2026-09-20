@@ -117,6 +117,7 @@ export function buildApp(options: BuildAppOptions = {}): Express {
   const usersService = createUsersService({
     users: options.users ?? usersRepository,
     usersAuth: options.usersAuth ?? usersAuthAdapter,
+    nowMs,
   });
 
   return createApp({

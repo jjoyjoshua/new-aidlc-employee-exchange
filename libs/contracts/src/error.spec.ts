@@ -93,6 +93,12 @@ describe('ERROR_CODES', () => {
     expect(errorCodeSchema.parse('email_taken')).toBe('email_taken');
   });
 
+  it('carries user_not_found, distinct from desk_not_found (US-023)', () => {
+    expect(ERROR_CODES.user_not_found).toBe('user_not_found');
+    expect(ERROR_CODES.user_not_found).not.toBe(ERROR_CODES.desk_not_found);
+    expect(errorCodeSchema.parse('user_not_found')).toBe('user_not_found');
+  });
+
   it('is the same set the enum validates (US-001/AC-04)', () => {
     expect(errorCodeSchema.options).toEqual(Object.values(ERROR_CODES));
   });

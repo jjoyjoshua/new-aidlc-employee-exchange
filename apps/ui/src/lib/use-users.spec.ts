@@ -164,3 +164,73 @@ describe('useUsers.markAdded — summary always, array only when appendToList (U
     expect(result.current.status).toBe('loading');
   });
 });
+
+describe('useUsers.markUpdated — replaces in place, re-sorts, summary untouched (US-023, design note §4.2)', () => {
+  const FIVE: AdminUser[] = [
+    { id: '1', fullName: 'Amy Ito', email: 'amy@company.com', role: 'employee', isActive: true },
+    { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: true },
+    { id: '3', fullName: 'Zed Okoro', email: 'zed@company.com', role: 'admin', isActive: true },
+  ];
+  const FIVE_SUMMARY: AdminSummary = { total: 3, employees: 2, admins: 1, deactivated: 0 };
+
+  async function readyHook(users: AdminUser[] = FIVE, summary: AdminSummary = FIVE_SUMMARY) {
+    const fetchUsers: UsersFetcher = async () => ({ kind: 'ok', users, summary });
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    return result;
+  }
+
+  it('replaces the row matching id with the updated account (US-023/AC-01)', async () => {
+    const result = await readyHook();
+    const updated: AdminUser = { id: '2', fullName: 'Marcus Vale', email: 'vale@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markUpdated(updated));
+
+    expect(result.current.status === 'ready' && result.current.users.find((u) => u.id === '2')).toEqual(updated);
+  });
+
+  it('re-sorts by full_name — a name change can move the row (US-023/AC-01)', async () => {
+    const result = await readyHook();
+    // Renaming "Amy Ito" to "Zoe Ito" moves it from first to last.
+    const renamed: AdminUser = { id: '1', fullName: 'Zoe Ito', email: 'amy@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markUpdated(renamed));
+
+    expect(result.current.status === 'ready' && result.current.users.map((u) => u.fullName)).toEqual([
+      'Marcus Webb',
+      'Zed Okoro',
+      'Zoe Ito',
+    ]);
+  });
+
+  it('leaves summary BYTE-IDENTICAL — no count moves for a name/email correction (US-023, design note §4.2)', async () => {
+    const result = await readyHook();
+    const updated: AdminUser = { id: '2', fullName: 'Marcus Vale', email: 'vale@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markUpdated(updated));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual(FIVE_SUMMARY);
+  });
+
+  it('replaces the row even under a search that would no longer match it — never removes a row (US-023, design note §4.2)', async () => {
+    const result = await readyHook();
+    // As if only "Marcus Webb" matched a committed search — renaming it out of that match is the
+    // lesser wrong versus leaving a stale name on screen after a successful save.
+    const renamed: AdminUser = { id: '2', fullName: 'Marcus Okonkwo', email: 'okonkwo@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markUpdated(renamed));
+
+    expect(result.current.status === 'ready' && result.current.users).toHaveLength(3);
+    expect(result.current.status === 'ready' && result.current.users.some((u) => u.id === '2')).toBe(true);
+  });
+
+  it('is a no-op before the first successful load', async () => {
+    const fetchUsers: UsersFetcher = () => new Promise(() => undefined);
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    const updated: AdminUser = { id: '2', fullName: 'Marcus Vale', email: 'vale@company.com', role: 'employee', isActive: true };
+
+    expect(result.current.status).toBe('loading');
+    act(() => result.current.markUpdated(updated));
+    expect(result.current.status).toBe('loading');
+  });
+});

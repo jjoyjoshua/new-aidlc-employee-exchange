@@ -16,6 +16,17 @@
  * a FILTERED view the server alone can evaluate correctly (A6) — the match line's numerator
  * would disagree with what renders, and a no-match `EmptyState` would be silently replaced by
  * one non-matching row.
+ *
+ * US-023 adds `markUpdated` (design note §4.2) — NOT `markAdded` with a different verb, and the
+ * differences matter: (1) `summary` is UNCHANGED — US-023 alters neither `role` nor `is_active`,
+ * so no count moves, unlike `markAdded`'s two increments just above; (2) the row is replaced by
+ * `id` and the array is RE-SORTED via `byFullName`, because a name change can move a row within a
+ * `full_name` ASC list; (3) the row is replaced IN PLACE, even under an active search, never
+ * removed — `markAdded` had to abstain from touching a filtered view because inserting a row is
+ * the hook inventing a server-side filter decision, but `markUpdated`'s row is already rendered:
+ * leaving it showing the OLD name after a successful save would read as a failed save. Renaming a
+ * match out of the current search term leaves one stale-but-visible row until the next fetch —
+ * the lesser wrong, and the match line's numerator is unaffected because `summary` does not change.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminSummary, AdminUser } from '@desk-booking/contracts';
@@ -58,6 +69,15 @@ export type UseUsersResult = UsersState & {
    * this is a pre-existing, documented gap, not a regression (A15).
    */
   markAdded: (account: AdminUser, options: MarkAddedOptions) => void;
+  /**
+   * US-023/AC-01 (ST-07). Replaces the row matching `account.id` with the updated values and
+   * re-sorts via `byFullName` — `summary` is left byte-identical, on purpose (see the module
+   * docblock). A no-op before the first successful load, the same pre-existing, documented gap
+   * `markAdded` carries (A15) — this screen's edit action is reached from a rendered row, so in
+   * practice that gap is unreachable for this function specifically, unlike `markAdded`'s
+   * `Add person` button.
+   */
+  markUpdated: (account: AdminUser) => void;
 };
 
 export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
@@ -99,5 +119,16 @@ export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
     });
   }, []);
 
-  return { ...state, markAdded };
+  const markUpdated = useCallback((account: AdminUser) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+
+      // `summary` is spread through UNCHANGED — no count moves for a name/email correction.
+      const users = current.users.map((row) => (row.id === account.id ? account : row)).sort(byFullName);
+
+      return { ...current, users };
+    });
+  }, []);
+
+  return { ...state, markAdded, markUpdated };
 }

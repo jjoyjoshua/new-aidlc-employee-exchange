@@ -74,6 +74,11 @@ export const errorCodeSchema = z.enum([
   // (`api-standards.md`'s 409/422 split, which uses THIS refusal as its own worked example).
   // Distinct from `desk_inactive`, which is the mirror rule on the BOOKING path.
   'desk_has_upcoming_bookings',
+  // US-023 — a well-formed `PATCH /api/admin/users/:id` naming an account that no longer exists.
+  // `desk_not_found`'s own reasoning (US-018 §3.5): a request naming a missing resource must
+  // answer something, and a 500 is the wrong shape. No existence-oracle concern — an admin can
+  // already enumerate every account via `GET /api/admin/users`.
+  'user_not_found',
   'route_not_found',
   'service_unavailable',
   'internal_error',

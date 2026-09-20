@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { AdminSummary } from '@desk-booking/contracts';
 import {
   accountCreatedToast,
+  accountUpdatedToast,
   disabledMenuItemReason,
+  editPersonTitle,
   emailTakenMessage,
   matchLine,
   noMatchMessage,
+  ROLE_FIELD_DISABLED_REASON,
   roleActionLabel,
   rowMenuTriggerLabel,
   summaryLine,
@@ -79,5 +82,27 @@ describe('accountCreatedToast (US-021/AC-09)', () => {
     expect(accountCreatedToast('Dana Silva')).toBe(
       "Dana Silva added. Give them the password you set — it hasn't been emailed, and they'll change it when they sign in.",
     );
+  });
+});
+
+describe('editPersonTitle (US-023/AC-01, SCR-009:126, :191)', () => {
+  it('reads "Edit person — {fullName}" for another account', () => {
+    expect(editPersonTitle('Dana Silva', false)).toBe('Edit person — Dana Silva');
+  });
+
+  it('appends the (you) marker when editing the signed-in administrator\'s own account', () => {
+    expect(editPersonTitle('Marcus Vale', true)).toBe('Edit person — Marcus Vale (you)');
+  });
+});
+
+describe('accountUpdatedToast (US-023/AC-01, SCR-009:157)', () => {
+  it('names the person with no delivery burden — a correction is not a credential', () => {
+    expect(accountUpdatedToast('Dana Silva')).toBe('Dana Silva updated.');
+  });
+});
+
+describe('ROLE_FIELD_DISABLED_REASON (US-023, ADR-010)', () => {
+  it('is the same string disabledMenuItemReason carries — one vocabulary, not two', () => {
+    expect(ROLE_FIELD_DISABLED_REASON).toBe(disabledMenuItemReason);
   });
 });

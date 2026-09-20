@@ -25,6 +25,12 @@ export type CreateAuthAccountOutcome =
 
 export type DeleteAuthAccountOutcome = { kind: 'ok' } | { kind: 'failed' };
 
+export type UpdateAuthEmailOutcome =
+  | { kind: 'ok' }
+  /** GoTrue's own `email_exists` — `createAccount`'s branch above, reused rather than re-derived. */
+  | { kind: 'duplicate' }
+  | { kind: 'unavailable' };
+
 export interface UsersAuthAdapter {
   createAccount(email: string, password: string): Promise<CreateAuthAccountOutcome>;
   /**
@@ -37,6 +43,20 @@ export interface UsersAuthAdapter {
    * already uses for a failed compensating action.
    */
   deleteAccount(userId: string): Promise<DeleteAuthAccountOutcome>;
+  /**
+   * US-023/AC-05, AC-07. `updateUserById(userId, { email, email_confirm: true })` — ONE
+   * attribute plus its confirmation, and named `updateEmail` rather than `updateAccount` so a
+   * diff adding a `password` key to it is visibly wrong (design note §3.3). `email_confirm:
+   * true` for the same two reasons `createAccount` passes it: it suppresses a GoTrue-sent
+   * confirmation email nobody in this repository wrote code to send, AND it is (to the extent
+   * verifiable outside a live project) what makes the new address usable to sign in with
+   * immediately rather than left pending (US-023/AC-05, design note §3.4, open item 3).
+   *
+   * NEVER `deleteAccount` + `createAccount` to "re-provision" the account: `user_profiles.id`'s
+   * `on delete cascade` would destroy the profile row and everything keyed to it — the exact trap
+   * US-023's own QA notes name (ADR-012 §Decision item 3).
+   */
+  updateEmail(userId: string, email: string): Promise<UpdateAuthEmailOutcome>;
 }
 
 export const usersAuthAdapter: UsersAuthAdapter = {
@@ -90,6 +110,27 @@ export const usersAuthAdapter: UsersAuthAdapter = {
         message: thrown instanceof Error ? thrown.message : String(thrown),
       });
       return { kind: 'failed' };
+    }
+  },
+
+  async updateEmail(userId, email) {
+    try {
+      // ONE attribute — no `password` key is ever constructed here (design note §3.3, AC-07).
+      const { error } = await supabase().auth.admin.updateUserById(userId, { email, email_confirm: true });
+
+      if (error) {
+        if (error.code === 'email_exists') return { kind: 'duplicate' };
+        logger.error('failed to update an auth account email', { userId, message: error.message, code: error.code });
+        return { kind: 'unavailable' };
+      }
+
+      return { kind: 'ok' };
+    } catch (thrown) {
+      logger.error('supabase auth threw while updating an account email', {
+        userId,
+        message: thrown instanceof Error ? thrown.message : String(thrown),
+      });
+      return { kind: 'unavailable' };
     }
   },
 };

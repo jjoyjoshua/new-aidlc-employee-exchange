@@ -1,11 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import type { AdminUser } from '@desk-booking/contracts';
 import { UserFormDialog } from './UserFormDialog.js';
 import type { UserFormDialogState } from './use-user-form-dialog.js';
 
-const OPEN: UserFormDialogState = { busy: false };
+const OPEN: UserFormDialogState = { mode: 'create', busy: false };
 const VALID_PASSWORD = 'Correct-Horse7';
+
+const EXISTING_ACCOUNT: AdminUser = {
+  id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+  fullName: 'Dana Silva',
+  email: 'dana@company.com',
+  role: 'employee',
+  isActive: true,
+};
 
 async function fillValidForm() {
   await userEvent.type(screen.getByLabelText('Full name'), 'Dana Silva');
@@ -181,6 +190,7 @@ describe('UserFormDialog — ST-09 all rules met (US-021/AC-04)', () => {
 describe('UserFormDialog — ST-04 duplicate email (US-021/AC-06)', () => {
   it('renders the holder\'s name for an active account, and the field\'s own short message', () => {
     const dialog: UserFormDialogState = {
+      mode: 'create',
       busy: false,
       outcome: 'duplicate',
       duplicateFullName: 'Dana Silva',
@@ -194,6 +204,7 @@ describe('UserFormDialog — ST-04 duplicate email (US-021/AC-06)', () => {
 
   it('adds the reactivation sentence for a deactivated holder', () => {
     const dialog: UserFormDialogState = {
+      mode: 'create',
       busy: false,
       outcome: 'duplicate',
       duplicateFullName: 'Former Employee',
@@ -207,7 +218,7 @@ describe('UserFormDialog — ST-04 duplicate email (US-021/AC-06)', () => {
 
 describe('UserFormDialog — ST-06 saving (US-021/AC-11)', () => {
   it('the confirming action is busy and fields are read-only while saving', () => {
-    render(<UserFormDialog dialog={{ busy: true }} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    render(<UserFormDialog dialog={{ mode: 'create', busy: true }} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
 
     expect(screen.getByLabelText('Full name')).toHaveAttribute('readonly');
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
@@ -219,11 +230,131 @@ describe('UserFormDialog — ST-08 save failed (US-021/AC-11)', () => {
     const { rerender } = render(<UserFormDialog dialog={OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
 
     await fillValidForm();
-    rerender(<UserFormDialog dialog={{ busy: false, outcome: 'failed' }} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    rerender(<UserFormDialog dialog={{ mode: 'create', busy: false, outcome: 'failed' }} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
 
     expect(screen.getByText(/couldn't save that just now/)).toBeInTheDocument();
     expect(screen.getByLabelText('Full name')).toHaveValue('Dana Silva');
     expect(screen.getByLabelText('Email')).toHaveValue('dana@company.com');
     expect(screen.getByLabelText('Initial password')).toHaveValue(VALID_PASSWORD);
+  });
+});
+
+describe('UserFormDialog — ST-02 edit default (US-023/AC-01)', () => {
+  const EDIT_OPEN: UserFormDialogState = { mode: 'edit', account: EXISTING_ACCOUNT, busy: false };
+
+  it('renders the edit title, prefilled name/email, no password field, and the reset-password note', () => {
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByRole('dialog', { name: 'Edit person — Dana Silva' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Full name')).toHaveValue('Dana Silva');
+    expect(screen.getByLabelText('Email')).toHaveValue('dana@company.com');
+    expect(screen.queryByLabelText('Initial password')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Suggest a password' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/isn't emailed/)).not.toBeInTheDocument();
+    expect(screen.getByText('To change their password, use Reset password on the people list.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+  });
+
+  it('appends the (you) marker when editing the signed-in administrator\'s own account (US-023/AC-01, SCR-009:191)', () => {
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} currentUserId={EXISTING_ACCOUNT.id} />);
+
+    expect(screen.getByRole('dialog', { name: 'Edit person — Dana Silva (you)' })).toBeInTheDocument();
+  });
+
+  it('does not show (you) when editing a different account', () => {
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} currentUserId="someone-else" />);
+
+    expect(screen.getByRole('dialog', { name: 'Edit person — Dana Silva' })).toBeInTheDocument();
+  });
+
+  it('the role radios show the current role, ARIA-disabled — never the native attribute (ADR-010, design note §4.3)', () => {
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+
+    const employeeRadio = screen.getByRole('radio', { name: /Employee/ });
+    expect(employeeRadio).toBeChecked();
+    expect(employeeRadio).not.toBeDisabled();
+    expect(employeeRadio).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('calls onSubmit with only fullName/email — no role, no password (US-023/AC-01, AC-07)', async () => {
+    const onSubmit = vi.fn();
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={onSubmit} onDismiss={vi.fn()} />);
+
+    await userEvent.clear(screen.getByLabelText('Full name'));
+    await userEvent.type(screen.getByLabelText('Full name'), 'Dana Okafor');
+    await userEvent.clear(screen.getByLabelText('Email'));
+    await userEvent.type(screen.getByLabelText('Email'), 'dana.okafor@company.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ fullName: 'Dana Okafor', email: 'dana.okafor@company.com' });
+  });
+
+  it('refuses an empty full name and an implausible email, in the browser, with no request sent (US-023/AC-04)', async () => {
+    const onSubmit = vi.fn();
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={onSubmit} onDismiss={vi.fn()} />);
+
+    await userEvent.clear(screen.getByLabelText('Full name'));
+    await userEvent.clear(screen.getByLabelText('Email'));
+    await userEvent.type(screen.getByLabelText('Email'), 'not-an-email');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(screen.getByText('Enter a name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('UserFormDialog — ST-04 duplicate email in edit mode (US-023/AC-02)', () => {
+  it('reuses the SAME Alert/field-message shape create mode uses (SCR-009, one state, two forms)', () => {
+    const dialog: UserFormDialogState = {
+      mode: 'edit',
+      account: EXISTING_ACCOUNT,
+      busy: false,
+      outcome: 'duplicate',
+      duplicateFullName: 'Existing Holder',
+      duplicateIsActive: true,
+    };
+    render(<UserFormDialog dialog={dialog} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByText('already belongs to Existing Holder.')).toBeInTheDocument();
+    expect(screen.getByText('Already in use.')).toBeInTheDocument();
+  });
+});
+
+describe('UserFormDialog — ST-06/ST-08 saving and save-failed in edit mode (US-023/AC-08)', () => {
+  it('the confirming action is busy and fields are read-only while saving', () => {
+    render(
+      <UserFormDialog
+        dialog={{ mode: 'edit', account: EXISTING_ACCOUNT, busy: true }}
+        onSubmit={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Full name')).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  });
+
+  it('a save failure retains every typed value (US-023/AC-08)', async () => {
+    const { rerender } = render(
+      <UserFormDialog
+        dialog={{ mode: 'edit', account: EXISTING_ACCOUNT, busy: false }}
+        onSubmit={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    await userEvent.clear(screen.getByLabelText('Full name'));
+    await userEvent.type(screen.getByLabelText('Full name'), 'Dana Okafor');
+    rerender(
+      <UserFormDialog
+        dialog={{ mode: 'edit', account: EXISTING_ACCOUNT, busy: false, outcome: 'failed' }}
+        onSubmit={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/couldn't save that just now/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Full name')).toHaveValue('Dana Okafor');
   });
 });

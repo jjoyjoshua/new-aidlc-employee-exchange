@@ -22,7 +22,7 @@
  * properties; the <768px bottom sheet ignores them (it was always a plain `position: fixed;
  * inset: 0`, independent of the trigger's position).
  *
- * **The four items are `aria-disabled="true"` and FOCUSABLE — never the HTML `disabled`
+ * **The still-unbuilt items are `aria-disabled="true"` and FOCUSABLE — never the HTML `disabled`
  * attribute** (design note §6, ADR-010, ADR-010's decision record). `Button` renders `disabled`
  * as a real HTML attribute, which drops a control from the tab order and most screen readers'
  * browse mode; four such items inside a `role="menu"` would leave NOTHING focusable when it
@@ -31,6 +31,9 @@
  * component owns every one of `aria-disabled`, `title` and the visually-hidden reason directly —
  * `Button` is not modified, and no prop is added to it for this (`aria-disabled` would pass
  * through its `...rest` if it WERE used, which is the whole argument against adding a prop).
+ * **US-023 is the first destination to land:** `Edit` is now a real, live item — no
+ * `aria-disabled`, no reason to carry — exactly as ADR-010 forecast, one item at a time
+ * (`users/README.md`). The other three stay `aria-disabled` until US-024/US-025/US-027.
  *
  * **Outside-click dismissal** is implemented as a document-level listener scoped to the menu's
  * own DOM subtree, not the overlay element's own click target — the overlay is a zero-size
@@ -63,6 +66,13 @@ export interface AccountRowMenuProps {
    *  explicitly on Escape or an outside click (AC-12). */
   triggerRef: RefObject<HTMLElement | null>;
   onDismiss: () => void;
+  /**
+   * US-023. **Edit** stops being `aria-disabled` and gains this handler — the first of the four
+   * items ADR-010 promised would happen one at a time as each destination story lands
+   * (`users/README.md`). The other three (role, reset password, deactivate/activate) stay
+   * `aria-disabled` until US-024/US-025/US-027.
+   */
+  onEdit: (account: AdminUser) => void;
 }
 
 interface MenuItemSpec {
@@ -77,7 +87,7 @@ type AnchorStyle = CSSProperties & {
   '--menu-anchor-right'?: string;
 };
 
-export function AccountRowMenu({ account, triggerRef, onDismiss }: AccountRowMenuProps) {
+export function AccountRowMenu({ account, triggerRef, onDismiss, onEdit }: AccountRowMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `people-menu-title-${account.id}`;
 
@@ -154,11 +164,11 @@ export function AccountRowMenu({ account, triggerRef, onDismiss }: AccountRowMen
     items[nextIndex]?.focus();
   };
 
-  // Every item shares the same shape: real, correctly labelled, `aria-disabled`, focusable,
-  // carrying its reason via `title` AND a visually-hidden span (the pair `AdminBookingRow.tsx`'s
-  // own docblock establishes — "`title` alone is not an accessible name in practice"). `onClick`
-  // returns immediately; nothing this story builds ever runs (ADR-010).
-  function renderItem({ label, danger }: MenuItemSpec) {
+  // The three items with no destination yet: real, correctly labelled, `aria-disabled`,
+  // focusable, carrying their reason via `title` AND a visually-hidden span (the pair
+  // `AdminBookingRow.tsx`'s own docblock establishes — "`title` alone is not an accessible name
+  // in practice"). `onClick` returns immediately; nothing this story builds ever runs (ADR-010).
+  function renderDisabledItem({ label, danger }: MenuItemSpec) {
     return (
       <button
         key={label}
@@ -177,17 +187,28 @@ export function AccountRowMenu({ account, triggerRef, onDismiss }: AccountRowMen
     );
   }
 
+  // US-023's own destination has landed: a real, live item — no `aria-disabled`, no reason to
+  // carry, and focus returns to the trigger the same way Escape/outside-click do (design note
+  // §4.4's "Edit stops being aria-disabled and gains its handler").
+  function handleEdit() {
+    triggerRef.current?.focus();
+    onDismiss();
+    onEdit(account);
+  }
+
   return createPortal(
     <div className="people-menu__overlay" style={anchorStyle}>
       <div ref={menuRef} role="menu" aria-labelledby={titleId} className="people-menu" onKeyDown={handleKeyDown}>
         <p id={titleId} className="people-menu__title">
           {account.fullName}
         </p>
-        {renderItem({ label: EDIT_LABEL })}
-        {renderItem({ label: roleActionLabel(account.role) })}
-        {renderItem({ label: RESET_PASSWORD_LABEL })}
+        <button type="button" role="menuitem" className="people-menu__item" onClick={handleEdit}>
+          {EDIT_LABEL}
+        </button>
+        {renderDisabledItem({ label: roleActionLabel(account.role) })}
+        {renderDisabledItem({ label: RESET_PASSWORD_LABEL })}
         <hr className="people-menu__divider" aria-hidden="true" />
-        {renderItem({ label: account.isActive ? DEACTIVATE_LABEL : ACTIVATE_LABEL, danger: true })}
+        {renderDisabledItem({ label: account.isActive ? DEACTIVATE_LABEL : ACTIVATE_LABEL, danger: true })}
       </div>
     </div>,
     document.body,

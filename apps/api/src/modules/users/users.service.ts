@@ -5,6 +5,11 @@
  * US-021 adds this module's first WRITE, `createAccount` — two systems, one write each, no
  * shared transaction (ADR-011). See that function's own docblock for the compensating-delete
  * shape ADR-011 requires.
+ *
+ * US-023 adds this module's first UPDATE, `updateAccount` — the same no-shared-transaction problem,
+ * but with the order REVERSED from create (ADR-012): `user_profiles` first, Supabase Auth second,
+ * because the foreign key that forces Auth-first on an insert constrains nothing on an update
+ * (design note §2.1). See that function's own docblock for the restore-compensation shape.
  */
 import type { AdminUser, AdminUsersResponse, AdminSummary, UserRole } from '@desk-booking/contracts';
 import type { UserAccountRow, UserSummaryRow, UsersRepository } from './users.repository.js';
@@ -14,6 +19,9 @@ import { logger } from '../../infra/logger/index.js';
 export interface UsersServiceDeps {
   users: UsersRepository;
   usersAuth: UsersAuthAdapter;
+  /** US-023 — `updated_at`'s first writer. One reading threaded through, so the repository never
+   *  reads a clock itself (`desks.service.ts`'s own `DesksServiceDeps` shape). */
+  nowMs: () => number;
 }
 
 export interface CreateAccountInput {
@@ -22,6 +30,23 @@ export interface CreateAccountInput {
   role: UserRole;
   password: string;
 }
+
+export interface UpdateAccountInput {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+/**
+ * US-023/AC-01, AC-02, AC-03, AC-05, AC-07. `CreateAccountOutcome`'s four kinds plus `not_found`
+ * — the same single addition `RenameDeskOutcome` makes over `CreateDeskOutcome`.
+ */
+export type UpdateAccountOutcome =
+  | { kind: 'ok'; account: AdminUser }
+  | { kind: 'duplicate'; fullName: string; isActive: boolean }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable' }
+  | { kind: 'failed' };
 
 /**
  * US-021/AC-01, AC-06, AC-08. Four kinds at THIS layer — wider than the browser ever sees
@@ -78,7 +103,7 @@ function tallySummary(rows: UserSummaryRow[]): AdminSummary {
   return { total, employees, admins, deactivated };
 }
 
-export function createUsersService({ users, usersAuth }: UsersServiceDeps) {
+export function createUsersService({ users, usersAuth, nowMs }: UsersServiceDeps) {
   return {
     /**
      * US-020/AC-01, AC-02, AC-04, AC-06. `listAccounts` (filtered by `q` when present) and
@@ -159,6 +184,87 @@ export function createUsersService({ users, usersAuth }: UsersServiceDeps) {
 
       // desks.service.ts:82-95's shape: return the row just built, never a re-read.
       return { kind: 'ok', account: { id: created.userId, fullName, email, role, isActive: true } };
+    },
+
+    /**
+     * US-023/AC-01, AC-02, AC-03, AC-05, AC-06, AC-07, AC-08. Design note §2.11's shape, exactly.
+     * Two systems, one write each, in the ORDER ADR-012 decided — `user_profiles` first, Supabase
+     * Auth second, the REVERSE of `createAccount` above, because the foreign key that forces
+     * Auth-first on an insert constrains nothing here (design note §2.1).
+     */
+    async updateAccount({ id, fullName, email }: UpdateAccountInput): Promise<UpdateAccountOutcome> {
+      // The read that makes everything else possible (design note §2.6): existence, the old
+      // values a failed Auth write restores, and whether the email actually changed at all.
+      const current = await users.findById(id);
+      if (!current) return { kind: 'not_found' };
+
+      const emailChanged = current.email.toLowerCase() !== email;
+
+      // The LOAD-BEARING guard (design note §2.8): when the email is unchanged, no duplicate
+      // check runs and neither write touches it — AC-03 holds because a self-collision is never
+      // tested for, not because `excludeId` below catches it.
+      if (emailChanged) {
+        const holder = await users.findByEmail(email, id);
+        if (holder) return { kind: 'duplicate', fullName: holder.full_name, isActive: holder.is_active };
+      }
+
+      // Profile FIRST (ADR-012 §Decision item 1) — the reverse of create.
+      const written = await users.updateProfileDetails({ id, fullName, email, updatedAt: new Date(nowMs()) });
+      if (written.kind === 'not_found') return { kind: 'not_found' };
+      if (written.kind === 'duplicate') {
+        // `excludeId` defence in depth (design note §2.8): the guard above missed a concurrent
+        // write that landed between the read and this one. Re-read once, the same re-read device
+        // `createAccount` uses for its own race.
+        const holder = await users.findByEmail(email, id);
+        if (holder) return { kind: 'duplicate', fullName: holder.full_name, isActive: holder.is_active };
+        logger.error('user_profiles_email_key fired but no row holds the email — inconsistent', { id });
+        return { kind: 'failed' };
+      }
+
+      // No Auth call AT ALL when the email did not change (design note §2.3) — structurally, not
+      // by arrangement: AC-07's re-provisioning trap has nothing to reach for on this path.
+      if (!emailChanged) return { kind: 'ok', account: mapAccount(written.profile) };
+
+      // ONE attribute (design note §3.3, AC-07) — `usersAuth.updateEmail` never constructs a
+      // `password` key, and `deleteAccount` is never called from this path.
+      const auth = await usersAuth.updateEmail(id, email);
+      if (auth.kind === 'ok') return { kind: 'ok', account: mapAccount(written.profile) };
+
+      // Compensation: this request undoing its OWN write (ADR-012 §Decision item 2 / ADR-011
+      // item 2 — not item 4's self-healing, which this is not). BOTH old values restored (design
+      // note §2.7 — a partial revert would contradict SCR-009 ST-08's "Nothing has changed.").
+      // Logged, never thrown, never surfaced (ADR-011 item 3).
+      logger.error('auth email update failed after the profile was written; compensating', {
+        id,
+        kind: auth.kind,
+      });
+      const restored = await users.updateProfileDetails({
+        id,
+        fullName: current.full_name,
+        email: current.email,
+        updatedAt: new Date(nowMs()),
+      });
+      if (restored.kind !== 'ok') {
+        logger.error(
+          'COMPENSATING RESTORE FAILED — user_profiles and auth.users now disagree about this ' +
+            'account\'s email; sign-in uses the OLD address and notifications the NEW one',
+          { id },
+        );
+        return { kind: 'failed' };
+      }
+
+      // `duplicate` from GoTrue here is NOT one the administrator can act on — no profile row
+      // holds the address, so there is nothing to name in ST-04 (ADR-011 item 4: no adopting, no
+      // deleting a resource this request did not create).
+      if (auth.kind === 'duplicate') {
+        logger.error(
+          'auth.users holds this email but user_profiles does not — orphaned or diverged credential ' +
+            '(ADR-011 §Decision item 5, ADR-012 §Decision item 6)',
+          { id, email },
+        );
+        return { kind: 'failed' };
+      }
+      return { kind: 'unavailable' };
     },
   };
 }

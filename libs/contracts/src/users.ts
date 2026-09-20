@@ -80,15 +80,23 @@ export const adminUsersResponseSchema = z.object({
 export type AdminUsersResponse = z.infer<typeof adminUsersResponseSchema>;
 
 /**
+ * `fullName`/`email`'s shared rules (US-021/AC-01–AC-03; US-023/AC-02, AC-04, D-08 in spirit).
+ * Extracted so `createAccountRequestSchema` and `userUpdateSchema` (below) use the SAME object,
+ * not two schemas that happen to agree today — `deskNumberSchema`'s own reason for existing
+ * (`desks.ts`). `email`'s `.trim().toLowerCase()` runs HERE, not in the service, so the parsed
+ * value is both what a duplicate check reads and what gets stored — no second place to remember
+ * to normalise (US-021/D-01).
+ */
+export const fullNameSchema = z.string().trim().min(1).max(200);
+export const emailSchema = z.string().trim().toLowerCase().max(320).email();
+
+/**
  * `POST /api/admin/users`'s one legitimate body (US-021/AC-01, AC-02, AC-03). `.strict()` —
  * matching every request schema in this package.
  *
- * `email`'s `.trim().toLowerCase()` runs in THIS schema, not in the service, the same shape
- * `deskNumberSchema` (`desks.ts`) uses for desk numbers: the parsed value is both what the
- * duplicate check reads and what gets stored, so there is no second place to remember to
- * normalise (US-021/D-01). `password` reuses `newPasswordSchema` verbatim — the same V-12
- * evaluator the browser's `PolicyChecklist` runs, so the checklist and this refusal cannot
- * disagree (`password.ts`'s own stated reason for existing).
+ * `password` reuses `newPasswordSchema` verbatim — the same V-12 evaluator the browser's
+ * `PolicyChecklist` runs, so the checklist and this refusal cannot disagree (`password.ts`'s own
+ * stated reason for existing).
  *
  * No `id`: the database mints it via Supabase Auth. No `isActive`/`mustChangePassword`: both are
  * `user_profiles` column defaults (`true` and `true` respectively) that this request has no way
@@ -97,13 +105,32 @@ export type AdminUsersResponse = z.infer<typeof adminUsersResponseSchema>;
  */
 export const createAccountRequestSchema = z
   .object({
-    fullName: z.string().trim().min(1).max(200),
-    email: z.string().trim().toLowerCase().max(320).email(),
+    fullName: fullNameSchema,
+    email: emailSchema,
     role: userRoleSchema,
     password: newPasswordSchema,
   })
   .strict();
 export type CreateAccountRequest = z.input<typeof createAccountRequestSchema>;
+
+/** `PATCH /api/admin/users/:id`'s path parameter (US-023). */
+export const userIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
+export type UserIdParams = z.infer<typeof userIdParamsSchema>;
+
+/**
+ * `PATCH /api/admin/users/:id`'s one legitimate body (US-023/AC-01, AC-02, AC-03, AC-04, AC-07).
+ * `.strict()` — matching every request schema in this package.
+ *
+ * Declared independently of `createAccountRequestSchema`, NOT `.omit({ role: true, password:
+ * true })` from it — `deskUpdateSchema`'s own docblock (`desks.ts`) names this hazard: they are
+ * two contracts that happen to coincide today, and a future required field on create would
+ * silently appear on edit, where SCR-009 forbids a password field in writing (US-023 design note
+ * §3.1). Both fields required, not optional — the edit form always posts both (prefilled); the
+ * unchanged-email guard that decides whether Supabase Auth is even called lives in the service,
+ * not here (design note §2.3).
+ */
+export const userUpdateSchema = z.object({ fullName: fullNameSchema, email: emailSchema }).strict();
+export type UserUpdateRequest = z.input<typeof userUpdateSchema>;
 
 /**
  * The `details` payload on a `409 email_taken` refusal (US-021/AC-06, ADR-009's second
