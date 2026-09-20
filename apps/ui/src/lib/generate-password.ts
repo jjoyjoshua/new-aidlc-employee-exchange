@@ -1,5 +1,7 @@
 /**
- * SCR-009's **Suggest a password** (REQ-033, V-18, US-021/D-04). One pure function that
+ * SCR-009's **Suggest a password** (REQ-033, V-18, US-021/D-04) — the generator this US-022
+ * story specifies in detail (AC-01, AC-02, AC-04; see `generate-password.spec.ts`). One pure
+ * function that
  * self-verifies its own output against `evaluatePasswordPolicy` — the same function the
  * checklist and the server both run — before ever returning a value, so the generator and the
  * policy cannot silently drift apart (`password.ts`'s own stated reason for `newPasswordSchema`

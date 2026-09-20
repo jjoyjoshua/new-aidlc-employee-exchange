@@ -36,7 +36,7 @@
 | REQ-030 | US-025 | 0/14 | planned |
 | REQ-031 | US-014 | 10/10 | delivered |
 | REQ-032 | US-020 | 13/13 | delivered |
-| REQ-033 | US-022 | 0/6 | planned |
+| REQ-033 | US-022 | 6/6 | delivered |
 | REQ-034 | US-008 | 6/6 | delivered |
 | REQ-035 | US-009 | 7/7 | delivered |
 | REQ-036 | US-012 | 6/6 | delivered |

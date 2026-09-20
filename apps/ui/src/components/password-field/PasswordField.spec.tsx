@@ -59,7 +59,7 @@ describe('PasswordField (US-001/AC-05)', () => {
     expect(screen.getByRole('button', { name: 'Show' })).toBeDisabled();
   });
 
-  it('renders revealed when a caller passes visible={true} (US-021/AC-04, D-07 — Suggest a password)', () => {
+  it('renders revealed when a caller passes visible={true} (US-021/AC-04, D-07, US-022/AC-03 — Suggest a password)', () => {
     render(<PasswordField label="Password" visible onVisibleChange={() => {}} />);
 
     expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');

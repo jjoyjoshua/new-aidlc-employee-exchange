@@ -111,7 +111,7 @@ describe('UserFormDialog — ST-09 all rules met (US-021/AC-04)', () => {
     }
   });
 
-  it('Suggest a password fills a compliant, REVEALED value (US-021/AC-04, D-07 — no point hiding a value that must be read aloud)', async () => {
+  it('Suggest a password fills a compliant, REVEALED value, checklist all met (US-021/AC-04, D-07, US-022/AC-01, AC-03 — no point hiding a value that must be read aloud)', async () => {
     render(<UserFormDialog dialog={OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Suggest a password' }));
@@ -120,6 +120,61 @@ describe('UserFormDialog — ST-09 all rules met (US-021/AC-04)', () => {
     expect(field).toHaveAttribute('type', 'text');
     expect(field.value.length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    for (const label of ['8 characters or more', 'An upper-case letter', 'A lower-case letter', 'A number', 'A special character']) {
+      expect(screen.getByText(label).closest('li')).toHaveClass('policy-checklist__row--met');
+    }
+  });
+
+  it('Suggest a password produces a different value on a second use (US-022/AC-04)', async () => {
+    render(<UserFormDialog dialog={OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    const field = screen.getByLabelText('Initial password') as HTMLInputElement;
+    const suggest = screen.getByRole('button', { name: 'Suggest a password' });
+
+    await userEvent.click(suggest);
+    const first = field.value;
+    await userEvent.click(suggest);
+    const second = field.value;
+
+    expect(second).not.toBe(first);
+  });
+
+  it('a generated password is still editable — typing over it is accepted or refused by the ordinary rules (US-022/AC-05)', async () => {
+    render(<UserFormDialog dialog={OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    const field = screen.getByLabelText('Initial password') as HTMLInputElement;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest a password' }));
+    const generated = field.value;
+
+    await userEvent.clear(field);
+    await userEvent.type(field, 'tooweak');
+    expect(field.value).toBe('tooweak');
+    expect(field.value).not.toBe(generated);
+    expect(screen.getByText('8 characters or more').closest('li')).not.toHaveClass('policy-checklist__row--met');
+
+    await userEvent.clear(field);
+    await userEvent.type(field, VALID_PASSWORD);
+    for (const label of ['8 characters or more', 'An upper-case letter', 'A lower-case letter', 'A number', 'A special character']) {
+      expect(screen.getByText(label).closest('li')).toHaveClass('policy-checklist__row--met');
+    }
+  });
+
+  it('a generated password submits exactly like a typed one — same shape, no marker (US-022/AC-06)', async () => {
+    const onSubmit = vi.fn();
+    render(<UserFormDialog dialog={OPEN} onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    const field = screen.getByLabelText('Initial password') as HTMLInputElement;
+
+    await userEvent.type(screen.getByLabelText('Full name'), 'Dana Silva');
+    await userEvent.type(screen.getByLabelText('Email'), 'dana@company.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest a password' }));
+    const generated = field.value;
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      fullName: 'Dana Silva',
+      email: 'dana@company.com',
+      role: 'employee',
+      password: generated,
+    });
   });
 });
 

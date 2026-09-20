@@ -1164,7 +1164,11 @@
         "AC-05",
         "AC-06"
       ],
-      "tests": [],
+      "tests": [
+        "apps/ui/src/lib/generate-password.spec.ts",
+        "apps/ui/src/screens/people/UserFormDialog.spec.tsx",
+        "apps/ui/src/components/password-field/PasswordField.spec.tsx"
+      ],
       "screens": [
         "SCR-009"
       ]
