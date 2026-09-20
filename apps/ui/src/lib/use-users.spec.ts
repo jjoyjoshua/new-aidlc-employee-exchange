@@ -234,3 +234,108 @@ describe('useUsers.markUpdated — replaces in place, re-sorts, summary untouche
     expect(result.current.status).toBe('loading');
   });
 });
+
+describe('useUsers.markRoleChanged — replaces in place, moves BOTH role counts, total/deactivated untouched (US-024/AC-11, design note §4.1)', () => {
+  const FIVE: AdminUser[] = [
+    { id: '1', fullName: 'Amy Ito', email: 'amy@company.com', role: 'employee', isActive: true },
+    { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'employee', isActive: true },
+    { id: '3', fullName: 'Zed Okoro', email: 'zed@company.com', role: 'admin', isActive: true },
+  ];
+  const FIVE_SUMMARY: AdminSummary = { total: 3, employees: 2, admins: 1, deactivated: 0 };
+
+  async function readyHook(users: AdminUser[] = FIVE, summary: AdminSummary = FIVE_SUMMARY) {
+    const fetchUsers: UsersFetcher = async () => ({ kind: 'ok', users, summary });
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    return result;
+  }
+
+  it('replaces the row matching id with the updated (new-role) account (US-024/AC-01, AC-11)', async () => {
+    const result = await readyHook();
+    const promoted: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'admin', isActive: true };
+
+    act(() => result.current.markRoleChanged(promoted));
+
+    expect(result.current.status === 'ready' && result.current.users.find((u) => u.id === '2')).toEqual(promoted);
+  });
+
+  it('a promotion moves BOTH counts — employees down one, admins up one — total and deactivated untouched (US-024/AC-11)', async () => {
+    const result = await readyHook();
+    const promoted: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'admin', isActive: true };
+
+    act(() => result.current.markRoleChanged(promoted));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 3,
+      employees: 1,
+      admins: 2,
+      deactivated: 0,
+    });
+  });
+
+  it('a demotion moves the counts the OTHER way', async () => {
+    const result = await readyHook();
+    const demoted: AdminUser = { id: '3', fullName: 'Zed Okoro', email: 'zed@company.com', role: 'employee', isActive: true };
+
+    act(() => result.current.markRoleChanged(demoted));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 3,
+      employees: 3,
+      admins: 0,
+      deactivated: 0,
+    });
+  });
+
+  it('the delta applies even for a DEACTIVATED account — the summary counts every admin row regardless of is_active (US-024/AC-12, design note §4.1)', async () => {
+    const withDeactivatedAdmin: AdminUser[] = [
+      ...FIVE,
+      { id: '4', fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin', isActive: false },
+    ];
+    const summary: AdminSummary = { total: 4, employees: 2, admins: 2, deactivated: 1 };
+    const result = await readyHook(withDeactivatedAdmin, summary);
+    const demoted: AdminUser = { id: '4', fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false };
+
+    act(() => result.current.markRoleChanged(demoted));
+
+    expect(result.current.status === 'ready' && result.current.summary).toEqual({
+      total: 4,
+      employees: 3,
+      admins: 1,
+      deactivated: 1,
+    });
+  });
+
+  it('employees + admins === total holds after the change — the invariant markAdded/the service both assert', async () => {
+    const result = await readyHook();
+    const promoted: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'admin', isActive: true };
+
+    act(() => result.current.markRoleChanged(promoted));
+
+    const summary = result.current.status === 'ready' ? result.current.summary : undefined;
+    expect(summary && summary.employees + summary.admins).toBe(summary?.total);
+  });
+
+  it('re-sorts by full_name — unaffected here since a role change cannot move the name, but the sort still runs', async () => {
+    const result = await readyHook();
+    const promoted: AdminUser = { id: '1', fullName: 'Amy Ito', email: 'amy@company.com', role: 'admin', isActive: true };
+
+    act(() => result.current.markRoleChanged(promoted));
+
+    expect(result.current.status === 'ready' && result.current.users.map((u) => u.fullName)).toEqual([
+      'Amy Ito',
+      'Marcus Webb',
+      'Zed Okoro',
+    ]);
+  });
+
+  it('is a no-op before the first successful load', async () => {
+    const fetchUsers: UsersFetcher = () => new Promise(() => undefined);
+    const { result } = renderHook(() => useUsers(fetchUsers));
+    const promoted: AdminUser = { id: '2', fullName: 'Marcus Webb', email: 'marcus@company.com', role: 'admin', isActive: true };
+
+    expect(result.current.status).toBe('loading');
+    act(() => result.current.markRoleChanged(promoted));
+    expect(result.current.status).toBe('loading');
+  });
+});

@@ -1233,10 +1233,31 @@
         "AC-12",
         "AC-13"
       ],
-      "tests": [],
+      "tests": [
+        "libs/contracts/src/error.spec.ts",
+        "libs/contracts/src/users.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "apps/api/src/modules/admin/admin.concurrency.spec.ts",
+        "apps/ui/src/lib/change-role.spec.ts",
+        "apps/ui/src/lib/use-users.spec.ts",
+        "apps/ui/src/lib/auth/auth-context.spec.tsx",
+        "apps/ui/src/screens/people/RoleChangeDialog.spec.tsx",
+        "apps/ui/src/screens/people/use-role-change-dialog.spec.ts",
+        "apps/ui/src/screens/people/AccountRow.spec.tsx",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx",
+        "apps/ui/src/screens/people/People.spec.tsx",
+        "apps/ui/src/screens/people/UserFormDialog.spec.tsx",
+        "apps/ui/src/screens/people/use-user-form-dialog.spec.ts",
+        "apps/ui/src/screens/people/copy.spec.ts"
+      ],
       "screens": [
         "SCR-008",
         "SCR-009"
+      ],
+      "decisions": [
+        "ADR-013"
       ]
     },
     "US-025": {

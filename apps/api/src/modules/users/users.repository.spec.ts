@@ -550,3 +550,104 @@ describe('usersRepository.updateProfileDetails (US-023/AC-01, AC-07 — this mod
     }
   });
 });
+
+/**
+ * US-024/AC-01, AC-04, AC-07, AC-12 (design note §3.2, §3.3 — this module's first write to
+ * `role`). Names `role` and `updated_at` ONLY, keyed on `id` — never `is_active`, never the
+ * later deactivation story's own `deactivated_at` column, never `must_change_password`, the same
+ * discipline `updateProfileDetails` states for its own two columns.
+ *
+ * `.maybeSingle()`, never `.single()` — `updateProfileDetails`'s own reason: zero rows must
+ * answer `{ kind: 'not_found' }`, not a thrown Postgres error.
+ *
+ * The `blocked` mapping matches `error.code === 'Z0011'` ONLY — the SQLSTATE
+ * `user_profiles_require_active_admin()` raises (migration `0004_last_active_admin_guard.sql`),
+ * a code minted by this project and raised by exactly one statement in the whole schema. This is
+ * deliberately NOT the two-part match `updateProfileDetails` needs for `23505` (design note
+ * §3.1-§3.2): `23505` is raised by every unique index in the schema, so the index name in the
+ * message disambiguates; `Z0011` needs no second discriminator. The negative test below is the
+ * one that would fail if a message match crept in.
+ */
+describe('usersRepository.setRole (US-024/AC-01, AC-04, AC-07, AC-12)', () => {
+  const UPDATED_AT = new Date('2026-09-20T10:00:00.000Z');
+
+  it('updates role and updated_at ONLY, keyed on id — never is_active, never must_change_password', async () => {
+    const row = { ...ROW_A, role: 'admin' as const };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.setRole({ id: ROW_A.id, role: 'admin', updatedAt: UPDATED_AT });
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          select: 'id, full_name, email, role, is_active',
+          eq: [['id', ROW_A.id]],
+          order: [],
+          update: { role: 'admin', updated_at: UPDATED_AT.toISOString() },
+          maybeSingle: true,
+        },
+      ]);
+      expect(result).toEqual({ kind: 'ok', profile: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when no row matches the id — zero rows, not an error', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.setRole({ id: 'missing-id', role: 'employee', updatedAt: UPDATED_AT });
+      expect(result).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "blocked" } on the Z0011 SQLSTATE the last-active-admin trigger raises (US-024/AC-04, AC-07)', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: 'Z0011', message: 'BR-001.11: this change would leave the office with no active administrator' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.setRole({ id: ROW_A.id, role: 'employee', updatedAt: UPDATED_AT });
+      expect(result).toEqual({ kind: 'blocked' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws — never "blocked" — on the SAME message under the DEFAULT SQLSTATE: the match is on the code, not the prose', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: 'P0001', message: 'BR-001.11: this change would leave the office with no active administrator' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.setRole({ id: ROW_A.id, role: 'employee', updatedAt: UPDATED_AT }),
+      ).rejects.toThrow(/role change failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on any other repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.setRole({ id: ROW_A.id, role: 'employee', updatedAt: UPDATED_AT }),
+      ).rejects.toThrow(/role change failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});

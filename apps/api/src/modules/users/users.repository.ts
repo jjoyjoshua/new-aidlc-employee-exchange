@@ -137,7 +137,46 @@ export interface UsersRepository {
    * mapped to a refusal it is not — `updateDeskNumber`'s own precedent, unchanged.
    */
   updateProfileDetails(input: UpdateProfileDetailsInput): Promise<UpdateProfileDetailsOutcome>;
+  /**
+   * US-024/AC-01, AC-04, AC-07, AC-12. Names `role` and `updated_at` and NOTHING else — never
+   * `is_active`, never `deactivated_at` (US-025's), never `must_change_password` — the same
+   * discipline `updateProfileDetails` states for its own two columns.
+   *
+   * `.maybeSingle()`, never `.single()` — `updateProfileDetails`'s own reason: zero matched rows
+   * must answer `{ kind: 'not_found' }`, not a thrown Postgres error.
+   *
+   * The `blocked` outcome maps `error.code === 'Z0011'` ONLY (design note §3.1-§3.2, `ADR-013`)
+   * — the project-minted SQLSTATE `user_profiles_require_active_admin()` raises
+   * (`supabase/migrations/0004_last_active_admin_guard.sql`), never a message match. `Z0011` is
+   * raised by exactly one statement in the whole schema, unlike `23505` above (raised by every
+   * unique index), so no second discriminator is needed.
+   */
+  setRole(input: SetRoleInput): Promise<SetRoleOutcome>;
 }
+
+/** US-024. What `setRole` needs from the caller — `updatedAt` is the ONE clock reading the
+ *  service takes, threaded through exactly as `updateProfileDetails` requires (US-023's own
+ *  precedent for `nowMs()`). */
+export interface SetRoleInput {
+  id: string;
+  role: UserRole;
+  updatedAt: Date;
+}
+
+export type SetRoleOutcome =
+  | { kind: 'ok'; profile: ProfileDetailsRow }
+  /** US-024/AC-04, AC-07 (BR-001.11, V-11). The DATABASE refused it, inside the writing
+   *  transaction, serialised by the trigger's own advisory lock (`ADR-013`) — never an in-app
+   *  count taken earlier in the request. */
+  | { kind: 'blocked' }
+  | { kind: 'not_found' };
+
+/** The SQLSTATE `user_profiles_require_active_admin()` raises. A PROJECT-MINTED code in the
+ *  implementation-defined class `Z0`, raised by exactly ONE statement in the whole schema —
+ *  design note §3.1. Deliberately not exported: a database detail, not a wire contract. The wire
+ *  contract is `ERROR_CODES.last_active_admin` (`libs/contracts`), which the ROUTE composes from
+ *  `blocked`. */
+const LAST_ACTIVE_ADMIN_SQLSTATE = 'Z0011';
 
 export const usersRepository: UsersRepository = {
   async listAccounts(q) {
@@ -198,5 +237,18 @@ export const usersRepository: UsersRepository = {
     if (error.code !== '23505') throw new Error(`user update failed: ${error.message}`);
     if (error.message.includes('user_profiles_email_key')) return { kind: 'duplicate' };
     throw new Error(`unrecognised unique violation: ${error.message}`);
+  },
+
+  async setRole({ id, role, updatedAt }) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .update({ role, updated_at: updatedAt.toISOString() })
+      .eq('id', id)
+      .select('id, full_name, email, role, is_active')
+      .maybeSingle();
+
+    if (!error) return data ? { kind: 'ok', profile: data as ProfileDetailsRow } : { kind: 'not_found' };
+    if (error.code === LAST_ACTIVE_ADMIN_SQLSTATE) return { kind: 'blocked' };
+    throw new Error(`role change failed: ${error.message}`);
   },
 };

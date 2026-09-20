@@ -108,6 +108,12 @@ describe('ERROR_CODES', () => {
     expect(ERROR_CODES.desk_has_upcoming_bookings).not.toBe(ERROR_CODES.desk_inactive);
     expect(errorCodeSchema.parse('desk_has_upcoming_bookings')).toBe('desk_has_upcoming_bookings');
   });
+
+  it('carries last_active_admin, distinct from desk_has_upcoming_bookings (US-024/AC-04)', () => {
+    expect(ERROR_CODES.last_active_admin).toBe('last_active_admin');
+    expect(ERROR_CODES.last_active_admin).not.toBe(ERROR_CODES.desk_has_upcoming_bookings);
+    expect(errorCodeSchema.parse('last_active_admin')).toBe('last_active_admin');
+  });
 });
 
 describe('errorBodySchema.details (US-019/AC-04, ADR-009)', () => {

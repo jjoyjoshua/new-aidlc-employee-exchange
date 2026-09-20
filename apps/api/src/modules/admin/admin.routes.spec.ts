@@ -124,6 +124,9 @@ const noUsers: UsersRepository = {
   async updateProfileDetails() {
     throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
   },
+  async setRole() {
+    throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
+  },
 };
 
 const notUsedUsersAuth: UsersAuthAdapter = {
@@ -190,6 +193,9 @@ function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
     },
     async updateProfileDetails({ id, fullName, email }) {
       return { kind: 'ok', profile: { id, full_name: fullName, email, role: 'employee', is_active: true } };
+    },
+    async setRole({ id, role }) {
+      return { kind: 'ok', profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role, is_active: true } };
     },
     ...overrides,
   };
@@ -1206,6 +1212,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async updateProfileDetails() {
         throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
       },
+      async setRole() {
+        throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
+      },
     };
     const app = appWith({ users });
 
@@ -1252,6 +1261,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async updateProfileDetails() {
         throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
       },
+      async setRole() {
+        throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
+      },
     };
     const app = appWith({ users });
 
@@ -1281,6 +1293,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async updateProfileDetails() {
         throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
+      },
+      async setRole() {
+        throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
       },
     };
     const app = appWith({ users });
@@ -1336,6 +1351,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async updateProfileDetails() {
         throw new Error('updateProfileDetails not stubbed — this test does not exercise PATCH /users/:id');
+      },
+      async setRole() {
+        throw new Error('setRole not stubbed — this test does not exercise POST /users/:id/role');
       },
     };
     const app = appWith({ users });
@@ -1791,6 +1809,152 @@ describe('PATCH /api/admin/users/:id (US-023/AC-01, AC-02, AC-03, AC-04, AC-05, 
   it('refuses a request with no token at all', async () => {
     const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
     const response = await request(app).patch(`/api/admin/users/${USER_ID}`).send(VALID_BODY);
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/users/:id/role (US-024/AC-01, AC-04, AC-13)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  it('a valid body changes the role and returns 200 with the exact shape — toEqual, never toMatchObject (US-024/AC-01)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async setRole({ id, role }) {
+          return { kind: 'ok', profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role, is_active: true } };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'admin' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: USER_ID,
+      fullName: 'Dana Silva',
+      email: 'dana@company.com',
+      role: 'admin',
+      isActive: true,
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('the trigger\'s refusal maps to 422 last_active_admin, with no details payload (US-024/AC-04, AC-06, D-03)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async setRole() {
+          return { kind: 'blocked' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'employee' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('last_active_admin');
+    expect(response.body.details).toBeUndefined();
+  });
+
+  it('an id matching no account gets 404 user_not_found', async () => {
+    const app = appWith({
+      users: usersFor({
+        async setRole() {
+          return { kind: 'not_found' };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'employee' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('user_not_found');
+  });
+
+  it('an unknown role value is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ users: usersFor() });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'superadmin' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('an unknown field is refused at the edge (.strict()) — no force/override flag exists (US-024/AC-06)', async () => {
+    const app = appWith({ users: usersFor() });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'employee', force: true });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request', async () => {
+    const app = appWith({ users: usersFor() });
+
+    const response = await request(app)
+      .post('/api/admin/users/not-a-uuid/role')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'employee' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('the repository failing returns a bare 500', async () => {
+    const app = appWith({
+      users: usersFor({
+        async setRole() {
+          throw new Error('db unreachable');
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ role: 'employee' });
+
+    expect(response.status).toBe(500);
+  });
+
+  it('refuses an Employee session with 403 admin_only, through the REAL mount, and changes nothing (US-024/AC-13)', async () => {
+    const setRoleCalls: unknown[] = [];
+    const app = appWith({
+      users: usersFor({
+        async setRole(input) {
+          setRoleCalls.push(input);
+          return { kind: 'ok', profile: { id: input.id, full_name: 'Dana Silva', email: 'dana@company.com', role: input.role, is_active: true } };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/role`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`)
+      .send({ role: 'admin' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    expect(setRoleCalls).toEqual([]);
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor() });
+    const response = await request(app).post(`/api/admin/users/${USER_ID}/role`).send({ role: 'admin' });
     expect(response.status).toBe(401);
   });
 });

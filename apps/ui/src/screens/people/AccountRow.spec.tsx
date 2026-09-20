@@ -23,7 +23,7 @@ function renderTableRow(account: AdminUser, currentUserId = 'nobody') {
   return render(
     <table>
       <tbody>
-        <AccountRow account={account} layout="table" currentUserId={currentUserId} onEdit={vi.fn()} />
+        <AccountRow account={account} layout="table" currentUserId={currentUserId} onEdit={vi.fn()} onChangeRole={vi.fn()} />
       </tbody>
     </table>,
   );
@@ -32,7 +32,7 @@ function renderTableRow(account: AdminUser, currentUserId = 'nobody') {
 function renderCardRow(account: AdminUser, currentUserId = 'nobody') {
   return render(
     <ul>
-      <AccountRow account={account} layout="card" currentUserId={currentUserId} onEdit={vi.fn()} />
+      <AccountRow account={account} layout="card" currentUserId={currentUserId} onEdit={vi.fn()} onChangeRole={vi.fn()} />
     </ul>,
   );
 }

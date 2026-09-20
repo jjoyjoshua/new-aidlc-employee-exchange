@@ -6,6 +6,7 @@ import {
   adminUsersResponseSchema,
   createAccountRequestSchema,
   emailTakenDetailsSchema,
+  roleChangeRequestSchema,
   userIdParamsSchema,
   userUpdateSchema,
 } from './users.js';
@@ -217,6 +218,28 @@ describe('userIdParamsSchema (US-023)', () => {
     expect(
       userIdParamsSchema.safeParse({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', extra: 1 }).success,
     ).toBe(false);
+  });
+});
+
+describe('roleChangeRequestSchema (US-024/AC-01 — POST /api/admin/users/:id/role)', () => {
+  it('parses a well-formed body naming employee', () => {
+    expect(roleChangeRequestSchema.safeParse({ role: 'employee' }).success).toBe(true);
+  });
+
+  it('parses a well-formed body naming admin', () => {
+    expect(roleChangeRequestSchema.safeParse({ role: 'admin' }).success).toBe(true);
+  });
+
+  it('rejects an unknown role', () => {
+    expect(roleChangeRequestSchema.safeParse({ role: 'superadmin' }).success).toBe(false);
+  });
+
+  it('rejects a missing role', () => {
+    expect(roleChangeRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('rejects an unknown field (.strict()) — this contract carries role only, matching every other request schema in this package', () => {
+    expect(roleChangeRequestSchema.safeParse({ role: 'admin', fullName: 'Dana Silva' }).success).toBe(false);
   });
 });
 

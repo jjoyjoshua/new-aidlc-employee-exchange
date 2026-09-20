@@ -30,10 +30,12 @@ function Harness({
   account,
   onDismiss = vi.fn(),
   onEdit = vi.fn(),
+  onChangeRole = vi.fn(),
 }: {
   account: AdminUser;
   onDismiss?: () => void;
   onEdit?: (account: AdminUser) => void;
+  onChangeRole?: (account: AdminUser) => void;
 }) {
   const triggerRef = createRef<HTMLButtonElement>();
   return (
@@ -41,7 +43,7 @@ function Harness({
       <button type="button" ref={triggerRef}>
         {`Actions for ${account.fullName}`}
       </button>
-      <AccountRowMenu account={account} triggerRef={triggerRef} onDismiss={onDismiss} onEdit={onEdit} />
+      <AccountRowMenu account={account} triggerRef={triggerRef} onDismiss={onDismiss} onEdit={onEdit} onChangeRole={onChangeRole} />
     </div>
   );
 }
@@ -90,9 +92,9 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
   // `spec.md`'s Out of scope section and `decisions.md` D-03, not here — a bare `US-###` in this
   // file's source (title or comment) obliges that story's own manifest entry to list this file
   // (`aidlc-check`'s stale-manifest rule), which would be premature for a story that doesn't
-  // exist yet. `Edit` is no longer in this list — US-023 is the destination that landed.
+  // exist yet. `Edit` and the role item are no longer in this list — US-023 and US-024 are the
+  // destinations that landed.
   it.each([
-    ['Make an admin', 'the role-change action is built'],
     ['Reset password', 'password reset is built'],
     ['Deactivate', 'deactivate/activate is built'],
   ])(
@@ -139,6 +141,37 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
     expect(onEdit).toHaveBeenCalledWith(EMPLOYEE);
     expect(onDismiss).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Actions for Dana Silva' })).toHaveFocus();
+  });
+
+  it('the role item is a real, live item — no aria-disabled, no title reason (US-024)', () => {
+    render(<Harness account={EMPLOYEE} />);
+    const roleItem = screen.getByRole('menuitem', { name: 'Make an admin' });
+
+    expect(roleItem).not.toHaveAttribute('aria-disabled');
+    expect(roleItem).not.toHaveAttribute('title');
+    expect(roleItem).not.toBeDisabled();
+  });
+
+  it('clicking the role item calls onChangeRole with the account, dismisses the menu, and returns focus to the trigger (US-024)', async () => {
+    const onDismiss = vi.fn();
+    const onChangeRole = vi.fn();
+    render(<Harness account={EMPLOYEE} onDismiss={onDismiss} onChangeRole={onChangeRole} />);
+
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Make an admin' }));
+
+    expect(onChangeRole).toHaveBeenCalledWith(EMPLOYEE);
+    expect(onDismiss).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Actions for Dana Silva' })).toHaveFocus();
+  });
+
+  it('the role item reads "Make an employee" and is live for a DEACTIVATED admin (US-024/AC-12)', async () => {
+    const onChangeRole = vi.fn();
+    render(<Harness account={DEACTIVATED_ADMIN} onChangeRole={onChangeRole} />);
+    const roleItem = screen.getByRole('menuitem', { name: 'Make an employee' });
+    expect(roleItem).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(roleItem);
+    expect(onChangeRole).toHaveBeenCalledWith(DEACTIVATED_ADMIN);
   });
 });
 

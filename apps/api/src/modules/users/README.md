@@ -5,13 +5,13 @@
 **Owns (may write):** `user_profiles`. US-020 was this module's **first slice, and it was
 read-only** — `GET /api/admin/users`. `../README.md`'s ownership row already reserved this
 module's future scope in writing, before US-020 existed: "Account CRUD, role,
-activate/deactivate **and its cascade**, admin password reset, search." US-021 (create) and
-US-023 (edit, this section) fill in "CRUD" so far; US-024 (role change), US-025/US-026
-(deactivate/activate **and its cascade**), and US-027 (admin password reset) still add their own
-write routes to this same module, not to `bookings` or anywhere else. `../README.md`'s own rule is
-explicit: *"`users` owns the deactivation cascade, not `bookings`. BR-001.18 makes cancelling the
-leaver's desks part of deactivating the account — one act, one transaction, refusable as a
-whole."*
+activate/deactivate **and its cascade**, admin password reset, search." US-021 (create), US-023
+(edit) and US-024 (role change, this module's first write to `role`) fill in "CRUD" and "role" so
+far; US-025/US-026 (deactivate/activate **and its cascade**) and US-027 (admin password reset)
+still add their own write routes to this same module, not to `bookings` or anywhere else.
+`../README.md`'s own rule is explicit: *"`users` owns the deactivation cascade, not `bookings`.
+BR-001.18 makes cancelling the leaver's desks part of deactivating the account — one act, one
+transaction, refusable as a whole."*
 
 **`listAccounts(q?)` (US-020/AC-01, AC-04; REQ-032).** Selects `id, full_name, email, role,
 is_active` ordered `full_name` ASC, and — when `q` is present — applies a `.or()` filter built by
@@ -155,15 +155,77 @@ service never runs the duplicate check or either write at all when the normalise
 the stored one — the load-bearing guard. `excludeId` only protects a second time, if that guard is
 ever weakened.
 
+## `changeRole` (US-024/AC-01, AC-04, AC-07, AC-12 — this module's first write to `role`)
+
+**A single-system write, unlike `createAccount`/`updateAccount` above.** `changeRole` never calls
+Supabase Auth on any branch — `role` lives only in `user_profiles` — so `ADR-011`/`ADR-012`'s
+cross-system compensation shapes do not apply here at all. One `nowMs()` reading, threaded to
+`setRole`'s `updatedAt` exactly as `updateAccount` does its own clock reading.
+
+**BR-001.11 ("never zero active admins") is enforced entirely by a database trigger, not by this
+module.** `supabase/migrations/0004_last_active_admin_guard.sql` adds the schema's only trigger
+(`db-design.md` §3's own forecast) — a plain `AFTER UPDATE OF role, is_active … FOR EACH ROW`
+trigger, **not** the `CONSTRAINT TRIGGER … DEFERRABLE` shape that section originally named. The
+Architect's design note for this story (`inception/specs/US-024-change-a-persons-role/
+design-note.md` §2) found that the originally-described shape permits write skew — two admins
+demoting each other in the same instant can both pass and both commit, leaving zero active admins,
+exactly the case `db-design.md` §3 names as the threat and does not close. The fix, recorded in
+`ADR-013-whole-table-invariants-under-concurrency.md`, is a transaction-scoped advisory lock
+(`pg_advisory_xact_lock(1001011)`) taken as the trigger function's first statement, before it
+checks the invariant.
+
+**The trigger's `WHEN` clause is why AC-07 and AC-12 need no code in this module at all.** It fires
+only on `old.is_active and old.role = 'admin' and not (new.is_active and new.role = 'admin')` — a
+row that was already deactivated can never trip it (AC-12), and a deactivated admin is never
+counted by the guard's own `exists` either (AC-07, since REQ-005 already keeps a deactivated
+account from signing in). **`usersRepository.setRole` and `usersService.changeRole` add no
+application-side count, on any branch — the trigger is the sole arbiter, and a diff adding one is a
+review finding.**
+
+**The refusal is signalled by a project-minted SQLSTATE, `Z0011`**, matched by `setRole` on
+`error.code` alone — never a message match, unlike `updateProfileDetails`'s `23505` above, which
+needs the constraint name because `23505` is raised by every unique index in the schema. `Z0011` is
+raised by exactly one `raise` statement in the whole schema, so no second discriminator is needed.
+The route maps `blocked` to `422 last_active_admin` with **no `details` payload** — every fact the
+browser's approved copy needs (the account's own name) is already on the screen that sent the
+request (`decisions.md` D-03).
+
+**One residual, named rather than silently accepted.** `user_profiles.id references auth.users(id)
+on delete cascade` means deleting the last active admin's Auth user would empty the admin
+population without the trigger ever seeing it — the trigger has no `DELETE` branch. No product path
+deletes an account (`db-design.md` §4 is categorical, and `ADR-012` item 3 makes
+`auth.admin.deleteUser` a data-loss bug on any live account), so this is accepted, not fixed
+(design note §2.5, open item 4).
+
+**The proof that matters is a gated real-Postgres test, not the unit suite.** A recording fake can
+be *told* that Postgres raised `Z0011`; it cannot discover whether Postgres actually would have,
+and it certainly cannot reproduce two genuinely simultaneous transactions racing the same trigger.
+`apps/api/src/modules/admin/admin.concurrency.spec.ts`, gated on `RUN_BOOKINGS_CONCURRENCY_TEST=1`,
+has the five cases: the SQLSTATE assumption asserted directly against the raw rejected error, the
+AC-07/AC-12 shapes, a negative control, and — the one that actually proves the design — two
+`Promise.all`'d demotions of two real admin fixtures leaving exactly one active admin, never zero.
+That case fails against the trigger `db-design.md` §3 originally described and passes against this
+one.
+
+**The people list's own admin count is NOT BR-001.11's count, and this module has no reason to make
+them agree.** `tallySummary` above counts every `role = 'admin'` row regardless of `is_active`;
+BR-001.11 counts only `is_active and role = 'admin'`. An office can show "2 admins" while the
+trigger sees one, and a demotion the screen gave no way to anticipate is refused correctly. Do not
+"fix" this by filtering the summary to active admins only — AC-02/AC-06's own worked example
+(`"38 people · 36 employees, 2 admins · 1 deactivated"`) is the whole-table count, by design.
+
 ## The forward constraint
 
-US-024 (role change), US-025/US-026 (Deactivate/Activate and BR-001.18's cascade), and US-027
-(admin password reset) each add a route here, not to `bookings` or `desks`. US-025 and US-027 are
-each an UPDATE crossing the same Auth/profile seam US-023 just settled, and apply `ADR-012` by
-name rather than re-deriving its ordering and compensation shape; a future story whose write
-*creates* a row (none currently forecast) would instead apply `ADR-011`, unchanged. The row-menu
-items US-020 renders disabled become live one at a time as each of these stories lands — **Edit
-is the first, landed by US-023** (design note §6, `ADR-010-unbuilt-destination-controls.md`).
+US-025/US-026 (Deactivate/Activate and BR-001.18's cascade) and US-027 (admin password reset) each
+add a route here, not to `bookings` or `desks`. **US-025 and US-026 depend on the IDENTICAL trigger
+US-024 just added and must not add a second one** — their `is_active` flips are already in that
+trigger's `UPDATE OF role, is_active` event list and `WHEN` clause, confirmed by `ADR-013`'s own
+Decision item 4. US-025 and US-027 are each also an UPDATE crossing the same Auth/profile seam
+US-023 settled, and apply `ADR-012` by name rather than re-deriving its ordering and compensation
+shape; a future story whose write *creates* a row (none currently forecast) would instead apply
+`ADR-011`, unchanged. The row-menu items US-020 renders disabled become live one at a time as each
+of these stories lands — **Edit landed first (US-023), the role item second (US-024)**
+(design note §6, `ADR-010-unbuilt-destination-controls.md`).
 
 See `../README.md` for the module boundary this file must respect (`users` may import
 `notifications`; nothing else).

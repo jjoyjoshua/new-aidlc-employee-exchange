@@ -5,9 +5,18 @@
  * requires the edit path's save-guarding to match create's, and that is true because it is the
  * SAME `inFlight` ref, not because two files happen to agree today — this hook's own earlier
  * docblock predicted exactly this change.
+ *
+ * US-024 adds the edit path's role handling (D-01): when the role radio differs from the loaded
+ * account's own role, `submit()` calls `changeRole` FIRST, and only proceeds to `updateAccount`
+ * for the name/email fields once that succeeds or the role was never touched. A `blocked` role
+ * change never reaches `updateAccount` at all — nothing has been saved, matching ST-05's copy.
+ * D-04 (accepted 2026-09-20, tracked as issue #57): if the role change succeeds and the
+ * following `updateAccount` then fails, the account keeps its NEW role and OLD name/email; ST-08's
+ * "Nothing has changed" is shown anyway, since no approved copy exists for that partial state yet.
  */
 import { useCallback, useRef, useState } from 'react';
-import type { AdminUser } from '@desk-booking/contracts';
+import type { AdminUser, UserRole } from '@desk-booking/contracts';
+import type { ChangeRoleFetcher } from '../../lib/change-role.js';
 import type { CreateAccountFetcher } from '../../lib/create-account.js';
 import type { UpdateAccountFetcher } from '../../lib/update-account.js';
 
@@ -17,7 +26,9 @@ export interface UserFormDialogState {
    *  "subject plus busy plus outcome" shape, applied here because create has no subject). */
   account?: AdminUser;
   busy: boolean;
-  outcome?: 'duplicate' | 'failed';
+  /** US-024/AC-04 adds `lastAdmin` — SCR-009 ST-05, the same refusal SCR-008 ST-09 renders as a
+   *  dialog, shown here in-form instead (D-03's shared sentence-builder, one rule two doors). */
+  outcome?: 'duplicate' | 'failed' | 'lastAdmin';
   /** Present iff `outcome === 'duplicate'` (US-021/AC-06, US-023/AC-02, ST-04). */
   duplicateFullName?: string;
   duplicateIsActive?: boolean;
@@ -26,13 +37,17 @@ export interface UserFormDialogState {
 export interface CreateAccountFields {
   fullName: string;
   email: string;
-  role: 'employee' | 'admin';
+  role: UserRole;
   password: string;
 }
 
 export interface UpdateAccountFields {
   fullName: string;
   email: string;
+  /** US-024. Always present — the edit form's radios are live now, not `aria-disabled`. Compared
+   *  against `dialog.account.role` inside `submit()`; `updateAccount` itself never receives this
+   *  field (`userUpdateSchema` carries none, US-023/AC-07). */
+  role: UserRole;
 }
 
 export interface UseUserFormDialogResult {
@@ -48,7 +63,12 @@ export interface UseUserFormDialogResult {
  *  unchanged from the dialog being submitted (`use-desk-form-dialog.ts`'s `withOutcome`). */
 function withOutcome(
   dialog: UserFormDialogState,
-  patch: { busy: boolean; outcome?: 'duplicate' | 'failed'; duplicateFullName?: string; duplicateIsActive?: boolean },
+  patch: {
+    busy: boolean;
+    outcome?: 'duplicate' | 'failed' | 'lastAdmin';
+    duplicateFullName?: string;
+    duplicateIsActive?: boolean;
+  },
 ): UserFormDialogState {
   if (dialog.mode === 'edit') return { mode: 'edit', account: dialog.account!, ...patch };
   return { mode: 'create', ...patch };
@@ -57,6 +77,7 @@ function withOutcome(
 export function useUserFormDialog(
   createAccount: CreateAccountFetcher,
   updateAccount: UpdateAccountFetcher,
+  changeRole: ChangeRoleFetcher,
   onCreated: (account: AdminUser) => void,
   onUpdated: (account: AdminUser) => void,
 ): UseUserFormDialogResult {
@@ -102,28 +123,55 @@ export function useUserFormDialog(
       }
 
       const subject = dialog.account!;
-      void updateAccount(subject.id, fields as UpdateAccountFields).then((outcome) => {
-        inFlight.current = false;
-        if (outcome.kind === 'ok') {
-          onUpdated(outcome.account);
-          setDialog(undefined);
+      const { role, ...details } = fields as UpdateAccountFields;
+
+      const submitDetails = () => {
+        void updateAccount(subject.id, details).then((outcome) => {
+          inFlight.current = false;
+          if (outcome.kind === 'ok') {
+            onUpdated(outcome.account);
+            setDialog(undefined);
+            return;
+          }
+          if (outcome.kind === 'duplicate') {
+            setDialog(
+              withOutcome(dialog, {
+                busy: false,
+                outcome: 'duplicate',
+                duplicateFullName: outcome.fullName,
+                duplicateIsActive: outcome.isActive,
+              }),
+            );
+            return;
+          }
+          setDialog(withOutcome(dialog, { busy: false, outcome: 'failed' }));
+        });
+      };
+
+      // D-01's load-bearing guard: no `changeRole` call at all when the role is unchanged —
+      // the ONLY path this hook had before US-024, byte for byte.
+      if (role === subject.role) {
+        submitDetails();
+        return;
+      }
+
+      void changeRole(subject.id, role).then((roleOutcome) => {
+        if (roleOutcome.kind === 'blocked') {
+          inFlight.current = false;
+          setDialog(withOutcome(dialog, { busy: false, outcome: 'lastAdmin' }));
           return;
         }
-        if (outcome.kind === 'duplicate') {
-          setDialog(
-            withOutcome(dialog, {
-              busy: false,
-              outcome: 'duplicate',
-              duplicateFullName: outcome.fullName,
-              duplicateIsActive: outcome.isActive,
-            }),
-          );
+        if (roleOutcome.kind === 'failed') {
+          inFlight.current = false;
+          setDialog(withOutcome(dialog, { busy: false, outcome: 'failed' }));
           return;
         }
-        setDialog(withOutcome(dialog, { busy: false, outcome: 'failed' }));
+        // ok — the role write landed. `inFlight` stays true and the dialog stays busy: this is
+        // one continuous submission from the administrator's own point of view, not two.
+        submitDetails();
       });
     },
-    [dialog, createAccount, updateAccount, onCreated, onUpdated],
+    [dialog, createAccount, updateAccount, changeRole, onCreated, onUpdated],
   );
 
   const dismiss = useCallback(() => {

@@ -267,16 +267,16 @@ describe('UserFormDialog — ST-02 edit default (US-023/AC-01)', () => {
     expect(screen.getByRole('dialog', { name: 'Edit person — Dana Silva' })).toBeInTheDocument();
   });
 
-  it('the role radios show the current role, ARIA-disabled — never the native attribute (ADR-010, design note §4.3)', () => {
+  it('the role radios show the current role and are LIVE — no aria-disabled, US-024 is this control\'s destination', () => {
     render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
 
     const employeeRadio = screen.getByRole('radio', { name: /Employee/ });
     expect(employeeRadio).toBeChecked();
     expect(employeeRadio).not.toBeDisabled();
-    expect(employeeRadio).toHaveAttribute('aria-disabled', 'true');
+    expect(employeeRadio).not.toHaveAttribute('aria-disabled');
   });
 
-  it('calls onSubmit with only fullName/email — no role, no password (US-023/AC-01, AC-07)', async () => {
+  it('calls onSubmit with fullName/email AND the current role — no password (US-023/AC-01, AC-07; US-024/AC-01)', async () => {
     const onSubmit = vi.fn();
     render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={onSubmit} onDismiss={vi.fn()} />);
 
@@ -286,7 +286,17 @@ describe('UserFormDialog — ST-02 edit default (US-023/AC-01)', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'dana.okafor@company.com');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(onSubmit).toHaveBeenCalledWith({ fullName: 'Dana Okafor', email: 'dana.okafor@company.com' });
+    expect(onSubmit).toHaveBeenCalledWith({ fullName: 'Dana Okafor', email: 'dana.okafor@company.com', role: 'employee' });
+  });
+
+  it('selecting a different role radio and saving submits the NEW role (US-024/AC-01)', async () => {
+    const onSubmit = vi.fn();
+    render(<UserFormDialog dialog={EDIT_OPEN} onSubmit={onSubmit} onDismiss={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole('radio', { name: /Admin/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin' });
   });
 
   it('refuses an empty full name and an implausible email, in the browser, with no request sent (US-023/AC-04)', async () => {
@@ -318,6 +328,57 @@ describe('UserFormDialog — ST-04 duplicate email in edit mode (US-023/AC-02)',
 
     expect(screen.getByText('already belongs to Existing Holder.')).toBeInTheDocument();
     expect(screen.getByText('Already in use.')).toBeInTheDocument();
+  });
+});
+
+describe('UserFormDialog — ST-05 role change would remove the last admin (US-024/AC-04, AC-06, AC-08)', () => {
+  const ADMIN_ACCOUNT: AdminUser = { ...EXISTING_ACCOUNT, fullName: 'Marcus Vale', role: 'admin' };
+  const LAST_ADMIN_DIALOG: UserFormDialogState = {
+    mode: 'edit',
+    account: ADMIN_ACCOUNT,
+    busy: false,
+    outcome: 'lastAdmin',
+  };
+
+  it('renders the refusal directly above the role radios, naming the account and the consequence (D-03, shared with SCR-008 ST-09)', () => {
+    render(<UserFormDialog dialog={LAST_ADMIN_DIALOG} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByText('Marcus Vale is the only active admin.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Making this account an employee would leave nobody able to manage the system. Make someone else an admin first.'),
+    ).toBeInTheDocument();
+  });
+
+  it('the role radio reverts to the stored (Admin) role — the attempted Employee selection is undone', () => {
+    render(<UserFormDialog dialog={LAST_ADMIN_DIALOG} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByRole('radio', { name: /Admin/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Employee/ })).not.toBeChecked();
+  });
+
+  it('other edits (name/email) are preserved and still saveable — a rejected role change does not hold the rest of the form hostage (US-024/AC-08)', async () => {
+    const onSubmit = vi.fn();
+    const { rerender } = render(
+      <UserFormDialog dialog={{ mode: 'edit', account: ADMIN_ACCOUNT, busy: false }} onSubmit={onSubmit} onDismiss={vi.fn()} />,
+    );
+
+    await userEvent.clear(screen.getByLabelText('Full name'));
+    await userEvent.type(screen.getByLabelText('Full name'), 'Marcus Webb');
+    await userEvent.click(screen.getByRole('radio', { name: /Employee/ }));
+
+    rerender(<UserFormDialog dialog={LAST_ADMIN_DIALOG} onSubmit={onSubmit} onDismiss={vi.fn()} />);
+
+    expect(screen.getByLabelText('Full name')).toHaveValue('Marcus Webb');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ fullName: 'Marcus Webb', email: 'dana@company.com', role: 'admin' });
+  });
+
+  it('no override control exists on this refusal (US-024/AC-06)', () => {
+    render(<UserFormDialog dialog={LAST_ADMIN_DIALOG} onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /understand the risk/i })).not.toBeInTheDocument();
   });
 });
 
