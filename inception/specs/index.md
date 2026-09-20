@@ -27,6 +27,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-021 | Create a user account | Complex | implemented | [`US-021-create-a-user-account/`](US-021-create-a-user-account/) |
 | US-022 | Suggest an initial password | Medium | implemented | [`US-022-suggest-an-initial-password/`](US-022-suggest-an-initial-password/) |
 | US-023 | Correct a person's name or email | Complex | implemented | [`US-023-correct-a-persons-details/`](US-023-correct-a-persons-details/) |
+| US-024 | Change a person's role | Complex | implemented | [`US-024-change-a-persons-role/`](US-024-change-a-persons-role/) |
 
 ## How to update
 

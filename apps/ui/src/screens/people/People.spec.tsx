@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { People } from './People.js';
 import { AuthProvider, useAuth, type AuthContextValue } from '../../lib/auth/auth-context.js';
 import { RequireRole } from '../../lib/auth/require-role.js';
@@ -12,6 +12,7 @@ import type { UsersOutcome } from '../../lib/use-users.js';
 import type { FetchUsers } from '../../lib/fetch-users.js';
 import type { CreateAccountFetcher, CreateAccountOutcome } from '../../lib/create-account.js';
 import type { UpdateAccountFetcher, UpdateAccountOutcome } from '../../lib/update-account.js';
+import type { ChangeRoleFetcher } from '../../lib/change-role.js';
 import { PAGE_TITLE } from './copy.js';
 
 const ADMIN: AuthenticatedUser = {
@@ -34,12 +35,14 @@ function SignedIn({
   fetchUsers,
   createAccount,
   updateAccount,
+  changeRole,
   user = ADMIN,
   guarded = false,
 }: {
   fetchUsers: FetchUsers;
   createAccount?: CreateAccountFetcher;
   updateAccount?: UpdateAccountFetcher;
+  changeRole?: ChangeRoleFetcher;
   user?: AuthenticatedUser;
   guarded?: boolean;
 }) {
@@ -51,7 +54,7 @@ function SignedIn({
     requestNoContent: (async () => ({ kind: 'ok', data: undefined })) as ApiClient['requestNoContent'],
   };
 
-  const screenEl = <People fetchUsers={fetchUsers} createAccount={createAccount} updateAccount={updateAccount} />;
+  const screenEl = <People fetchUsers={fetchUsers} createAccount={createAccount} updateAccount={updateAccount} changeRole={changeRole} />;
 
   return (
     <MemoryRouter initialEntries={['/admin/people']}>
@@ -405,5 +408,108 @@ describe('People — edit an account (US-023/AC-01, AC-09, design note §4.2)', 
 
     expect(await screen.findByText('already belongs to Existing Holder.')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+// The table AND card trees both render in jsdom — `openEditFor`'s own reasoning.
+async function openRoleChangeFor(fullName: string) {
+  await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${fullName}` })[0]!);
+  await userEvent.click(await screen.findByRole('menuitem', { name: /^Make an/ }));
+}
+
+describe('People — change a role, row menu route (US-024/AC-01, AC-02, AC-04, AC-05, AC-11)', () => {
+  it('opening the role item renders the confirmation, named for the direction (US-024/AC-02)', async () => {
+    render(<SignedIn fetchUsers={async () => okUsers([DANA])} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openRoleChangeFor('Dana Silva');
+
+    expect(await screen.findByRole('alertdialog', { name: 'Make Dana Silva an admin?' })).toBeInTheDocument();
+  });
+
+  it('a successful change closes the dialog, updates the row and the admin count, shows the toast, and returns focus to the row trigger (US-024/AC-01, AC-11)', async () => {
+    let fetchCalls = 0;
+    const fetchUsers: FetchUsers = async () => {
+      fetchCalls += 1;
+      return okUsers([DANA, MARCUS], SUMMARY);
+    };
+    const changeRole: ChangeRoleFetcher = async () => ({ kind: 'ok', account: { ...DANA, role: 'admin' } });
+    render(<SignedIn fetchUsers={fetchUsers} changeRole={changeRole} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openRoleChangeFor('Dana Silva');
+    await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+    expect(await screen.findByText('Dana Silva is now an admin.')).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByText('38 people · 35 employees, 3 admins · 1 deactivated')).toBeInTheDocument();
+    expect(fetchCalls).toBe(1);
+    expect(screen.getAllByRole('button', { name: 'Actions for Dana Silva' })[0]).toHaveFocus();
+  });
+
+  it('a blocked change shows the refusal naming the account, and Make someone an admin dismisses it and focuses the search field (US-024/AC-04, AC-05, AC-06)', async () => {
+    const changeRole: ChangeRoleFetcher = async () => ({ kind: 'blocked' });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, MARCUS])} changeRole={changeRole} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openRoleChangeFor('Marcus Vale');
+    await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+    expect(await screen.findByRole('alertdialog', { name: 'Marcus Vale is the only active admin.' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change role' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Make someone an admin' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Search name or email')).toHaveFocus();
+  });
+
+  it('demoting the SIGNED-IN administrator\'s own account patches the session immediately — RequireRole redirects without a reload (US-024/AC-03, edge case)', async () => {
+    const changeRole: ChangeRoleFetcher = async () => ({ kind: 'ok', account: { ...MARCUS, role: 'employee' } });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, MARCUS])} changeRole={changeRole} user={ADMIN} guarded />);
+    // `findByText(/Marcus Vale/)`, not the exact string — this row is the signed-in admin's own,
+    // so `AccountRow`'s "(you)" suffix makes the text node "Marcus Vale (you)" (design note §7.3).
+    await screen.findAllByText(/Marcus Vale/);
+
+    await openRoleChangeFor('Marcus Vale');
+    await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+    expect(await screen.findByText('My bookings')).toBeInTheDocument();
+  });
+});
+
+describe('People — change a role, edit-form route (US-024/AC-01, AC-08, AC-11)', () => {
+  it('changing the role radio and saving moves the admin count too — markRoleChanged, not markUpdated (US-024/AC-11, one rule two doors)', async () => {
+    // The role write already landed by the time this PATCH response is built (D-01's ordering),
+    // so — as the real `updateProfileDetails` SELECT would — it reflects the NEW role too.
+    const updateAccount: UpdateAccountFetcher = async () => ({ kind: 'ok', account: { ...DANA, fullName: 'Dana Okafor', role: 'admin' } });
+    const changeRole: ChangeRoleFetcher = async () => ({ kind: 'ok', account: { ...DANA, role: 'admin' } });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, MARCUS], SUMMARY)} updateAccount={updateAccount} changeRole={changeRole} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openEditFor('Dana Silva');
+    const dialog = screen.getByRole('dialog', { name: 'Edit person — Dana Silva' });
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Admin/ }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Dana Okafor updated.')).toBeInTheDocument();
+    expect(screen.getByText('38 people · 35 employees, 3 admins · 1 deactivated')).toBeInTheDocument();
+  });
+
+  it('a blocked role change from the edit form shows the in-form refusal, and Cancel leaves the row untouched (US-024/AC-04, AC-08)', async () => {
+    const updateAccount = vi.fn();
+    const changeRole: ChangeRoleFetcher = async () => ({ kind: 'blocked' });
+    render(<SignedIn fetchUsers={async () => okUsers([DANA, MARCUS])} updateAccount={updateAccount} changeRole={changeRole} />);
+    await screen.findAllByText('Dana Silva');
+
+    await openEditFor('Marcus Vale');
+    // MARCUS shares the signed-in ADMIN's id in these fixtures — self-edit appends "(you)"
+    // (`editPersonTitle`, design note §7.3).
+    const dialog = screen.getByRole('dialog', { name: 'Edit person — Marcus Vale (you)' });
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Employee/ }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(await within(dialog).findByText('Marcus Vale is the only active admin.')).toBeInTheDocument();
+    expect(updateAccount).not.toHaveBeenCalled();
   });
 });

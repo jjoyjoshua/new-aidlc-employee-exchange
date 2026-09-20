@@ -74,6 +74,13 @@ export const errorCodeSchema = z.enum([
   // (`api-standards.md`'s 409/422 split, which uses THIS refusal as its own worked example).
   // Distinct from `desk_inactive`, which is the mirror rule on the BOOKING path.
   'desk_has_upcoming_bookings',
+  // US-024/AC-04, AC-07 — BR-001.11. `POST /api/admin/users/:id/role` (or a future US-025
+  // deactivation) would leave zero accounts with `is_active = true and role = 'admin'`. The
+  // database's own trigger is the sole arbiter — a plain `AFTER UPDATE` trigger serialised by a
+  // transaction-scoped advisory lock, not the `CONSTRAINT TRIGGER` `db-design.md` §3 originally
+  // named (write skew; `ADR-013`, migration `0004_last_active_admin_guard.sql`) — this code
+  // names ITS rejection, mapped by the repository, never a count taken earlier in the request.
+  'last_active_admin',
   // US-023 — a well-formed `PATCH /api/admin/users/:id` naming an account that no longer exists.
   // `desk_not_found`'s own reasoning (US-018 §3.5): a request naming a missing resource must
   // answer something, and a 500 is the wrong shape. No existence-oracle concern — an admin can

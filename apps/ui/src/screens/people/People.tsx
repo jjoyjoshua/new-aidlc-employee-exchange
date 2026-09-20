@@ -33,6 +33,7 @@ import { TextField } from '../../components/text-field/TextField.js';
 import { Toast } from '../../components/toast/Toast.js';
 import { useAuth } from '../../lib/auth/auth-context.js';
 import type { ApiClient } from '../../lib/api-client.js';
+import { createChangeRole, type ChangeRoleFetcher } from '../../lib/change-role.js';
 import { createCreateAccount, type CreateAccountFetcher } from '../../lib/create-account.js';
 import { createFetchUsers, type FetchUsers } from '../../lib/fetch-users.js';
 import { createUpdateAccount, type UpdateAccountFetcher } from '../../lib/update-account.js';
@@ -49,10 +50,13 @@ import {
   matchLine,
   noMatchMessage,
   PAGE_TITLE,
+  roleChangedToast,
   SEARCH_LABEL,
   summaryLine,
   TRY_AGAIN_LABEL,
 } from './copy.js';
+import { RoleChangeDialog } from './RoleChangeDialog.js';
+import { useRoleChangeDialog } from './use-role-change-dialog.js';
 import { UserFormDialog } from './UserFormDialog.js';
 import { useUserFormDialog } from './use-user-form-dialog.js';
 import './people.css';
@@ -70,10 +74,12 @@ export interface PeopleProps {
   createAccount?: CreateAccountFetcher | undefined;
   /** Test seam for `PATCH /api/admin/users/:id` (US-023). Defaults to the real call. */
   updateAccount?: UpdateAccountFetcher | undefined;
+  /** Test seam for `POST /api/admin/users/:id/role` (US-024). Defaults to the real call. */
+  changeRole?: ChangeRoleFetcher | undefined;
 }
 
-export function People({ fetchUsers, createAccount, updateAccount }: PeopleProps) {
-  const { api, user } = useAuth();
+export function People({ fetchUsers, createAccount, updateAccount, changeRole }: PeopleProps) {
+  const { api, user, updateOwnRole } = useAuth();
 
   // Behind RequireSession, `user` is always present by the time this screen renders — the same
   // reasoning every other admin screen states for its own guarded fields.
@@ -83,9 +89,11 @@ export function People({ fetchUsers, createAccount, updateAccount }: PeopleProps
     <PeopleContent
       api={api}
       currentUserId={user.id}
+      updateOwnRole={updateOwnRole}
       fetchUsers={fetchUsers}
       createAccount={createAccount}
       updateAccount={updateAccount}
+      changeRole={changeRole}
     />
   );
 }
@@ -93,19 +101,24 @@ export function People({ fetchUsers, createAccount, updateAccount }: PeopleProps
 function PeopleContent({
   api,
   currentUserId,
+  updateOwnRole,
   fetchUsers,
   createAccount,
   updateAccount,
+  changeRole,
 }: {
   api: ApiClient;
   currentUserId: string;
+  updateOwnRole: (role: AdminUser['role']) => void;
   fetchUsers: FetchUsers | undefined;
   createAccount: CreateAccountFetcher | undefined;
   updateAccount: UpdateAccountFetcher | undefined;
+  changeRole: ChangeRoleFetcher | undefined;
 }) {
   const resolvedFetch = useMemo(() => fetchUsers ?? createFetchUsers(api), [fetchUsers, api]);
   const resolvedCreateAccount = useMemo(() => createAccount ?? createCreateAccount(api), [createAccount, api]);
   const resolvedUpdateAccount = useMemo(() => updateAccount ?? createUpdateAccount(api), [updateAccount, api]);
+  const resolvedChangeRole = useMemo(() => changeRole ?? createChangeRole(api), [changeRole, api]);
 
   const [typed, setTyped] = useState('');
   const [committedQ, setCommittedQ] = useState<string | undefined>(undefined);
@@ -133,14 +146,32 @@ function PeopleContent({
   );
   // US-023/AC-01 (ST-07) — unlike `markAdded`, `markUpdated` replaces IN PLACE regardless of an
   // active search (`use-users.ts`'s own module docblock states why the two diverge here).
+  //
+  // US-024/AC-01, AC-11: the edit form's role radios can ALSO change the role now (D-01's
+  // role-then-details order), and when they do, the summary's admin count must move exactly as
+  // it does on the row-menu route — `markRoleChanged`, not `markUpdated`, which is why the
+  // decision is made HERE, against the row this hook already holds, rather than threaded through
+  // `useUserFormDialog`'s own callback shape. ST-07's toast wording is unchanged either way — "the
+  // admin count updating is the confirmation that matters," not a different sentence.
   const handleUpdated = useCallback(
     (account: AdminUser) => {
-      if (users.status === 'ready') users.markUpdated(account);
+      if (users.status === 'ready') {
+        const previousRole = users.users.find((row) => row.id === account.id)?.role;
+        if (previousRole !== undefined && previousRole !== account.role) users.markRoleChanged(account);
+        else users.markUpdated(account);
+      }
       setSavedMessage(accountUpdatedToast(account.fullName));
+      if (account.id === currentUserId) updateOwnRole(account.role);
     },
-    [users],
+    [users, currentUserId, updateOwnRole],
   );
-  const userFormDialog = useUserFormDialog(resolvedCreateAccount, resolvedUpdateAccount, handleCreated, handleUpdated);
+  const userFormDialog = useUserFormDialog(
+    resolvedCreateAccount,
+    resolvedUpdateAccount,
+    resolvedChangeRole,
+    handleCreated,
+    handleUpdated,
+  );
 
   // A9/§7.4: latches true on the first successful load and never resets — see the module
   // docblock for why this must not simply track `status === 'loading'`.
@@ -183,6 +214,22 @@ function PeopleContent({
     fieldRef.current?.focus();
   }, []);
 
+  // US-024/AC-01, AC-03, AC-11 (design note §4.1). `markRoleChanged`, NOT `markUpdated`: a role
+  // change moves the summary's admin count, which `markUpdated` deliberately never does. When the
+  // changed account is the ACTING administrator's own, `updateOwnRole` patches the local session
+  // immediately (edge case — self-demotion loses the admin screens without a reload).
+  const handleRoleChanged = useCallback(
+    (account: AdminUser) => {
+      if (users.status === 'ready') users.markRoleChanged(account);
+      setSavedMessage(roleChangedToast(account.fullName, account.role));
+      if (account.id === currentUserId) updateOwnRole(account.role);
+    },
+    [users, currentUserId, updateOwnRole],
+  );
+  // ST-09's primary action (US-024/AC-05) — reuses `handleClear`'s own focus-the-field device,
+  // clearing any stale term too: the administrator is about to type a NEW name to promote.
+  const roleChangeDialog = useRoleChangeDialog(resolvedChangeRole, handleRoleChanged, handleClear);
+
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
@@ -197,6 +244,15 @@ function PeopleContent({
           onSubmit={userFormDialog.submit}
           onDismiss={userFormDialog.dismiss}
           currentUserId={currentUserId}
+        />
+      ) : null}
+
+      {roleChangeDialog.dialog ? (
+        <RoleChangeDialog
+          dialog={roleChangeDialog.dialog}
+          onConfirm={roleChangeDialog.confirm}
+          onDismiss={roleChangeDialog.dismiss}
+          onRouteToPromote={roleChangeDialog.routeToPromote}
         />
       ) : null}
 
@@ -274,6 +330,7 @@ function PeopleContent({
           onClearSearch={handleClear}
           onAddPerson={userFormDialog.openAdd}
           onEdit={userFormDialog.openEdit}
+          onChangeRole={roleChangeDialog.open}
         />
       ) : null}
     </>
@@ -287,6 +344,7 @@ function PeopleReady({
   onClearSearch,
   onAddPerson,
   onEdit,
+  onChangeRole,
 }: {
   users: AdminUser[];
   committedQ: string | undefined;
@@ -294,6 +352,7 @@ function PeopleReady({
   onClearSearch: () => void;
   onAddPerson: () => void;
   onEdit: (account: AdminUser) => void;
+  onChangeRole: (account: AdminUser) => void;
 }) {
   if (users.length === 0) {
     // AC-08: this is the ONLY empty branch this screen ever reaches — the signed-in
@@ -323,14 +382,28 @@ function PeopleReady({
           <AccountsTableHead />
           <tbody>
             {users.map((account) => (
-              <AccountRow key={account.id} account={account} layout="table" currentUserId={currentUserId} onEdit={onEdit} />
+              <AccountRow
+                key={account.id}
+                account={account}
+                layout="table"
+                currentUserId={currentUserId}
+                onEdit={onEdit}
+                onChangeRole={onChangeRole}
+              />
             ))}
           </tbody>
         </table>
       </div>
       <ul className="people-cards">
         {users.map((account) => (
-          <AccountRow key={account.id} account={account} layout="card" currentUserId={currentUserId} onEdit={onEdit} />
+          <AccountRow
+            key={account.id}
+            account={account}
+            layout="card"
+            currentUserId={currentUserId}
+            onEdit={onEdit}
+            onChangeRole={onChangeRole}
+          />
         ))}
       </ul>
     </>

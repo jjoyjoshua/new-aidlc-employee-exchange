@@ -50,6 +50,9 @@ function stubRepository({ accountsByQuery, summaryRows }: StubOptions): {
       async updateProfileDetails() {
         throw new Error('updateProfileDetails not stubbed — this suite does not exercise updateAccount');
       },
+      async setRole() {
+        throw new Error('setRole not stubbed — this suite does not exercise changeRole');
+      },
     },
   };
 }
@@ -252,6 +255,9 @@ function stubForCreate({
     },
     async updateProfileDetails() {
       throw new Error('updateProfileDetails not stubbed — this suite does not exercise updateAccount');
+    },
+    async setRole() {
+      throw new Error('setRole not stubbed — this suite does not exercise changeRole');
     },
   };
 
@@ -463,6 +469,9 @@ function stubForUpdate({
     async updateProfileDetails(input) {
       updateProfileDetailsCalls.push(input);
       return (updateProfileDetailsImpl ?? echoImpl)(input);
+    },
+    async setRole() {
+      throw new Error('not exercised by updateAccount tests');
     },
   };
 
@@ -713,5 +722,107 @@ describe('createUsersService.updateAccount — the happy path (US-023/AC-01, AC-
       },
     });
     expect(updateEmailCalls).toEqual([{ userId: UPDATE_INPUT.id, email: 'dana.okafor@company.com' }]);
+  });
+});
+
+/**
+ * US-024/AC-01, AC-02(server half), AC-04, AC-07, AC-12 (design note §2.4, §3.2, §3.4).
+ *
+ * No in-app admin count anywhere in this service method, on any branch — the trigger
+ * (`0004_last_active_admin_guard.sql`) is the SOLE arbiter of BR-001.11 (design note §5, §2.4).
+ * AC-07 ("a deactivated admin does not count") is proven by the repository returning `blocked`
+ * from a `setRole` call the SAME as any other — this suite never seeds a second admin row or
+ * counts anything, because there is nothing here TO count.
+ */
+function stubForRoleChange(setRoleImpl?: (input: { id: string; role: 'employee' | 'admin'; updatedAt: Date }) => Promise<
+  { kind: 'ok'; profile: ProfileDetailsRow } | { kind: 'blocked' } | { kind: 'not_found' }
+>) {
+  const setRoleCalls: Array<{ id: string; role: 'employee' | 'admin'; updatedAt: Date }> = [];
+  const echoImpl = async (input: { id: string; role: 'employee' | 'admin'; updatedAt: Date }) => ({
+    kind: 'ok' as const,
+    profile: { ...currentRow(), id: input.id, role: input.role },
+  });
+
+  const repository: UsersRepository = {
+    async listAccounts() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async findByEmail() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async insertProfile() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async findById() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async updateProfileDetails() {
+      throw new Error('not exercised by changeRole tests');
+    },
+    async setRole(input) {
+      setRoleCalls.push(input);
+      return (setRoleImpl ?? echoImpl)(input);
+    },
+  };
+
+  return { repository, setRoleCalls };
+}
+
+describe('createUsersService.changeRole (US-024/AC-01, AC-04, AC-07, AC-12)', () => {
+  it('threads ONE nowMs() reading to the repository as updatedAt — the same discipline updateAccount uses (US-024/AC-01)', async () => {
+    const { repository, setRoleCalls } = stubForRoleChange();
+
+    const outcome = await service(repository).changeRole(UPDATE_INPUT.id, 'admin');
+
+    expect(setRoleCalls).toEqual([{ id: UPDATE_INPUT.id, role: 'admin', updatedAt: new Date(NOW_MS) }]);
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin', isActive: true },
+    });
+  });
+
+  it('returns not_found when the repository reports zero matched rows', async () => {
+    const { repository } = stubForRoleChange(async () => ({ kind: 'not_found' }));
+
+    const outcome = await service(repository).changeRole('missing-id', 'employee');
+
+    expect(outcome).toEqual({ kind: 'not_found' });
+  });
+
+  it('returns blocked when the trigger refuses it — the only active admin (US-024/AC-04)', async () => {
+    const { repository } = stubForRoleChange(async () => ({ kind: 'blocked' }));
+
+    const outcome = await service(repository).changeRole(UPDATE_INPUT.id, 'employee');
+
+    expect(outcome).toEqual({ kind: 'blocked' });
+  });
+
+  it('returns blocked identically for a deactivated-admin fixture — no service-side count distinguishes it (US-024/AC-07)', async () => {
+    // AC-07's own point: the service does nothing special here. It is the SAME `blocked` branch
+    // as the test above, reached because the REPOSITORY (standing in for the trigger) says so —
+    // not because this test seeded a second admin row for a service-side tally to inspect.
+    const { repository } = stubForRoleChange(async () => ({ kind: 'blocked' }));
+
+    const outcome = await service(repository).changeRole(UPDATE_INPUT.id, 'employee');
+
+    expect(outcome).toEqual({ kind: 'blocked' });
+  });
+
+  it('changes a deactivated account\'s role — the repository is reached exactly as for an active one (US-024/AC-12)', async () => {
+    const { repository, setRoleCalls } = stubForRoleChange(async (input) => ({
+      kind: 'ok',
+      profile: { ...currentRow({ is_active: false }), id: input.id, role: input.role },
+    }));
+
+    const outcome = await service(repository).changeRole(UPDATE_INPUT.id, 'admin');
+
+    expect(setRoleCalls).toHaveLength(1);
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'admin', isActive: false },
+    });
   });
 });

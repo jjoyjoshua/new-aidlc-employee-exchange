@@ -41,6 +41,19 @@ export interface UpdateAccountInput {
  * US-023/AC-01, AC-02, AC-03, AC-05, AC-07. `CreateAccountOutcome`'s four kinds plus `not_found`
  * — the same single addition `RenameDeskOutcome` makes over `CreateDeskOutcome`.
  */
+/**
+ * US-024/AC-01, AC-04, AC-07, AC-12. `ChangeRoleOutcome`'s three kinds — `updateAccount`'s own
+ * shape minus `duplicate`/`unavailable`/`failed`: this is a single-system write to `role` only,
+ * never Supabase Auth, so ADR-011/ADR-012's cross-system compensation shapes do not apply
+ * (`spec.md`'s Technical constraints).
+ */
+export type ChangeRoleOutcome =
+  | { kind: 'ok'; account: AdminUser }
+  | { kind: 'not_found' }
+  /** US-024/AC-04, AC-07 (BR-001.11, V-11). The trigger refused it — never an in-app count
+   *  (design note §2.4, §5, `ADR-013`). */
+  | { kind: 'blocked' };
+
 export type UpdateAccountOutcome =
   | { kind: 'ok'; account: AdminUser }
   | { kind: 'duplicate'; fullName: string; isActive: boolean }
@@ -265,6 +278,23 @@ export function createUsersService({ users, usersAuth, nowMs }: UsersServiceDeps
         return { kind: 'failed' };
       }
       return { kind: 'unavailable' };
+    },
+
+    /**
+     * US-024/AC-01, AC-04, AC-07, AC-12. A single-system write — `user_profiles.role` only, no
+     * Auth call on any branch (design note §1, `spec.md`'s Technical constraints). ONE `nowMs()`
+     * reading, threaded to the repository as `updatedAt` — `updateAccount`'s own discipline
+     * above, unchanged.
+     *
+     * NO in-app admin count, on any branch. BR-001.11 is enforced entirely by the database
+     * trigger (`0004_last_active_admin_guard.sql`, `ADR-013`) — this method passes `blocked`
+     * straight through whatever the repository reports, which is what makes AC-07 (a deactivated
+     * admin does not count) structural rather than logic this method could get wrong.
+     */
+    async changeRole(id: string, role: UserRole): Promise<ChangeRoleOutcome> {
+      const result = await users.setRole({ id, role, updatedAt: new Date(nowMs()) });
+      if (result.kind !== 'ok') return result;
+      return { kind: 'ok', account: mapAccount(result.profile) };
     },
   };
 }

@@ -6,9 +6,14 @@ import {
   disabledMenuItemReason,
   editPersonTitle,
   emailTakenMessage,
+  LAST_ACTIVE_ADMIN_REFUSAL_BODY,
+  lastActiveAdminRefusalTitle,
   matchLine,
   noMatchMessage,
-  ROLE_FIELD_DISABLED_REASON,
+  roleChangeConfirmBody,
+  roleChangeConfirmTitle,
+  roleChangedToast,
+  roleChangeFailedAlert,
   roleActionLabel,
   rowMenuTriggerLabel,
   summaryLine,
@@ -101,8 +106,52 @@ describe('accountUpdatedToast (US-023/AC-01, SCR-009:157)', () => {
   });
 });
 
-describe('ROLE_FIELD_DISABLED_REASON (US-023, ADR-010)', () => {
-  it('is the same string disabledMenuItemReason carries — one vocabulary, not two', () => {
-    expect(ROLE_FIELD_DISABLED_REASON).toBe(disabledMenuItemReason);
+describe('roleChangeConfirmTitle (US-024/AC-02, ST-08)', () => {
+  it('asks the promotion question', () => {
+    expect(roleChangeConfirmTitle('Priya Raman', 'admin')).toBe('Make Priya Raman an admin?');
+  });
+
+  it('asks the demotion question', () => {
+    expect(roleChangeConfirmTitle('Priya Raman', 'employee')).toBe('Make Priya Raman an employee?');
+  });
+});
+
+describe('roleChangeConfirmBody (US-024/AC-02, ST-08)', () => {
+  it('states what a promotion gains', () => {
+    expect(roleChangeConfirmBody('admin')).toBe("They'll be able to see and cancel everyone's bookings, and manage desks and people.");
+  });
+
+  it('states what a demotion loses, and that they can book a desk for themselves (edge case)', () => {
+    expect(roleChangeConfirmBody('employee')).toBe(
+      "They'll lose access to bookings, desks and people — and they'll be able to book a desk for themselves.",
+    );
+  });
+});
+
+describe('lastActiveAdminRefusalTitle / LAST_ACTIVE_ADMIN_REFUSAL_BODY (US-024/AC-04, AC-05, ST-09, SCR-009 ST-05, AC-08)', () => {
+  it('names the account as the only active admin', () => {
+    expect(lastActiveAdminRefusalTitle('Marcus Vale')).toBe('Marcus Vale is the only active admin.');
+  });
+
+  it('names the consequence and the fix — one sentence-builder shared by both doors (D-03)', () => {
+    expect(LAST_ACTIVE_ADMIN_REFUSAL_BODY).toBe(
+      'Making this account an employee would leave nobody able to manage the system. Make someone else an admin first.',
+    );
+  });
+});
+
+describe('roleChangeFailedAlert (US-024/AC-10, ST-13)', () => {
+  it('names the person and states nothing changed', () => {
+    expect(roleChangeFailedAlert('Dana Silva')).toBe("We couldn't change Dana Silva's role just now. Nothing has changed. Try again.");
+  });
+});
+
+describe('roleChangedToast (US-024/AC-11, ST-14)', () => {
+  it('states a promotion', () => {
+    expect(roleChangedToast('Priya Raman', 'admin')).toBe('Priya Raman is now an admin.');
+  });
+
+  it('states a demotion', () => {
+    expect(roleChangedToast('Priya Raman', 'employee')).toBe('Priya Raman is now an employee.');
   });
 });

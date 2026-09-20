@@ -78,6 +78,17 @@ export type UseUsersResult = UsersState & {
    * `Add person` button.
    */
   markUpdated: (account: AdminUser) => void;
+  /**
+   * US-024/AC-01, AC-11. NOT `markUpdated`: that method leaves `summary` byte-identical because
+   * US-023 never changes `role`/`is_active`; a role change moves exactly two of the summary's
+   * four counts, in opposite directions, by exactly one each — `employees`/`admins` shift,
+   * `total`/`deactivated` never do (design note §4.1). The delta is read from `account.role`, the
+   * NEW value, against the row it replaces — never from `account.isActive`, because
+   * `users.service.ts`'s `tallySummary` counts every admin row regardless of `is_active` (US-024's
+   * own summary-vs-BR-001.11 distinction, D-03's rationale): a role change on a DEACTIVATED
+   * account still moves these counts, exactly as one on an active account does.
+   */
+  markRoleChanged: (account: AdminUser) => void;
 };
 
 export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
@@ -130,5 +141,29 @@ export function useUsers(fetchUsers: UsersFetcher): UseUsersResult {
     });
   }, []);
 
-  return { ...state, markAdded, markUpdated };
+  const markRoleChanged = useCallback((account: AdminUser) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+
+      const previous = current.users.find((row) => row.id === account.id);
+      // No prior row (should not happen — this is only ever called for a row just acted on):
+      // replace in place, but do not guess at a summary delta with nothing to compute it from.
+      if (!previous) return { ...current, users: current.users.map((row) => (row.id === account.id ? account : row)) };
+
+      const summary = {
+        ...current.summary,
+        // `total` and `deactivated` are UNCHANGED — the population did not change and neither did
+        // anyone's active state (`markUpdated`'s own reasoning, applied here for a different pair
+        // of columns). Only the role bucket moves, both ways at once.
+        employees: current.summary.employees + (account.role === 'employee' ? 1 : -1),
+        admins: current.summary.admins + (account.role === 'admin' ? 1 : -1),
+      };
+
+      const users = current.users.map((row) => (row.id === account.id ? account : row)).sort(byFullName);
+
+      return { ...current, users, summary };
+    });
+  }, []);
+
+  return { ...state, markAdded, markUpdated, markRoleChanged };
 }

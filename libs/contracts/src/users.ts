@@ -113,9 +113,20 @@ export const createAccountRequestSchema = z
   .strict();
 export type CreateAccountRequest = z.input<typeof createAccountRequestSchema>;
 
-/** `PATCH /api/admin/users/:id`'s path parameter (US-023). */
+/** `PATCH /api/admin/users/:id`'s path parameter (US-023), reused verbatim by
+ *  `POST /api/admin/users/:id/role` (US-024) — the same resource, a different verb sub-resource. */
 export const userIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
 export type UserIdParams = z.infer<typeof userIdParamsSchema>;
+
+/**
+ * `POST /api/admin/users/:id/role`'s one legitimate body (US-024/AC-01). `.strict()` — matching
+ * every request schema in this package. Carries `role` only: this is a refusable state
+ * TRANSITION (BR-001.11), not a plain field update, so it is a verb sub-resource rather than a
+ * body added to `userUpdateSchema` (`ai/standards/api-standards.md`; `userUpdateSchema`'s own
+ * docblock above already rejects a `role` field for exactly this reason, US-023/AC-07).
+ */
+export const roleChangeRequestSchema = z.object({ role: userRoleSchema }).strict();
+export type RoleChangeRequest = z.infer<typeof roleChangeRequestSchema>;
 
 /**
  * `PATCH /api/admin/users/:id`'s one legitimate body (US-023/AC-01, AC-02, AC-03, AC-04, AC-07).

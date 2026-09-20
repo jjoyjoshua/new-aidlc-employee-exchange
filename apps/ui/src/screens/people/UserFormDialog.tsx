@@ -19,7 +19,7 @@
  *
  * `useUserFormDialog` (the caller) owns the server round trip, busy state and outcome.
  */
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import {
   createAccountRequestSchema,
   evaluatePasswordPolicy,
@@ -47,8 +47,9 @@ import {
   emailTakenMessage,
   FULL_NAME_LABEL,
   INITIAL_PASSWORD_LABEL,
+  LAST_ACTIVE_ADMIN_REFUSAL_BODY,
+  lastActiveAdminRefusalTitle,
   RESET_PASSWORD_NOTE,
-  ROLE_FIELD_DISABLED_REASON,
   ROLE_LEGEND,
   ROLE_OPTION_DESCRIPTION,
   SAVE_CHANGES_LABEL,
@@ -102,6 +103,13 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss, currentUserId }: U
   const emailRef = useRef<HTMLInputElement>(null);
   const noteId = useId();
 
+  // ST-05 (US-024/AC-04): the attempted role is undone the moment the server refuses it — "the
+  // role radio has already reverted to Admin" is the story's own wording. Name/email are left
+  // exactly as typed; only `role` is a controlled radio with something to revert.
+  useEffect(() => {
+    if (isEdit && dialog.outcome === 'lastAdmin') setRole(subject!.role);
+  }, [isEdit, dialog.outcome, subject]);
+
   const policy = evaluatePasswordPolicy(password);
   const allMet = PASSWORD_RULE_IDS.every((id) => policy[id]);
   const rules: PolicyRule[] = PASSWORD_RULE_IDS.map((id) => ({
@@ -125,8 +133,10 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss, currentUserId }: U
     if (dialog.busy) return;
 
     if (isEdit) {
-      // US-023/AC-04 — the SAME schema the route parses with (ADR-002). No role, no password:
-      // this contract carries neither (design note §3.1).
+      // US-023/AC-04 — the SAME schema the route parses with (ADR-002) validates fullName/email;
+      // no password. `role` rides alongside, validated only by being a controlled radio (US-024) —
+      // `userUpdateSchema` itself still carries neither role nor password (design note §3.1), and
+      // `useUserFormDialog.submit` is what strips `role` back off before calling `updateAccount`.
       const parsed = userUpdateSchema.safeParse({ fullName, email });
       if (!parsed.success) {
         const next: FieldErrors = {};
@@ -139,7 +149,7 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss, currentUserId }: U
         return;
       }
       setErrors({});
-      onSubmit({ fullName: parsed.data.fullName, email: parsed.data.email });
+      onSubmit({ fullName: parsed.data.fullName, email: parsed.data.email, role });
       return;
     }
 
@@ -224,17 +234,25 @@ export function UserFormDialog({ dialog, onSubmit, onDismiss, currentUserId }: U
           autoComplete="off"
         />
 
-        {/* SCR-009 ST-02: the radios show the current role, but this form cannot save a role
-            change (US-024's). ariaDisabled, never native `disabled`, so they stay focusable and
-            announce why — ADR-010 (design note §4.3). */}
+        {/* ST-05 (US-024/AC-04, AC-08): placed directly above the radios, not at the foot of the
+            form — the reader is about to correct the role they just picked, and this shows what
+            reverted and why in one glance. `LAST_ACTIVE_ADMIN_REFUSAL_BODY`/
+            `lastActiveAdminRefusalTitle` are the SAME sentence-builder SCR-008 ST-09 renders as a
+            dialog (D-03) — one rule, two doors (AC-08). */}
+        {isEdit && dialog.outcome === 'lastAdmin' ? (
+          <Alert tone="danger" live="assertive" title={lastActiveAdminRefusalTitle(subject!.fullName)}>
+            {LAST_ACTIVE_ADMIN_REFUSAL_BODY}
+          </Alert>
+        ) : null}
+
+        {/* SCR-009 ST-02: the radios show the current role. LIVE now, no `aria-disabled` — this is
+            US-024's own destination, ADR-010's forecast landing (design note §4.3 amended). */}
         <RadioGroup
           legend={ROLE_LEGEND}
           name="role"
           value={role}
           onChange={(value) => setRole(value as UserRole)}
           disabled={dialog.busy}
-          ariaDisabled={isEdit}
-          {...(isEdit ? { ariaDisabledReason: ROLE_FIELD_DISABLED_REASON } : {})}
           options={[
             { value: 'employee', label: ROLE_OPTION_DESCRIPTION.employee },
             { value: 'admin', label: ROLE_OPTION_DESCRIPTION.admin },

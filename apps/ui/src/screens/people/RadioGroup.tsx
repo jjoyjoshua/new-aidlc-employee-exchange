@@ -27,13 +27,13 @@ export interface RadioGroupProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   /**
-   * US-023, ADR-010. Additive to `disabled` above, never a replacement — the two mean different
-   * things and the create-mode caller's existing `disabled` behaviour is untouched by this prop
-   * existing. Renders `aria-disabled="true"` and a per-option reason instead of the native
-   * `disabled` attribute, which would drop every radio from the tab order (`AccountRowMenu.tsx`'s
-   * own reasoning, `disabledMenuItemReason`/`ROLE_FIELD_DISABLED_REASON` — one vocabulary). A
-   * selection attempt is swallowed rather than reaching `onChange`, the same "return immediately;
-   * nothing runs" shape that component uses.
+   * Introduced by US-023/ADR-010 for the edit form's role radios, no longer used there since
+   * US-024 made that control live — kept as a generic capability for a future ariaDisabled radio
+   * group. Additive to `disabled` above, never a replacement. Renders `aria-disabled="true"` and a
+   * per-option reason instead of the native `disabled` attribute, which would drop every radio
+   * from the tab order (`AccountRowMenu.tsx`'s own reasoning, `disabledMenuItemReason` — one
+   * vocabulary). A selection attempt is swallowed rather than reaching `onChange`, the same
+   * "return immediately; nothing runs" shape that component uses.
    */
   ariaDisabled?: boolean;
   /** The reason announced for each option when `ariaDisabled` is set — required together with it,

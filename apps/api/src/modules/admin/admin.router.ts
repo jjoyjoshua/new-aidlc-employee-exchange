@@ -24,6 +24,7 @@ import {
   deskCreateSchema,
   deskIdParamsSchema,
   deskUpdateSchema,
+  roleChangeRequestSchema,
   userIdParamsSchema,
   userUpdateSchema,
 } from '@desk-booking/contracts';
@@ -219,6 +220,46 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
       }
       if (outcome.kind === 'failed') {
         throw new Error('account update failed');
+      }
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(outcome.account);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * US-024/AC-01, AC-04, AC-06, AC-13. A refusable state TRANSITION (BR-001.11), hence the verb
+   * sub-resource — `/desks/:id/deactivate`'s own shape, `ai/standards/api-standards.md`. No
+   * `requireActingAdmin`: that middleware exists for ATTRIBUTION only (`cancelled_by`), and
+   * `user_profiles` has no actor column for a role change — this route adds none.
+   *
+   * `roleChangeRequestSchema` carries `role` only, `.strict()` — no force/override field can
+   * exist here even if a future diff tried to add one without changing the contract (US-024/AC-06).
+   *
+   * `blocked` → `422 last_active_admin`, no `details` payload (D-03 — every fact the browser's
+   * approved copy needs is already on the row it acted on; design note §3.1-§3.2, `ADR-013`).
+   * `not_found` reuses `user_not_found`, the same code `PATCH /users/:id` uses above.
+   */
+  router.post('/users/:id/role', async (req, res, next) => {
+    try {
+      const parsedParams = userIdParamsSchema.safeParse(req.params);
+      if (!parsedParams.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+      const parsedBody = roleChangeRequestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        throw badRequest(ERROR_CODES.invalid_request, 'That request was not valid.');
+      }
+
+      const outcome = await users.changeRole(parsedParams.data.id, parsedBody.data.role);
+
+      if (outcome.kind === 'blocked') {
+        throw unprocessable(ERROR_CODES.last_active_admin, 'That change would leave no active administrator.');
+      }
+      if (outcome.kind === 'not_found') {
+        throw notFound(ERROR_CODES.user_not_found, 'That account could not be found.');
       }
 
       res.setHeader('Cache-Control', 'private, no-store');

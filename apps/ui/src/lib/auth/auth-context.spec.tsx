@@ -70,19 +70,22 @@ afterEach(() => {
 });
 
 function Harness() {
-  const { user, office, signIn, signOut, setPassword } = useAuth();
+  const { user, office, signIn, signOut, setPassword, updateOwnRole } = useAuth();
   const [setPasswordResult, setSetPasswordResult] = useState('idle');
   return (
     <div>
       <div data-testid="user">{user ? user.email : 'none'}</div>
       <div data-testid="office">{office ? `${office.timezone} ${office.today}` : 'no-office'}</div>
       <div data-testid="mustChangePassword">{user ? String(user.mustChangePassword) : 'n/a'}</div>
+      <div data-testid="role">{user ? user.role : 'n/a'}</div>
       <div data-testid="setPasswordResult">{setPasswordResult}</div>
       <button onClick={() => void signIn('priya@company.com', 'correct')}>sign in</button>
       <button onClick={() => void signOut()}>sign out</button>
       <button onClick={() => void setPassword('NewPassword1!').then((r) => setSetPasswordResult(r.kind))}>
         set password
       </button>
+      <button onClick={() => updateOwnRole('admin')}>promote self locally</button>
+      <button onClick={() => updateOwnRole('employee')}>demote self locally</button>
     </div>
   );
 }
@@ -455,5 +458,30 @@ describe('setPassword (US-004)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'set password' }));
 
     expect(await screen.findByText('failed')).toBeInTheDocument();
+  });
+});
+
+describe('updateOwnRole — local patch only, no request (US-024/AC-03, edge case, design note §4.4)', () => {
+  it('changes the rendered role immediately, with no fetch at all (US-024/AC-03)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { session: SESSION, user: USER, office: OFFICE }));
+    renderHarness();
+
+    await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+    await screen.findByText('employee');
+    const callsBeforePatch = fetchMock.mock.calls.length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'promote self locally' }));
+
+    expect(await screen.findByText('admin')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.length).toBe(callsBeforePatch);
+  });
+
+  it('is a no-op on the rendered output before any sign-in — there is no user to patch', async () => {
+    renderHarness();
+    expect(screen.getByTestId('role')).toHaveTextContent('n/a');
+
+    await userEvent.click(screen.getByRole('button', { name: 'promote self locally' }));
+
+    expect(screen.getByTestId('role')).toHaveTextContent('n/a');
   });
 });

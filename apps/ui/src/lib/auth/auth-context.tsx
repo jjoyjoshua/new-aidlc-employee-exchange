@@ -27,6 +27,7 @@ import {
   type AuthenticatedUser,
   type Office,
   type Session,
+  type UserRole,
 } from '@desk-booking/contracts';
 import { createApiClient, type ApiClient, type ApiResult } from '../api-client.js';
 
@@ -81,6 +82,15 @@ export interface AuthContextValue {
    * change on the very next render. Does not navigate; the screen does (design note §7.3).
    */
   setPassword(newPassword: string): Promise<SetPasswordResult>;
+  /**
+   * US-024/AC-03, edge case (self-demotion). Patches the SIGNED-IN account's own `role` in local
+   * state only — no request, no session refresh. Safe because `require-admin.ts`'s own docblock
+   * states the server re-reads `role` from `user_profiles` on every request, never from a JWT
+   * claim: this can only change what the browser RENDERS, never what the server PERMITS (design
+   * note §4.4). Callers compare the changed account's `id` to `user.id` first and call this only
+   * on a match — a no-op call here (e.g. after booting signed out) is harmless but pointless.
+   */
+  updateOwnRole(role: UserRole): void;
   /**
    * US-006/D-08. The authenticated client every screen beyond `auth` needs for its own reads —
    * `fetch-availability.ts` is the first caller. It is the exact same instance `signIn`/
@@ -287,9 +297,13 @@ export function AuthProvider({ children, client, onSession, onSignOut, getStored
     [api, onSession],
   );
 
+  const updateOwnRole = useCallback<AuthContextValue['updateOwnRole']>((role) => {
+    setUser((current) => (current ? { ...current, role } : current));
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, office, status, signIn, signOut, setPassword, api }),
-    [user, office, status, signIn, signOut, setPassword, api],
+    () => ({ user, office, status, signIn, signOut, setPassword, updateOwnRole, api }),
+    [user, office, status, signIn, signOut, setPassword, updateOwnRole, api],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

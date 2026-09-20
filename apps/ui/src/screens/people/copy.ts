@@ -149,11 +149,49 @@ export function accountUpdatedToast(fullName: string): string {
   return `${fullName} updated.`;
 }
 
+// ── SCR-008 ST-08/ST-09, SCR-009 ST-05 — role change (US-024) ──────────────
+
+/** ST-08's confirmation title, one per direction — the role item's own label names the role it
+ *  would PRODUCE (`roleActionLabel`), and this title names the same thing as a question. */
+export function roleChangeConfirmTitle(fullName: string, targetRole: UserRole): string {
+  return targetRole === 'admin' ? `Make ${fullName} an admin?` : `Make ${fullName} an employee?`;
+}
+
+/** ST-08's two exact sentences (US-024/AC-02) — a promotion states what is gained, a demotion
+ *  states what is lost AND that the person becomes able to book a desk for themselves (the story's
+ *  own edge case: promoting somebody does not let them book, so the demotion sentence says so from
+ *  the other direction). */
+export function roleChangeConfirmBody(targetRole: UserRole): string {
+  return targetRole === 'admin'
+    ? "They'll be able to see and cancel everyone's bookings, and manage desks and people."
+    : "They'll lose access to bookings, desks and people — and they'll be able to book a desk for themselves.";
+}
+
+export const CHANGE_ROLE_LABEL = 'Change role';
+export const KEEP_AS_IS_LABEL = 'Keep as is';
+export const CLOSE_LABEL = 'Close';
+export const MAKE_SOMEONE_ADMIN_LABEL = 'Make someone an admin';
+
 /**
- * Reused for the edit form's role radios, ADR-010's established string (`disabledMenuItemReason`
- * above) rather than a second copy of the same fact: a role change is genuinely "not available yet
- * — coming in a later release" from THIS form, since US-024 is what makes it savable (design note
- * §4.3). Named separately from `disabledMenuItemReason` because the two are read in different
- * contexts (a menu item's `title` vs. a fieldset's radios), not because the words differ.
+ * ST-09's refusal, and SCR-009 ST-05's identical in-form one — ONE sentence-builder for both
+ * doors (US-024/AC-08, D-03), not two copies of the same rule. The title names the account and
+ * the fact; the body names the consequence and the fix. Always about a DEMOTION: BR-001.11 can
+ * only be tripped by removing an active admin, so there is no promotion-direction refusal to word.
  */
-export const ROLE_FIELD_DISABLED_REASON = disabledMenuItemReason;
+export function lastActiveAdminRefusalTitle(fullName: string): string {
+  return `${fullName} is the only active admin.`;
+}
+
+export const LAST_ACTIVE_ADMIN_REFUSAL_BODY =
+  'Making this account an employee would leave nobody able to manage the system. Make someone else an admin first.';
+
+/** ST-13's shape, applied to a role change (US-024/AC-10) — "nothing has changed" is the useful
+ *  half, `SCR-008 ST-13`'s own reasoning. */
+export function roleChangeFailedAlert(fullName: string): string {
+  return `We couldn't change ${fullName}'s role just now. Nothing has changed. Try again.`;
+}
+
+/** ST-14's transient message (US-024/AC-11) — states the effect, not the mechanism. */
+export function roleChangedToast(fullName: string, newRole: UserRole): string {
+  return newRole === 'admin' ? `${fullName} is now an admin.` : `${fullName} is now an employee.`;
+}
