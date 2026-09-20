@@ -29,6 +29,7 @@ import { createUsersService } from './modules/users/users.service.js';
 import { usersAuthAdapter, type UsersAuthAdapter } from './modules/users/users.adapter.js';
 import { SIGN_IN_MIN_FAILURE_MS } from './domain/sign-in-failure-delay.js';
 import { supabase } from './infra/supabase/index.js';
+import { randomInt as nodeRandomInt } from 'node:crypto';
 import { config } from './config/index.js';
 
 /**
@@ -69,11 +70,16 @@ export interface BuildAppOptions {
   users?: UsersRepository;
   /** US-021 test seam — overrides the real Supabase Auth create/delete calls. */
   usersAuth?: UsersAuthAdapter;
+  /** US-027 test seam — overrides the real CSPRNG the reset-password generator draws from
+   *  (`domain/generate-reset-password.ts` takes `randomInt` as a parameter, never reading
+   *  `crypto` itself, design note §5.1). */
+  randomInt?: (maxExclusive: number) => number;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
 export function buildApp(options: BuildAppOptions = {}): Express {
   const nowMs = options.nowMs ?? (() => Date.now());
+  const randomInt = options.randomInt ?? nodeRandomInt;
 
   const service = createAuthService({
     auth: options.auth ?? supabaseAuthAdapter,
@@ -121,6 +127,7 @@ export function buildApp(options: BuildAppOptions = {}): Express {
     // US-025's first use — deactivateAccount computes the office's "today" the same way
     // desksService/adminBookingsService already do (design note §3.2, C9).
     officeTimezone,
+    randomInt,
   });
 
   return createApp({

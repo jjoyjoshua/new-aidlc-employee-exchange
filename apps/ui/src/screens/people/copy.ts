@@ -60,13 +60,6 @@ export function noMatchMessage(term: string): string {
 }
 
 /**
- * ADR-010's reason string, reused verbatim from `US-016/D-02` (design note §6.2, plan Step 9,
- * open item 5): names no story id and promises no release date. Every one of the four row-menu
- * items carries this same string until its own destination story (US-023 – US-027) replaces it.
- */
-export const disabledMenuItemReason = 'Not available yet — coming in a later release.';
-
-/**
  * The row-menu's role item, labelled by the role it would PRODUCE, not the field it changes
  * (SCR-008's own structural decision) — US-020/AC-10.
  */
@@ -273,3 +266,59 @@ export function activateFailedAlert(fullName: string): string {
 export function reactivatedToast(fullName: string): string {
   return `${fullName} can sign in again.`;
 }
+
+// ── SCR-008 ST-10–ST-13, ST-15 — reset somebody's password (US-027) ─────────
+
+/** ST-10's title (US-027/AC-02). */
+export function resetPasswordConfirmTitle(fullName: string): string {
+  return `Reset ${fullName}'s password?`;
+}
+
+/**
+ * ST-10's body (US-027/AC-02) — the four clauses, IN ORDER, the approved hi-fi frame renders
+ * verbatim: a new password will be generated and shown once; it is not emailed, so it must be
+ * passed on; the current password stops working immediately; the person is asked to choose their
+ * own the first time they sign in with it. Order is load-bearing (`copy.spec.ts` asserts it, not
+ * just presence) — the design's own reasoning is that the credential's fate comes first and the
+ * forced-change consequence comes last.
+ */
+export const RESET_PASSWORD_CONFIRM_BODY =
+  "We'll generate a new one and show it to you once — it isn't emailed to them, so you'll need to " +
+  "pass it on. Their current password stops working straight away, and they'll be asked to choose " +
+  'their own the first time they sign in with the new one.';
+
+export const RESET_PASSWORD_CONFIRM_LABEL = 'Reset password';
+
+/** ST-13's shape, applied to a reset (US-027/AC-09) — matching `deactivateFailedAlert`'s own
+ *  pattern: "nothing has changed" is the useful half, and it is true here because D-06's write
+ *  order leaves the old password intact on any Auth-write failure. */
+export function resetPasswordFailedAlert(fullName: string): string {
+  return `We couldn't reset ${fullName}'s password just now. Nothing has changed. Try again.`;
+}
+
+/** ST-11's title (US-027/AC-03) — the account, not a generic "Password reset" heading, so a
+ *  glance at a second monitor still tells an onlooker whose credential is on screen. */
+export function resetPasswordResultTitle(fullName: string): string {
+  return `${fullName}'s new password`;
+}
+
+/**
+ * ST-11's body (US-027/AC-03, AC-04, AC-05) — order matches the approved design exactly: the
+ * shown-once warning and the instruction to copy it now come FIRST (the credential is the whole
+ * point of this state), the "never shown again" / "not emailed" facts come next, and the
+ * forced-change consequence comes LAST — the same "credential's fate first, consequence last"
+ * shape `RESET_PASSWORD_CONFIRM_BODY` uses.
+ */
+export function resetPasswordResultBody(fullName: string): string {
+  return (
+    "This is the only time you'll see it. Copy it now and give it to " +
+    `${fullName} directly — we can't show it again, and it isn't in any email. ` +
+    "They'll be asked to choose their own password when they sign in with it."
+  );
+}
+
+export const COPY_LABEL = 'Copy';
+/** Announced in place when Copy succeeds (SCR-008-people.md:227) — a live-region text change, not
+ *  merely a re-rendered icon, so a screen-reader user hears the confirmation. */
+export const COPIED_LABEL = 'Copied';
+export const DONE_LABEL = 'Done';

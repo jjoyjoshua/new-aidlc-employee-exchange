@@ -136,6 +136,9 @@ const noUsers: UsersRepository = {
   async activateAccount() {
     throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
   },
+  async armMustChangePassword() {
+    throw new Error('armMustChangePassword not stubbed — this test does not exercise POST /users/:id/reset-password');
+  },
 };
 
 const notUsedUsersAuth: UsersAuthAdapter = {
@@ -147,6 +150,9 @@ const notUsedUsersAuth: UsersAuthAdapter = {
   },
   async updateEmail() {
     throw new Error('updateEmail not stubbed — this test does not exercise PATCH /users/:id');
+  },
+  async setPassword() {
+    throw new Error('setPassword not stubbed — this test does not exercise POST /users/:id/reset-password');
   },
 };
 
@@ -215,6 +221,9 @@ function usersFor(overrides: Partial<UsersRepository> = {}): UsersRepository {
     async activateAccount() {
       throw new Error('not exercised');
     },
+    async armMustChangePassword() {
+      throw new Error('not exercised');
+    },
     ...overrides,
   };
 }
@@ -230,6 +239,9 @@ function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapt
     async updateEmail() {
       return { kind: 'ok' };
     },
+    async setPassword() {
+      return { kind: 'ok' };
+    },
     ...overrides,
   };
 }
@@ -240,6 +252,8 @@ function appWith(options: {
   desks?: DesksRepository;
   users?: UsersRepository;
   usersAuth?: UsersAuthAdapter;
+  /** US-027 test seam — a deterministic generator for reset-password route tests. */
+  randomInt?: (maxExclusive: number) => number;
 }) {
   const rows = options.rows ?? [ADMIN, EMPLOYEE];
 
@@ -267,6 +281,7 @@ function appWith(options: {
     desks: options.desks ?? noDesks,
     users: options.users ?? noUsers,
     usersAuth: options.usersAuth ?? notUsedUsersAuth,
+    ...(options.randomInt ? { randomInt: options.randomInt } : {}),
   });
 }
 
@@ -1242,6 +1257,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async activateAccount() {
         throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
       },
+      async armMustChangePassword() {
+        throw new Error('armMustChangePassword not stubbed — this test does not exercise POST /users/:id/reset-password');
+      },
     };
     const app = appWith({ users });
 
@@ -1300,6 +1318,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       async activateAccount() {
         throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
       },
+      async armMustChangePassword() {
+        throw new Error('armMustChangePassword not stubbed — this test does not exercise POST /users/:id/reset-password');
+      },
     };
     const app = appWith({ users });
 
@@ -1341,6 +1362,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async activateAccount() {
         throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
+      },
+      async armMustChangePassword() {
+        throw new Error('armMustChangePassword not stubbed — this test does not exercise POST /users/:id/reset-password');
       },
     };
     const app = appWith({ users });
@@ -1408,6 +1432,9 @@ describe('GET /api/admin/users (US-020/AC-01, AC-04, AC-06, AC-13)', () => {
       },
       async activateAccount() {
         throw new Error('activateAccount not stubbed — this test does not exercise POST /users/:id/activate');
+      },
+      async armMustChangePassword() {
+        throw new Error('armMustChangePassword not stubbed — this test does not exercise POST /users/:id/reset-password');
       },
     };
     const app = appWith({ users });
@@ -2335,5 +2362,170 @@ describe('POST /api/admin/users/:id/activate (US-026/AC-01, AC-03, AC-04, AC-05,
     const app = appWith({ users: usersFor() });
     const response = await request(app).post(`/api/admin/users/${USER_ID}/activate`);
     expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/users/:id/reset-password (US-027/AC-01, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  // Deterministic — the same derivation generate-reset-password.spec.ts's first test uses: index
+  // 0 of each required alphabet, filler index 0 ten times, an identity-permutation shuffle.
+  const FIXED_SEQUENCE = [0, 0, 0, 0, ...Array(10).fill(0), 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+  const GENERATED_PASSWORD = 'Aa0!AAAAAAAAAA';
+  function fixedRandomInt(): (maxExclusive: number) => number {
+    let i = 0;
+    return () => FIXED_SEQUENCE[i++]!;
+  }
+
+  it('a successful reset returns 200 with the account, the password exactly once, and a private, no-store cache header (US-027/AC-01, US-027/AC-03, NFR-01)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async armMustChangePassword({ id }) {
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true },
+          };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+      randomInt: fixedRandomInt(),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/reset-password`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      account: { id: USER_ID, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: true },
+      password: GENERATED_PASSWORD,
+    });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('writes to the account named in the URL, not the acting admin\'s own id (US-027/AC-07)', async () => {
+    const armCalls: string[] = [];
+    const app = appWith({
+      users: usersFor({
+        async armMustChangePassword({ id }) {
+          armCalls.push(id);
+          return { kind: 'ok', profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true } };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+      randomInt: fixedRandomInt(),
+    });
+
+    await request(app).post(`/api/admin/users/${USER_ID}/reset-password`).set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(armCalls).toEqual([USER_ID]);
+    expect(armCalls).not.toContain(ADMIN.id);
+  });
+
+  it('an id matching no account gets 404 user_not_found, and never reaches Supabase Auth (US-027/AC-01)', async () => {
+    const setPasswordCalls: string[] = [];
+    const app = appWith({
+      users: usersFor({ async armMustChangePassword() { return { kind: 'not_found' }; } }),
+      usersAuth: usersAuthFor({ async setPassword(userId) { setPasswordCalls.push(userId); return { kind: 'ok' }; } }),
+      randomInt: fixedRandomInt(),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/reset-password`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('user_not_found');
+    expect(setPasswordCalls).toEqual([]);
+  });
+
+  it('a malformed id path param is refused at the edge with 400 invalid_request (design note F14)', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+
+    const response = await request(app)
+      .post('/api/admin/users/not-a-uuid/reset-password')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('invalid_request');
+  });
+
+  it('an unavailable Supabase Auth write returns 503 service_unavailable, and the old password is left untouched (D-06, US-027/AC-09)', async () => {
+    const app = appWith({
+      users: usersFor({
+        async armMustChangePassword({ id }) {
+          return { kind: 'ok', profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: true } };
+        },
+      }),
+      usersAuth: usersAuthFor({ async setPassword() { return { kind: 'unavailable' }; } }),
+      randomInt: fixedRandomInt(),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/reset-password`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(503);
+    expect(response.body.code).toBe('service_unavailable');
+  });
+
+  it('the repository failing returns a bare 500', async () => {
+    const app = appWith({
+      users: usersFor({
+        async armMustChangePassword() {
+          throw new Error('db unreachable');
+        },
+      }),
+      usersAuth: usersAuthFor(),
+      randomInt: fixedRandomInt(),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/reset-password`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('refuses an Employee session with 403 admin_only, through the REAL mount, and changes nothing — including resetting their own password (US-027/AC-11)', async () => {
+    const armCalls: unknown[] = [];
+    const app = appWith({
+      users: usersFor({
+        async armMustChangePassword({ id }) {
+          armCalls.push({ id });
+          return { kind: 'ok', profile: { id, full_name: 'Priya Raman', email: 'priya@company.com', role: 'employee', is_active: true } };
+        },
+      }),
+      usersAuth: usersAuthFor(),
+      randomInt: fixedRandomInt(),
+    });
+
+    // The Employee attempts to reset their OWN account's password (V-07 — no self-service reset).
+    const response = await request(app)
+      .post(`/api/admin/users/${EMPLOYEE.id}/reset-password`)
+      .set('Authorization', `Bearer ${EMPLOYEE_TOKEN}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('admin_only');
+    expect(armCalls).toEqual([]);
+  });
+
+  it('refuses a request with no token at all', async () => {
+    const app = appWith({ users: usersFor(), usersAuth: usersAuthFor() });
+    const response = await request(app).post(`/api/admin/users/${USER_ID}/reset-password`);
+    expect(response.status).toBe(401);
+  });
+
+  it('never returns the password in a response body if the write failed — no partial leak across branches (US-027/AC-08)', async () => {
+    const app = appWith({
+      users: usersFor({ async armMustChangePassword() { return { kind: 'not_found' }; } }),
+      usersAuth: usersAuthFor(),
+      randomInt: fixedRandomInt(),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/reset-password`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(JSON.stringify(response.body)).not.toContain(GENERATED_PASSWORD);
   });
 });

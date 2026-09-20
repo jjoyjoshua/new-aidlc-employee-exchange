@@ -183,6 +183,54 @@ describe('Dialog — the shared shell (US-017 design note §5.2)', () => {
     expect(header?.querySelector('.dialog__icon')).toBeNull();
   });
 
+  it('dismissible defaults to true — every existing caller keeps its current close-icon and Escape behaviour (US-027 regression proof)', async () => {
+    const onDismiss = vi.fn();
+    render(
+      <Dialog title="Add desk" footer={null} onDismiss={onDismiss}>
+        body
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismissible={false} omits the close icon entirely — not merely disabling it (US-027/AC-04)', () => {
+    render(
+      <Dialog title="New password" footer={null} onDismiss={() => undefined} dismissible={false}>
+        body
+      </Dialog>,
+    );
+
+    expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument();
+  });
+
+  it('dismissible={false} suppresses Escape even when NOT busy — the exact combination ST-11 ships (US-027/AC-04, design note §7.3)', async () => {
+    const onDismiss = vi.fn();
+    render(
+      <Dialog title="New password" footer={null} onDismiss={onDismiss} dismissible={false} busy={false}>
+        body
+      </Dialog>,
+    );
+
+    await userEvent.keyboard('{Escape}');
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('a backdrop/outside click never dismisses — INHERITED behaviour, not new: .dialog__overlay has no click handler at all (US-027/AC-04, design note §7.1)', async () => {
+    const onDismiss = vi.fn();
+    render(
+      <Dialog title="Add desk" footer={null} onDismiss={onDismiss}>
+        body
+      </Dialog>,
+    );
+
+    const overlay = document.querySelector('.dialog__overlay') as HTMLElement;
+    await userEvent.click(overlay);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
   it('restores focus to the element that had it before the dialog opened, on unmount', () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Add desk';

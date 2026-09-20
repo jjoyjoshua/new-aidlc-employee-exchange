@@ -968,3 +968,71 @@ describe('usersRepository.activateAccount (US-026/AC-01, AC-03, AC-04, AC-05, AC
     }
   });
 });
+
+describe('usersRepository.armMustChangePassword (US-027/AC-07, AC-10)', () => {
+  const UPDATED_AT = new Date('2026-09-20T10:00:00.000Z');
+
+  it('updates must_change_password and updated_at ONLY, keyed on id, RETURNING the same five columns activateAccount does (US-027/AC-07)', async () => {
+    const row = { ...ROW_A };
+    const { calls, client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.armMustChangePassword({ id: ROW_A.id, updatedAt: UPDATED_AT });
+
+      expect(calls).toEqual([
+        {
+          table: 'user_profiles',
+          select: 'id, full_name, email, role, is_active',
+          eq: [['id', ROW_A.id]],
+          order: [],
+          update: { must_change_password: true, updated_at: UPDATED_AT.toISOString() },
+          maybeSingle: true,
+        },
+      ]);
+      expect(calls[0]?.update).not.toHaveProperty('role');
+      expect(calls[0]?.update).not.toHaveProperty('is_active');
+      expect(result).toEqual({ kind: 'ok', profile: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "ok" } unconditionally, even when the account was already must_change_password: true — a repeat has no side effect to double-fire (US-027/AC-10)', async () => {
+    const row = { ...ROW_A };
+    const { client } = fakeSupabase({ data: row, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.armMustChangePassword({ id: ROW_A.id, updatedAt: UPDATED_AT });
+      expect(result).toEqual({ kind: 'ok', profile: row });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { kind: "not_found" } when no row matches the id — zero rows, not an error (US-027/AC-01)', async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await usersRepository.armMustChangePassword({ id: 'missing-id', updatedAt: UPDATED_AT });
+      expect(result).toEqual({ kind: 'not_found' });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on any repository error', async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        usersRepository.armMustChangePassword({ id: ROW_A.id, updatedAt: UPDATED_AT }),
+      ).rejects.toThrow(/must_change_password arming failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});

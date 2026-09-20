@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createUsersService } from './users.service.js';
+import { logger } from '../../infra/logger/index.js';
 import type {
   CancelledBookingRow,
   EmailLookupRow,
@@ -64,6 +65,9 @@ function stubRepository({ accountsByQuery, summaryRows }: StubOptions): {
       async activateAccount() {
         throw new Error('activateAccount not stubbed — this suite does not exercise activateAccount');
       },
+      async armMustChangePassword() {
+        throw new Error('armMustChangePassword not stubbed — this suite does not exercise activateAccount');
+      },
     },
   };
 }
@@ -79,13 +83,26 @@ function notStubbedUsersAuth(): UsersAuthAdapter {
     async updateEmail() {
       throw new Error('updateEmail not stubbed — this suite does not exercise it');
     },
+    async setPassword() {
+      throw new Error('setPassword not stubbed — this suite does not exercise it');
+    },
   };
 }
 
 const OFFICE_TIMEZONE = 'Asia/Kolkata';
 
-function service(repository: UsersRepository, usersAuth: UsersAuthAdapter = notStubbedUsersAuth()) {
-  return createUsersService({ users: repository, usersAuth, nowMs: () => NOW_MS, officeTimezone: OFFICE_TIMEZONE });
+/** US-027 test seam — a deterministic stub RNG for suites that don't exercise `resetPassword`,
+ *  so `createUsersService`'s required `randomInt` never needs a real CSPRNG in a test. */
+function notExercisedRandomInt(): number {
+  throw new Error('randomInt not stubbed — this suite does not exercise resetPassword');
+}
+
+function service(
+  repository: UsersRepository,
+  usersAuth: UsersAuthAdapter = notStubbedUsersAuth(),
+  randomInt: (maxExclusive: number) => number = notExercisedRandomInt,
+) {
+  return createUsersService({ users: repository, usersAuth, nowMs: () => NOW_MS, officeTimezone: OFFICE_TIMEZONE, randomInt });
 }
 
 function row(overrides: Partial<UserAccountRow> = {}): UserAccountRow {
@@ -281,6 +298,9 @@ function stubForCreate({
     async activateAccount() {
       throw new Error('activateAccount not stubbed — this suite does not exercise activateAccount');
     },
+    async armMustChangePassword() {
+      throw new Error('armMustChangePassword not stubbed — this suite does not exercise activateAccount');
+    },
   };
 
   const usersAuth: UsersAuthAdapter = {
@@ -293,6 +313,9 @@ function stubForCreate({
     },
     async updateEmail() {
       throw new Error('updateEmail not stubbed — this suite does not exercise updateAccount');
+    },
+    async setPassword() {
+      throw new Error('setPassword not stubbed — this suite does not exercise resetPassword');
     },
   };
 
@@ -340,6 +363,9 @@ describe('createUsersService.createAccount — duplicate email (US-021/AC-06)', 
       },
       async updateEmail() {
         throw new Error('updateEmail not stubbed — this suite does not exercise updateAccount');
+      },
+      async setPassword() {
+        throw new Error('setPassword not stubbed — this suite does not exercise resetPassword');
       },
     };
 
@@ -504,6 +530,9 @@ function stubForUpdate({
     async activateAccount() {
       throw new Error('not exercised by updateAccount tests');
     },
+    async armMustChangePassword() {
+      throw new Error('not exercised by updateAccount tests');
+    },
   };
 
   const usersAuth: UsersAuthAdapter = {
@@ -518,6 +547,9 @@ function stubForUpdate({
     async updateEmail(userId, email) {
       updateEmailCalls.push({ userId, email });
       return updateEmailResult;
+    },
+    async setPassword() {
+      throw new Error('setPassword not stubbed — this suite does not exercise resetPassword');
     },
   };
 
@@ -806,6 +838,9 @@ function stubForRoleChange(setRoleImpl?: (input: { id: string; role: 'employee' 
     async activateAccount() {
       throw new Error('not exercised by changeRole tests');
     },
+    async armMustChangePassword() {
+      throw new Error('not exercised by changeRole tests');
+    },
   };
 
   return { repository, setRoleCalls };
@@ -903,6 +938,9 @@ function stubForPreview(
     async activateAccount() {
       throw new Error('not exercised by previewDeactivation tests');
     },
+    async armMustChangePassword() {
+      throw new Error('not exercised by previewDeactivation tests');
+    },
   };
   return { repository, calls };
 }
@@ -980,6 +1018,9 @@ function stubForDeactivate(
     },
     async activateAccount() {
       throw new Error('not exercised by deactivateAccount tests');
+    },
+    async armMustChangePassword() {
+      throw new Error('not exercised by dearmMustChangePassword tests');
     },
   };
   return { repository, calls };
@@ -1126,6 +1167,9 @@ function stubForActivate(
       activateCalls.push(input);
       return (activateImpl ?? echoImpl)(input);
     },
+    async armMustChangePassword() {
+      throw new Error('not exercised by activateAccount tests');
+    },
   };
 
   return { repository, activateCalls };
@@ -1176,4 +1220,186 @@ describe('createUsersService.activateAccount (US-026/AC-01, AC-03, AC-04, AC-05,
 
     expect(Object.keys(activateCalls[0] ?? {})).toEqual(['id', 'updatedAt']);
   });
+});
+
+function stubForReset(options: {
+  armImpl?: (input: { id: string; updatedAt: Date }) => Promise<{ kind: 'ok'; profile: ProfileDetailsRow } | { kind: 'not_found' }>;
+  setPasswordImpl?: (userId: string, password: string) => Promise<{ kind: 'ok' } | { kind: 'unavailable' }>;
+} = {}) {
+  const armCalls: Array<{ id: string; updatedAt: Date }> = [];
+  const setPasswordCalls: Array<{ userId: string; password: string }> = [];
+
+  const echoArm = async (input: { id: string; updatedAt: Date }) => ({
+    kind: 'ok' as const,
+    profile: { ...currentRow(), id: input.id },
+  });
+  const okSetPassword = async () => ({ kind: 'ok' as const });
+
+  const repository: UsersRepository = {
+    async listAccounts() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async getSummaryCounts() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async findByEmail() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async insertProfile() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async findById() {
+      throw new Error('not exercised by resetPassword tests — D-06/F11 removed the pre-read');
+    },
+    async updateProfileDetails() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async setRole() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async previewDeactivation() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async deactivateAccount() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async activateAccount() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async armMustChangePassword(input) {
+      armCalls.push(input);
+      return (options.armImpl ?? echoArm)(input);
+    },
+  };
+
+  const usersAuth: UsersAuthAdapter = {
+    async createAccount() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async deleteAccount() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async updateEmail() {
+      throw new Error('not exercised by resetPassword tests');
+    },
+    async setPassword(userId, password) {
+      setPasswordCalls.push({ userId, password });
+      return (options.setPasswordImpl ?? okSetPassword)(userId, password);
+    },
+  };
+
+  return { repository, usersAuth, armCalls, setPasswordCalls };
+}
+
+/** A fixed-sequence stub, exactly like `generate-reset-password.spec.ts`'s own `sequence` helper
+ *  — deterministic, so a test can assert the EXACT generated password rather than only its shape. */
+function fixedRandomInt(...values: number[]): (maxExclusive: number) => number {
+  let i = 0;
+  return () => values[i++]!;
+}
+
+describe('createUsersService.resetPassword (US-027/AC-01, AC-06, AC-07, AC-08, AC-09, AC-10)', () => {
+  // Index 0 of each required alphabet, filler index 0 ten times, then an identity-permutation
+  // shuffle (same derivation as generate-reset-password.spec.ts's first test) — the generated
+  // password is deterministically "Aa0!AAAAAAAAAA".
+  const IDENTITY_SEQUENCE = [0, 0, 0, 0, ...Array(10).fill(0), 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+  const GENERATED_PASSWORD = 'Aa0!AAAAAAAAAA';
+
+  it("writes user_profiles FIRST (armMustChangePassword), Supabase Auth SECOND (setPassword) — D-06, ADR-012's order (US-027/AC-09)", async () => {
+    const { repository, usersAuth, armCalls, setPasswordCalls } = stubForReset();
+    const calls: string[] = [];
+    const armSpyRepo: UsersRepository = {
+      ...repository,
+      async armMustChangePassword(input) {
+        calls.push('arm');
+        return repository.armMustChangePassword(input);
+      },
+    };
+    const authSpy: UsersAuthAdapter = {
+      ...usersAuth,
+      async setPassword(userId, password) {
+        calls.push('setPassword');
+        return usersAuth.setPassword(userId, password);
+      },
+    };
+
+    const outcome = await service(armSpyRepo, authSpy, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword(UPDATE_INPUT.id);
+
+    expect(calls).toEqual(['arm', 'setPassword']);
+    expect(armCalls).toEqual([{ id: UPDATE_INPUT.id, updatedAt: new Date(NOW_MS) }]);
+    expect(setPasswordCalls).toEqual([{ userId: UPDATE_INPUT.id, password: GENERATED_PASSWORD }]);
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: true },
+      password: GENERATED_PASSWORD,
+    });
+  });
+
+  it('performs NO findById — the write to user_profiles is itself the existence check (design note §2.2, F11)', async () => {
+    const { repository, usersAuth } = stubForReset();
+    // stubForReset's own findById throws "not exercised" — reaching it would fail this test with
+    // that error rather than a normal assertion failure, which is the point.
+    await expect(
+      service(repository, usersAuth, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword(UPDATE_INPUT.id),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'ok' }));
+  });
+
+  it('returns not_found when armMustChangePassword reports zero matched rows, and NEVER calls setPassword (US-027/AC-01)', async () => {
+    const { repository, usersAuth, setPasswordCalls } = stubForReset({ armImpl: async () => ({ kind: 'not_found' }) });
+
+    const outcome = await service(repository, usersAuth, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword('missing-id');
+
+    expect(outcome).toEqual({ kind: 'not_found' });
+    expect(setPasswordCalls).toEqual([]);
+  });
+
+  it('a failure at the Auth write leaves the profile ARMED but resolves unavailable — no compensating un-arm (D-06 §2.4, US-027/AC-09)', async () => {
+    const { repository, usersAuth, armCalls } = stubForReset({ setPasswordImpl: async () => ({ kind: 'unavailable' }) });
+
+    const outcome = await service(repository, usersAuth, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword(UPDATE_INPUT.id);
+
+    expect(outcome).toEqual({ kind: 'unavailable' });
+    // Exactly one arm call — no second call attempting to un-arm it.
+    expect(armCalls).toHaveLength(1);
+  });
+
+  it('an already-must_change_password:true account (mid forced-change) is reset again with no branch — the newest password becomes the administrator-set one (US-027/AC-10)', async () => {
+    const { repository, usersAuth } = stubForReset({
+      armImpl: async (input) => ({ kind: 'ok', profile: { ...currentRow(), id: input.id } }),
+    });
+
+    const outcome = await service(repository, usersAuth, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword(UPDATE_INPUT.id);
+
+    expect(outcome).toEqual({
+      kind: 'ok',
+      account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: true },
+      password: GENERATED_PASSWORD,
+    });
+  });
+
+  it('never logs the generated password, on the happy path or the Auth-failure path (US-027/AC-08)', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+
+    const { repository: okRepo, usersAuth: okAuth } = stubForReset();
+    await service(okRepo, okAuth, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword(UPDATE_INPUT.id);
+
+    const { repository: failRepo, usersAuth: failAuth } = stubForReset({ setPasswordImpl: async () => ({ kind: 'unavailable' }) });
+    await service(failRepo, failAuth, fixedRandomInt(...IDENTITY_SEQUENCE)).resetPassword(UPDATE_INPUT.id);
+
+    const allCalls = [...errorSpy.mock.calls, ...warnSpy.mock.calls, ...infoSpy.mock.calls, ...debugSpy.mock.calls];
+    expect(JSON.stringify(allCalls)).not.toContain(GENERATED_PASSWORD);
+
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+    debugSpy.mockRestore();
+  });
+
+  // AC-08's "never emailed" half is structural rather than a spy: `UsersServiceDeps` (this
+  // file's own top-level interface) carries no notifications dependency at all — `resetPassword`
+  // has no reference to reach `modules/notifications` through, the same "proven by an absence"
+  // shape `createAccount`'s insertProfile-shape test already uses.
 });

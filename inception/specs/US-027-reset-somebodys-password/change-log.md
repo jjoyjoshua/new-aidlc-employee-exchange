@@ -1,0 +1,10 @@
+# US-027 — change log
+
+> The curated history of this spec: what changed and why, in the words of whoever changed it. Git holds every edit; this holds the ones that mattered. A Medium-tier change to an existing package appends a row here.
+
+| Date       | Change                                                              | Why                                                                                                   | Requirements affected |
+| ---------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-09-20 | Spec package created (`spec.md`, `impact-analysis.md`, `decisions.md`, `traceability.md`, `implementation-plan.md`) | US-027 tiered Complex (new write endpoint, credential/PII handling, `must_change_password` re-arm); human decided D-01 (no V-18 exclusion on reset) and D-02 (`Dialog.dismissible` prop) before the plan was written | FR-01 – FR-11 added   |
+| 2026-09-20 | Architect design note (`design-note.md`) and ADR-014 landed; `spec.md`, `impact-analysis.md`, `decisions.md` and `implementation-plan.md` all updated to incorporate its findings — most notably F1 (blocker): the write order in Step 5 is reversed (`user_profiles` first, Supabase Auth second, no `findById`), per D-06. Also fixed: the response schema's `password` field (F2), the generator's RNG injection (F3), a corrected citation in `generate-password.ts`'s docblock (F4), the AC-08 test's rigor (F6), an eslint config path citation (F7), and several minor/nit findings folded directly into the relevant steps. This is expected post-D1 activity per `ai/gates/delivery.md`'s own ordering (design note lands after `go`, before Step 1), not scope creep | D-06 added; FR-07/FR-09/FR-10 test coverage widened; no FR text changed |
+
+A plan edited after its Gate D1 approval **must** have a row here **dated on or after the approval date**. Check 16 compares the plan against the approved SHA and fails a silent change; an older row does not cover a newer edit.

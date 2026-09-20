@@ -1344,7 +1344,22 @@
         "AC-10",
         "AC-11"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/domain/generate-reset-password.spec.ts",
+        "apps/api/src/modules/users/users.adapter.spec.ts",
+        "apps/api/src/modules/users/users.repository.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts",
+        "libs/contracts/src/users.spec.ts",
+        "apps/ui/src/components/dialog/Dialog.spec.tsx",
+        "apps/ui/src/lib/reset-password.spec.ts",
+        "apps/ui/src/screens/people/copy.spec.ts",
+        "apps/ui/src/screens/people/use-reset-password-dialog.spec.ts",
+        "apps/ui/src/screens/people/ResetPasswordDialog.spec.tsx",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx",
+        "apps/ui/src/screens/people/AccountRow.spec.tsx",
+        "apps/ui/src/screens/people/People.spec.tsx"
+      ],
       "screens": [
         "SCR-008"
       ]

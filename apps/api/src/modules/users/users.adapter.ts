@@ -31,6 +31,9 @@ export type UpdateAuthEmailOutcome =
   | { kind: 'duplicate' }
   | { kind: 'unavailable' };
 
+/** No `duplicate` branch — a password cannot collide the way an email address can. */
+export type UpdateAuthPasswordOutcome = { kind: 'ok' } | { kind: 'unavailable' };
+
 export interface UsersAuthAdapter {
   createAccount(email: string, password: string): Promise<CreateAuthAccountOutcome>;
   /**
@@ -57,6 +60,22 @@ export interface UsersAuthAdapter {
    * US-023's own QA notes name (ADR-012 §Decision item 3).
    */
   updateEmail(userId: string, email: string): Promise<UpdateAuthEmailOutcome>;
+  /**
+   * US-027/AC-01, AC-06. `updateUserById(userId, { password })` — ONE attribute, no
+   * `email_confirm`, no other key — named `setPassword` rather than `updateAccount` for
+   * `updateEmail`'s own stated reason: a diff adding an `email` key to it is visibly wrong.
+   *
+   * **This duplicates `auth.adapter.ts:110-136`'s `setPassword` exactly** — required, not
+   * sloppy: `modules/users` cannot import `modules/auth` (`eslint.config.mjs`'s `MAY_IMPORT.users
+   * = ['notifications']`, enforced at the repository root). The two must be kept in lockstep by
+   * hand; this one mirrors that one's `catch`-to-`unavailable` shape and its exact log line —
+   * `{ userId, message: error.message }`, never the password, never the whole options object
+   * (design note §4.1, §3.1 — AC-08's blast radius).
+   *
+   * The caller (`users.service.ts`) writes `user_profiles` FIRST and calls this SECOND (D-06,
+   * ADR-012's order) — a failure here leaves the account's existing password untouched.
+   */
+  setPassword(userId: string, password: string): Promise<UpdateAuthPasswordOutcome>;
 }
 
 export const usersAuthAdapter: UsersAuthAdapter = {
@@ -127,6 +146,28 @@ export const usersAuthAdapter: UsersAuthAdapter = {
       return { kind: 'ok' };
     } catch (thrown) {
       logger.error('supabase auth threw while updating an account email', {
+        userId,
+        message: thrown instanceof Error ? thrown.message : String(thrown),
+      });
+      return { kind: 'unavailable' };
+    }
+  },
+
+  async setPassword(userId, password) {
+    try {
+      // ONE attribute — the interface docblock's own rule, mirrored from `updateEmail`. The
+      // password is passed as a VALUE to this one call and to nothing else; it is never
+      // interpolated into a template literal anywhere in this function (AC-08).
+      const { error } = await supabase().auth.admin.updateUserById(userId, { password });
+
+      if (error) {
+        logger.error('failed to set an account password', { userId, message: error.message });
+        return { kind: 'unavailable' };
+      }
+
+      return { kind: 'ok' };
+    } catch (thrown) {
+      logger.error('supabase auth threw while setting an account password', {
         userId,
         message: thrown instanceof Error ? thrown.message : String(thrown),
       });

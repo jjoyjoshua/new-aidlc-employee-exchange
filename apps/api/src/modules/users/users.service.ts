@@ -17,6 +17,7 @@ import type { UsersAuthAdapter } from './users.adapter.js';
 import { logger } from '../../infra/logger/index.js';
 import { officeToday } from '../../domain/booking-window.js';
 import { displayStatusPredicate } from '../../domain/booking-history.js';
+import { generateResetPassword } from '../../domain/generate-reset-password.js';
 
 export interface UsersServiceDeps {
   users: UsersRepository;
@@ -27,6 +28,10 @@ export interface UsersServiceDeps {
   /** US-025's first use — `deactivateAccount` computes the office's "today" the same way
    *  `desksService`/`adminBookingsService` already do (design note §3.2, C9). */
   officeTimezone: string;
+  /** US-027 — the ONE crypto-backed source `resetPassword` threads into the pure
+   *  `generateResetPassword` (design note §5.1): `domain/` is declared pure and a CSPRNG is the
+   *  same nondeterminism `Date.now`/`nowMs` is banned from reading directly. */
+  randomInt: (maxExclusive: number) => number;
 }
 
 export interface CreateAccountInput {
@@ -76,6 +81,17 @@ export type DeactivateAccountOutcome =
  * a `blocked` branch to report.
  */
 export type ActivateAccountOutcome = { kind: 'ok'; account: AdminUser } | { kind: 'not_found' };
+
+/**
+ * US-027/AC-01, AC-06, AC-07, AC-08, AC-09, AC-10. `unavailable` covers both a Supabase Auth
+ * outage AND a genuine per-account failure at that write — the router maps both to
+ * `503 service_unavailable`, the same split `updateAccount`'s `unavailable` already takes for
+ * the sibling cross-system write. No `duplicate` kind: a password cannot collide.
+ */
+export type ResetPasswordOutcome =
+  | { kind: 'ok'; account: AdminUser; password: string }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable' };
 
 export type UpdateAccountOutcome =
   | { kind: 'ok'; account: AdminUser }
@@ -139,7 +155,7 @@ function tallySummary(rows: UserSummaryRow[]): AdminSummary {
   return { total, employees, admins, deactivated };
 }
 
-export function createUsersService({ users, usersAuth, nowMs, officeTimezone }: UsersServiceDeps) {
+export function createUsersService({ users, usersAuth, nowMs, officeTimezone, randomInt }: UsersServiceDeps) {
   return {
     /**
      * US-020/AC-01, AC-02, AC-04, AC-06. `listAccounts` (filtered by `q` when present) and
@@ -393,6 +409,43 @@ export function createUsersService({ users, usersAuth, nowMs, officeTimezone }: 
       const result = await users.activateAccount({ id, updatedAt: new Date(nowMs()) });
       if (result.kind !== 'ok') return result;
       return { kind: 'ok', account: mapAccount(result.profile) };
+    },
+
+    /**
+     * US-027/AC-01, AC-06, AC-07, AC-08, AC-09, AC-10. Two systems, one write each, in D-06's
+     * order — `user_profiles` FIRST, Supabase Auth SECOND — the REVERSE of `createAccount`'s
+     * order and the SAME as `updateAccount`'s, for `updateAccount`'s own reason restated: the
+     * foreign key that forces Auth-first on an insert constrains nothing here, and the reverse
+     * order can leave an account holding a credential NOBODY has seen if the profile write then
+     * failed (design note §2.1, ADR-012).
+     *
+     * No `findById`: `armMustChangePassword` IS the existence check, `not_found` short-circuits
+     * before a password is ever generated or a Supabase Auth call is ever made (design note §2.2,
+     * §2.3).
+     *
+     * The plaintext exists in exactly one place — the local `password` binding — and leaves this
+     * function in exactly one direction: the returned `ok` outcome. It is never passed to
+     * `logger`, never interpolated into a template literal, and never written to any column
+     * other than through `usersAuth.setPassword` (AC-08, RISK-005).
+     *
+     * No compensating un-arm on an Auth failure (D-06, design note §2.4): the account's password
+     * is untouched, so the only residual is that `must_change_password` stays armed on an account
+     * whose credential did not change — which is what BR-001.17 already asks of a person on this
+     * flag, not a divergence to repair the way `updateAccount`'s email restore closes one.
+     */
+    async resetPassword(id: string): Promise<ResetPasswordOutcome> {
+      const armed = await users.armMustChangePassword({ id, updatedAt: new Date(nowMs()) });
+      if (armed.kind === 'not_found') return { kind: 'not_found' };
+
+      const password = generateResetPassword(randomInt);
+
+      const auth = await usersAuth.setPassword(id, password);
+      if (auth.kind !== 'ok') {
+        logger.error('password reset failed at the auth write; the credential was NOT changed', { id });
+        return { kind: 'unavailable' };
+      }
+
+      return { kind: 'ok', account: mapAccount(armed.profile), password };
     },
   };
 }

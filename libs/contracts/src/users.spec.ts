@@ -7,6 +7,7 @@ import {
   createAccountRequestSchema,
   deactivationPreviewSchema,
   emailTakenDetailsSchema,
+  resetPasswordResponseSchema,
   roleChangeRequestSchema,
   userIdParamsSchema,
   userUpdateSchema,
@@ -342,5 +343,29 @@ describe('emailTakenDetailsSchema (US-021/AC-06, ADR-009 §2 second application)
 
   it('rejects an unknown field (.strict())', () => {
     expect(emailTakenDetailsSchema.safeParse({ fullName: 'Dana Silva', isActive: true, id: 'x' }).success).toBe(false);
+  });
+});
+
+describe('resetPasswordResponseSchema (US-027/AC-01, AC-03 — POST /api/admin/users/:id/reset-password 200 body)', () => {
+  it('accepts an account plus a non-empty password (US-027/AC-01)', () => {
+    expect(resetPasswordResponseSchema.safeParse({ account: VALID_USER, password: 'q4Lm1I0oTz8v' }).success).toBe(true);
+  });
+
+  it('rejects an empty password string (design note §6)', () => {
+    expect(resetPasswordResponseSchema.safeParse({ account: VALID_USER, password: '' }).success).toBe(false);
+  });
+
+  it('does NOT run newPasswordSchema/V-12 against the password — display only, never re-adjudicated (design note §6, F2)', () => {
+    // A value V-12 itself would reject (no upper, no digit, no special, under 8 chars) still
+    // parses here: this schema's job is to carry what the server already set, not police it.
+    expect(resetPasswordResponseSchema.safeParse({ account: VALID_USER, password: 'x' }).success).toBe(true);
+  });
+
+  it('rejects a missing account (US-027/AC-01)', () => {
+    expect(resetPasswordResponseSchema.safeParse({ password: 'q4Lm1I0oTz8v' }).success).toBe(false);
+  });
+
+  it('is not `.strict()` — additive-safe like every other response in this package', () => {
+    expect(resetPasswordResponseSchema.safeParse({ account: VALID_USER, password: 'q4Lm1I0oTz8v', extra: true }).success).toBe(true);
   });
 });

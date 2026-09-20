@@ -25,6 +25,14 @@
  * this component rather than through it. If a second screen ever needs a menu, extracting a
  * shared one is that story's call (`components/README.md:6`'s two-real-consumers bar), not a prop
  * added to `Dialog`.
+ *
+ * **US-027 admits `dismissible`, the first prop since the paragraph above.** It is not the same
+ * kind of prop as `scrim`/`anchor`/`modal`: those were refused because they would import a
+ * DIFFERENT WIDGET's vocabulary into this one (a menu's anchored, non-modal, trap-free shape).
+ * `dismissible` instead turns off chrome this component already owns outright — the header's
+ * close icon and Escape-suppression are both in its own "Owns" list two paragraphs up. A prop
+ * that mutes an owned affordance is not a prop that changes what kind of thing this is (design
+ * note §7.2).
  */
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 import closeIconMarkup from '../../assets/icon-close.svg?raw';
@@ -49,12 +57,29 @@ export interface DialogProps {
   footer: ReactNode;
   /** Escape and the close icon are suppressed while true. */
   busy?: boolean;
+  /** US-027/AC-04. When `false`, the close icon is not rendered at all (not merely disabled) and
+   *  Escape is suppressed regardless of `busy` — for a result the caller must not let the person
+   *  lose by accident (SCR-008 ST-11: "no ✕ in its header", design note §7.1/§7.3). Defaults
+   *  `true` — every existing caller's behaviour is unchanged. `onDismiss` stays required even
+   *  when `false`: the caller's own footer button (e.g. **Done**) still calls it directly; this
+   *  component simply never calls it itself while `dismissible` is `false`. */
+  dismissible?: boolean;
   /** Focused on open. Omitted -> the dialog itself, `ConfirmDialog`'s existing behaviour. */
   initialFocusRef?: RefObject<HTMLElement | null>;
   onDismiss: () => void;
 }
 
-export function Dialog({ title, role = 'dialog', icon, children, footer, busy = false, initialFocusRef, onDismiss }: DialogProps) {
+export function Dialog({
+  title,
+  role = 'dialog',
+  icon,
+  children,
+  footer,
+  busy = false,
+  dismissible = true,
+  initialFocusRef,
+  onDismiss,
+}: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   // The element that had focus before this dialog opened — captured once, on mount, before focus
@@ -73,7 +98,10 @@ export function Dialog({ title, role = 'dialog', icon, children, footer, busy = 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (!busy) onDismiss();
+        // `dismissible` is checked FIRST: a result the caller marked non-dismissible stays that
+        // way regardless of `busy` (design note §7.3) — the two flags are independent, and this
+        // combination (dismissible=false, busy=false) is exactly what ST-11 ships.
+        if (dismissible && !busy) onDismiss();
         return;
       }
 
@@ -99,7 +127,7 @@ export function Dialog({ title, role = 'dialog', icon, children, footer, busy = 
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [busy, onDismiss]);
+  }, [busy, dismissible, onDismiss]);
 
   return (
     <div className="dialog__overlay">
@@ -113,16 +141,15 @@ export function Dialog({ title, role = 'dialog', icon, children, footer, busy = 
           <h2 id={titleId} className="dialog__title">
             {title}
           </h2>
-          {/* Figma `Icon / close` (node 11:50) — "Dismiss a dialog". */}
-          <button
-            type="button"
-            className="dialog__close"
-            aria-label="Dismiss"
-            onClick={onDismiss}
-            disabled={busy}
-          >
-            <span className="dialog__close-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: closeIconMarkup }} />
-          </button>
+          {/* Figma `Icon / close` (node 11:50) — "Dismiss a dialog". Omitted entirely, not
+             merely disabled, when `dismissible` is false (US-027/AC-04, design note §7.1): a
+             disabled-but-visible icon still looks like a dismiss control the person cannot use
+             yet, where ST-11 needs one that was never offered. */}
+          {dismissible ? (
+            <button type="button" className="dialog__close" aria-label="Dismiss" onClick={onDismiss} disabled={busy}>
+              <span className="dialog__close-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: closeIconMarkup }} />
+            </button>
+          ) : null}
         </div>
         <div className="dialog__body">{children}</div>
         <div className="dialog__footer">{footer}</div>

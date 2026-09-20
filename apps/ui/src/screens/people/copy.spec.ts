@@ -13,7 +13,6 @@ import {
   DEACTIVATE_LAST_ACTIVE_ADMIN_REFUSAL_BODY,
   deactivatedToast,
   deactivateFailedAlert,
-  disabledMenuItemReason,
   editPersonTitle,
   emailTakenMessage,
   LAST_ACTIVE_ADMIN_REFUSAL_BODY,
@@ -27,6 +26,11 @@ import {
   roleActionLabel,
   rowMenuTriggerLabel,
   summaryLine,
+  resetPasswordConfirmTitle,
+  RESET_PASSWORD_CONFIRM_BODY,
+  resetPasswordFailedAlert,
+  resetPasswordResultTitle,
+  resetPasswordResultBody,
 } from './copy.js';
 
 const SUMMARY: AdminSummary = { total: 38, employees: 36, admins: 2, deactivated: 1 };
@@ -54,13 +58,6 @@ describe('matchLine (US-020/AC-05)', () => {
 describe('noMatchMessage (US-020/AC-07)', () => {
   it('names the retained term (US-020/AC-07)', () => {
     expect(noMatchMessage('danna')).toBe('Nobody matches "danna".');
-  });
-});
-
-describe('disabledMenuItemReason (US-020/AC-10, ADR-010)', () => {
-  it('names no story id and promises no release date (US-020/AC-10)', () => {
-    expect(disabledMenuItemReason).toBe('Not available yet — coming in a later release.');
-    expect(disabledMenuItemReason).not.toMatch(/US-0\d\d/);
   });
 });
 
@@ -245,5 +242,60 @@ describe('activateFailedAlert (US-026/AC-07)', () => {
 describe('reactivatedToast (US-026/AC-06)', () => {
   it('states the effect — they can sign in again', () => {
     expect(reactivatedToast('Dana Silva')).toBe('Dana Silva can sign in again.');
+  });
+});
+
+describe('resetPasswordConfirmTitle (US-027/AC-02, ST-10)', () => {
+  it('names the account in the question (US-027/AC-02)', () => {
+    expect(resetPasswordConfirmTitle('Dana Silva')).toBe("Reset Dana Silva's password?");
+  });
+});
+
+describe('RESET_PASSWORD_CONFIRM_BODY (US-027/AC-02, ST-10)', () => {
+  it('states all four clauses IN ORDER: generated+shown-once, not emailed, stops working immediately, forced choice at next sign-in (US-027/AC-02)', () => {
+    const body = RESET_PASSWORD_CONFIRM_BODY;
+    const shownOnceIndex = body.indexOf('show it to you once');
+    const notEmailedIndex = body.indexOf("isn't emailed");
+    const stopsWorkingIndex = body.indexOf('stops working straight away');
+    const forcedChoiceIndex = body.indexOf('choose their own the first time they sign in');
+
+    expect(shownOnceIndex).toBeGreaterThanOrEqual(0);
+    expect(notEmailedIndex).toBeGreaterThan(shownOnceIndex);
+    expect(stopsWorkingIndex).toBeGreaterThan(notEmailedIndex);
+    expect(forcedChoiceIndex).toBeGreaterThan(stopsWorkingIndex);
+  });
+});
+
+describe('resetPasswordFailedAlert (US-027/AC-09, ST-13)', () => {
+  it('names the person and states nothing changed, matching deactivateFailedAlert\'s own shape', () => {
+    expect(resetPasswordFailedAlert('Dana Silva')).toBe("We couldn't reset Dana Silva's password just now. Nothing has changed. Try again.");
+  });
+});
+
+describe('resetPasswordResultTitle (US-027/AC-03, ST-11)', () => {
+  it('names the account, not a generic heading', () => {
+    expect(resetPasswordResultTitle('Dana Silva')).toBe("Dana Silva's new password");
+  });
+});
+
+describe('resetPasswordResultBody (US-027/AC-03, AC-04, AC-05, ST-11)', () => {
+  it('states the shown-once warning and copy instruction FIRST, the forced-change consequence LAST', () => {
+    const body = resetPasswordResultBody('Dana Silva');
+    const shownOnceIndex = body.indexOf('only time');
+    const copyNowIndex = body.indexOf('Copy it now');
+    const neverAgainIndex = body.indexOf("can't show it again");
+    const notEmailedIndex = body.indexOf("isn't in any email");
+    const forcedChoiceIndex = body.indexOf('choose their own password');
+
+    expect(shownOnceIndex).toBeGreaterThanOrEqual(0);
+    expect(copyNowIndex).toBeGreaterThan(shownOnceIndex);
+    expect(neverAgainIndex).toBeGreaterThan(copyNowIndex);
+    expect(notEmailedIndex).toBeGreaterThan(copyNowIndex);
+    expect(forcedChoiceIndex).toBeGreaterThan(neverAgainIndex);
+    expect(forcedChoiceIndex).toBeGreaterThan(notEmailedIndex);
+  });
+
+  it('names the account being handed the credential', () => {
+    expect(resetPasswordResultBody('Dana Silva')).toContain('Dana Silva directly');
   });
 });

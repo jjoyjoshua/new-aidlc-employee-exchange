@@ -424,3 +424,33 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* ---- ST-11's credential field (US-027/AC-03) -------------------------------------------------
+ *
+ * `Credential field` — used on this screen only (SCR-008-people.md:219), so it lives here rather
+ * than in `components/`, the same one-consumer rule `AccountRowMenu` was built under.
+ */
+.reset-password__credential {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  padding: var(--s-16);
+  margin-top: var(--s-12);
+  background: var(--c-fill-subtle);
+  border: var(--bw-1) solid var(--c-border-strong);
+  border-radius: var(--r-md);
+}
+
+/* Monospaced, read-aloud-legible (SCR-008-people.md:228, :281-282): `--t-mono` is already the
+ * largest size in the ramp, so no new token was needed to make this the credential's own moment. */
+.reset-password__credential-value {
+  flex: 1 0 0;
+  min-width: 0;
+  font-family: var(--f-mono);
+  font-size: var(--t-mono);
+  line-height: var(--lh-mono);
+  color: var(--c-text-on-fill);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
