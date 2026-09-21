@@ -17,6 +17,7 @@ export * from './availability.js';
 export * from './bookings.js';
 export * from './desks.js';
 export * from './users.js';
+export * from './notifications.js';
 
 /**
  * Zod is re-exported **through** this package on purpose.

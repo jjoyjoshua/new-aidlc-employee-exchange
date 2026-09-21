@@ -25,6 +25,7 @@ import { createAdminBookingsService } from './modules/bookings/admin-bookings.se
 import { desksRepository, type DesksRepository } from './modules/desks/desks.repository.js';
 import { createDesksService } from './modules/desks/desks.service.js';
 import { notificationsService, type NotificationsService } from './modules/notifications/notifications.service.js';
+import { createNotificationsRouter } from './modules/notifications/notifications.router.js';
 import { remindersRepository, type RemindersRepository } from './modules/reminders/reminders.repository.js';
 import { createRemindersService } from './modules/reminders/reminders.service.js';
 import { createRemindersRouter } from './modules/reminders/reminders.router.js';
@@ -82,7 +83,10 @@ export interface BuildAppOptions {
    *  `MAIL_*` config through `infra/mailer`. Every existing route test builds a `Config` fixture
    *  with no mail keys, so a test that does not need to exercise mail behaviour must not hit the
    *  real singleton (US-028/D-04). One seam for every router (US-029/D-01) — not one per caller. */
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'>;
+  notifications?: Pick<
+    NotificationsService,
+    'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+  >;
   /** US-030 test seam — overrides the real cross-employee `bookings` read the reminder run uses. */
   reminders?: RemindersRepository;
 }
@@ -166,6 +170,7 @@ export function buildApp(options: BuildAppOptions = {}): Express {
       notifications: options.notifications ?? notificationsService,
     }),
     remindersRouter: createRemindersRouter({ service: remindersService }),
+    notificationsRouter: createNotificationsRouter({ service: options.notifications ?? notificationsService }),
     requireSession: session,
   });
 }

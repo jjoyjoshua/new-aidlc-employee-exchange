@@ -26,6 +26,9 @@ export interface AppDeps {
   bookingsRouter: Router;
   /** US-030. Guarded by `requireReminderSecret`, never `requireSession` — no user triggers it. */
   remindersRouter: Router;
+  /** US-031. `notifications`'s first router — mounted behind `requireSession` at the mount
+   *  point, the same shape as `bookingsRouter` below. */
+  notificationsRouter: Router;
   requireSession: RequestHandler;
 }
 
@@ -85,6 +88,12 @@ export function createApp(deps: AppDeps): Express {
   // enforced `session` instance, not the password-change-exempt one — a user with
   // `must_change_password` set must not browse availability.
   app.use('/api/bookings', deps.requireSession, deps.bookingsRouter);
+
+  // US-031. Mount-level guard, same reasoning as `/api/bookings` above: every future
+  // `notifications` route (US-032's, should it ever need one) inherits it before it is
+  // written. No account id ever appears in a path or body under this mount (AC-10) — the
+  // account is always `req.user.id`, which this guard is what attaches.
+  app.use('/api/notifications', deps.requireSession, deps.notificationsRouter);
 
   // US-030. Guarded by a shared secret, never `requireSession` — `app-architecture.md` §4.3 is
   // explicit that no user triggers this route. Mount-level, same reasoning as `/api/admin` above.

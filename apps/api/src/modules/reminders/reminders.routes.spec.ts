@@ -28,11 +28,26 @@ beforeEach(() => {
   } as unknown as Config);
 });
 
+/** None of this file's tests exercise the push-opt-in seam; every fixture below shares this
+ *  stub set so `BuildAppOptions.notifications`'s one shared seam type still typechecks. */
+const NOT_STUBBED_PUSH = {
+  async getPushSettings(): Promise<never> {
+    throw new Error('getPushSettings not stubbed — this file exercises /api/internal/reminders only');
+  },
+  async optIntoPush(): Promise<never> {
+    throw new Error('optIntoPush not stubbed — this file exercises /api/internal/reminders only');
+  },
+  async optOutOfPush(): Promise<never> {
+    throw new Error('optOutOfPush not stubbed — this file exercises /api/internal/reminders only');
+  },
+};
+
 function throwingNotifications(): Pick<
   NotificationsService,
-  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
 > {
   return {
+    ...NOT_STUBBED_PUSH,
     async sendBookingConfirmation() {
       throw new Error('not exercised — this file exercises /api/internal/reminders only');
     },
@@ -47,11 +62,15 @@ function throwingNotifications(): Pick<
 
 function recordingNotifications(
   result: RecordAndSendResult = { ok: true, recorded: true },
-): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'> & {
+): Pick<
+  NotificationsService,
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+> & {
   calls: string[];
 } {
   const calls: string[] = [];
   return {
+    ...NOT_STUBBED_PUSH,
     calls,
     async sendBookingConfirmation() {
       throw new Error('not exercised');
@@ -76,7 +95,10 @@ function rowsFor(rows: ReminderCandidateRow[]): RemindersRepository {
 
 function appWith(options: {
   reminders?: RemindersRepository;
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'>;
+  notifications?: Pick<
+    NotificationsService,
+    'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+  >;
 }) {
   return buildApp({
     profiles: { async findById() { return undefined; }, async stampLastSeen() {}, async clearMustChangePassword() {} },

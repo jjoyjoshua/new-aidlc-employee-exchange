@@ -34,6 +34,16 @@ export type ClaimReminderOutcome = { claimed: true; id: string } | { claimed: fa
 
 const REMINDER_INDEX_NAME = 'notification_deliveries_one_sent_reminder_per_booking';
 
+/** What `upsertPushSubscription` writes (US-031/FR-03). `userAgent` is operator diagnosis only
+ *  (`db-design.md:177`) — the caller truncates it from the request header, never the body. */
+export interface PushSubscriptionRow {
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userAgent: string | undefined;
+}
+
 export interface NotificationsRepository {
   insertDelivery(row: DeliveryRow): Promise<void>;
   /** US-030/D-02. "Write first, then explain" — the SAME discipline `cancelOwnedBooking`/
@@ -43,6 +53,23 @@ export interface NotificationsRepository {
   /** US-030/AC-10. Demotes an already-claimed row after the transport itself reports failure —
    *  the claim already committed, so this is an UPDATE, never a second insert. */
   markDeliveryFailed(id: string, errorDetail: string): Promise<void>;
+
+  /** US-031/FR-01. The one column of `user_profiles` this module reads (design note §4.6) —
+   *  an explicit column list, never `select('*')`, so ADR-004's cross-module `SELECT`
+   *  allowance stays visibly narrow. */
+  getPushOptIn(userId: string): Promise<boolean>;
+  /** US-031/FR-03, FR-04. The one column of `user_profiles` this module WRITES — the ADR-004
+   *  exception `app-architecture.md:89` grants in writing (design note §4.6). Returns the
+   *  value the database actually holds after the write, never the value the caller asked for
+   *  (US-031/AC-07 — the toggle is set only from what the server confirms). */
+  setPushOptIn(userId: string, value: boolean): Promise<boolean>;
+  /** US-031/FR-02, FR-03. Upserts on `endpoint` — the same browser re-subscribing updates its
+   *  row rather than duplicating it (db-design.md:263). Called BEFORE `setPushOptIn(true)`
+   *  (design note §4.2) — never the reverse. */
+  upsertPushSubscription(row: PushSubscriptionRow): Promise<void>;
+  /** US-031/FR-04. ALL of the account's subscriptions, not just one browser's — AC-03 is
+   *  unqualified (design note §4.3). Called AFTER `setPushOptIn(false)`, never before. */
+  deletePushSubscriptions(userId: string): Promise<void>;
 }
 
 export const notificationsRepository: NotificationsRepository = {
@@ -90,5 +117,45 @@ export const notificationsRepository: NotificationsRepository = {
       .eq('id', id);
 
     if (error) throw new Error(`reminder delivery demotion could not be recorded: ${error.message}`);
+  },
+
+  async getPushOptIn(userId) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .select('push_opt_in')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw new Error(`push opt-in read failed: ${error.message}`);
+    return (data as { push_opt_in: boolean }).push_opt_in;
+  },
+
+  async setPushOptIn(userId, value) {
+    const { data, error } = await supabase()
+      .from('user_profiles')
+      .update({ push_opt_in: value })
+      .eq('id', userId)
+      .select('push_opt_in')
+      .single();
+
+    if (error) throw new Error(`push opt-in write failed: ${error.message}`);
+    return (data as { push_opt_in: boolean }).push_opt_in;
+  },
+
+  async upsertPushSubscription({ userId, endpoint, p256dh, auth, userAgent }) {
+    const { error } = await supabase()
+      .from('push_subscriptions')
+      .upsert(
+        { user_id: userId, endpoint, p256dh, auth, user_agent: userAgent ?? null },
+        { onConflict: 'endpoint' },
+      );
+
+    if (error) throw new Error(`push subscription upsert failed: ${error.message}`);
+  },
+
+  async deletePushSubscriptions(userId) {
+    const { error } = await supabase().from('push_subscriptions').delete().eq('user_id', userId);
+
+    if (error) throw new Error(`push subscription delete failed: ${error.message}`);
   },
 };

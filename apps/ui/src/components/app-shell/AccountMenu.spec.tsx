@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { AccountMenu } from './AccountMenu.js';
 import { AuthProvider, useAuth, type AuthContextValue } from '../../lib/auth/auth-context.js';
@@ -20,6 +21,14 @@ const EMPLOYEE: AuthenticatedUser = {
   mustChangePassword: false,
 };
 
+const ADMIN: AuthenticatedUser = {
+  id: '9c858901-8a57-4791-81fe-4c455b099bc9',
+  email: 'admin@company.com',
+  fullName: 'Alex Admin',
+  role: 'admin',
+  mustChangePassword: false,
+};
+
 /** Signs in through the real provider — see AppShell.spec.tsx's `SignedIn` for why. */
 function Primer({ children }: { children: ReactNode }) {
   const auth: AuthContextValue = useAuth();
@@ -32,27 +41,31 @@ function Primer({ children }: { children: ReactNode }) {
   return ready ? <>{children}</> : null;
 }
 
-function renderMenu() {
+function renderMenu(initialEntries: string[] = ['/bookings'], user: AuthenticatedUser = EMPLOYEE) {
   const requestNoContent = vi.fn(async () => ({ kind: 'ok' as const, data: undefined }));
   const client = {
     request: async () => ({
       kind: 'ok' as const,
-      data: { session: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 }, user: EMPLOYEE },
+      data: { session: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 }, user },
     }),
     requestNoContent,
   };
 
   render(
-    <AuthProvider
-      client={client as never}
-      onSession={() => undefined}
-      onSignOut={() => undefined}
-      getStoredSession={async () => undefined}
-    >
-      <Primer>
-        <AccountMenu />
-      </Primer>
-    </AuthProvider>,
+    <MemoryRouter initialEntries={initialEntries}>
+      <AuthProvider
+        client={client as never}
+        onSession={() => undefined}
+        onSignOut={() => undefined}
+        getStoredSession={async () => undefined}
+      >
+        <Primer>
+          <Routes>
+            <Route path="*" element={<AccountMenu />} />
+          </Routes>
+        </Primer>
+      </AuthProvider>
+    </MemoryRouter>,
   );
 
   return { requestNoContent };
@@ -81,5 +94,48 @@ describe('AccountMenu (US-002/AC-01, D-06)', () => {
     await waitFor(() =>
       expect(requestNoContent).toHaveBeenCalledWith('/api/auth/sign-out', { method: 'POST' }),
     );
+  });
+});
+
+/**
+ * US-031. SCR-004's own structural decision: a screen reached from the account menu needs its
+ * own shell state, because leaving Bookings lit would claim the wrong page.
+ */
+describe('AccountMenu — the Settings link (US-031)', () => {
+  it('links to /settings', async () => {
+    renderMenu();
+
+    const settingsLink = await screen.findByRole('link', { name: 'Settings' });
+    expect(settingsLink).toHaveAttribute('href', '/settings');
+  });
+
+  it('is not marked current when on another page', async () => {
+    renderMenu(['/bookings']);
+
+    const settingsLink = await screen.findByRole('link', { name: 'Settings' });
+    expect(settingsLink).not.toHaveAttribute('aria-current');
+  });
+
+  it('is marked current — the SAME cue the main nav uses — when on /settings', async () => {
+    renderMenu(['/settings']);
+
+    const settingsLink = await screen.findByRole('link', { name: 'Settings' });
+    expect(settingsLink).toHaveAttribute('aria-current', 'page');
+    expect(settingsLink).toHaveClass('app-shell__link');
+  });
+
+  it('reaches Settings by keyboard, between Sign out and the account row', async () => {
+    renderMenu();
+
+    const settingsLink = await screen.findByRole('link', { name: 'Settings' });
+    settingsLink.focus();
+    expect(settingsLink).toHaveFocus();
+  });
+
+  it('is absent for an Admin — SCR-004 open question 2: push is employee-only, so there is nothing to configure', async () => {
+    renderMenu(['/admin/bookings'], ADMIN);
+
+    await screen.findByText('Alex Admin');
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
   });
 });

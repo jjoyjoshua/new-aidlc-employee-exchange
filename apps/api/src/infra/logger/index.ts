@@ -2,8 +2,9 @@
  * Structured JSON logging, one line per event (app-architecture.md §5.5).
  *
  * The redaction below is a constraint, not a habit: a password, a token, the service-role
- * key or a push subscription's keys must never reach a log line. RISK-005 specifically
- * requires administrator-set passwords to stay out of persistent logs.
+ * key, or a push subscription's keys or endpoint must never reach a log line. RISK-005
+ * specifically requires administrator-set passwords to stay out of persistent logs; US-031
+ * design note §4.5 makes the same case for a push endpoint, which is a capability URL.
  *
  * `console.log` is banned in server code by the lint config for exactly this reason — it is
  * the path by which a whole request body, secrets included, ends up in a log aggregator.
@@ -26,6 +27,10 @@ const REDACT = [
   'keys',
   'auth',
   'p256dh',
+  // US-031 design note §4.5. A push subscription's endpoint is a capability URL — anyone
+  // holding it can push a notification to that browser — so it is redacted the same as the
+  // subscription's keys, not treated as an ordinary address.
+  'endpoint',
 ];
 
 const shouldRedact = (key: string) => REDACT.includes(key.toLowerCase().replace(/[-_]/g, ''));

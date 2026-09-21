@@ -46,6 +46,14 @@
   white-space: nowrap;
 }
 
+/* US-031. `.app-shell__link` (imported from `app-shell.css`) gives the active-indicator bar,
+   the medium-weight label and the fill-subtle pill — the same three cues the main nav uses.
+   This modifier only adds what the account-menu context needs beyond that: full width, so the
+   row matches Sign out's own footprint below it. */
+.account-menu__settings-link {
+  width: 100%;
+}
+
 .account-menu__item {
   font-family: var(--f-body);
   font-size: var(--t-body-sm);

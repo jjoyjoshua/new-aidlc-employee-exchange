@@ -331,6 +331,21 @@ Nulling it on reactivation would erase that history for no requirement that asks
 `POST /users/:id/role` already takes, for the identical reason: no column exists to attribute to
 (`decisions.md` D-03, design note §5).
 
+## `push_opt_in` — the one column this module does NOT write (US-031)
+
+**`user_profiles.push_opt_in` is written by `modules/notifications`, not by this module** — an
+ADR-004 exception granted in writing at Gate 1, not a violation a reviewer should flag.
+`app-architecture.md:89` names *opt-in* in the `notifications` row's Owns column, and the
+alternative — a port from this module that `notifications` calls — is banned outright by
+`eslint.config.mjs`'s `MAY_IMPORT.notifications = []` (`modules/notifications` may import
+nothing). US-031 design note §4.6 has the full reasoning; the same shape US-025's cascade write
+to `bookings` already takes from the other side.
+
+**This module still owns every other column of `user_profiles`**, `push_opt_in` included in the
+sense that no *other* module may touch it — the exception is narrow and singular, not a crack in
+ADR-004's boundary. `users.repository.ts:80`'s own docblock reserves the column by name; this
+section is that reservation stated from the other side.
+
 ## The forward constraint
 
 US-027 (admin password reset) adds a route here, not to `bookings` or `desks`. It is an UPDATE

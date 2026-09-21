@@ -10,6 +10,10 @@ Once migrations exist they are the truth and the design document is the explanat
 | `0001_user_profiles.sql` | `user_profiles`    | US-001    |
 | `0002_desks.sql`         | `desks`             | US-006 (reads it; written by US-015/US-017) |
 | `0003_bookings.sql`      | `bookings`          | US-006 (reads it; first written by US-007) |
+| `0004_last_active_admin_guard.sql` | — (one trigger, no table) | US-024 |
+| `0005_deactivate_account_cascade.sql` | — (one function, no table) | US-025 |
+| `0006_notification_deliveries.sql` | `notification_deliveries` | US-034 |
+| `0007_push_subscriptions.sql` | `push_subscriptions` | US-031 |
 
 `0002` and `0003` shipped together, whole — every constraint and both of `bookings`'s partial
 unique indexes — although US-006 only reads. A table created without its constraints is a

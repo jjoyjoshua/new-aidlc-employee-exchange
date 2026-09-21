@@ -16,6 +16,7 @@ import { BookADesk } from './screens/book-a-desk/BookADesk.js';
 import { AllBookings } from './screens/all-bookings/AllBookings.js';
 import { Desks } from './screens/desks/Desks.js';
 import { People } from './screens/people/People.js';
+import { Settings } from './screens/settings/Settings.js';
 import { SetPassword } from './screens/set-password/SetPassword.js';
 import { AppShell } from './components/app-shell/AppShell.js';
 import { RequireRole } from './lib/auth/require-role.js';
@@ -51,6 +52,11 @@ export function AppRoutes() {
         }
       >
         <Route path="/bookings" element={<MyBookings />} />
+        {/* US-031. No role guard — SCR-004's own open question 2 settled that admins simply
+            have no link to this screen (AccountMenu.tsx), not that the route itself refuses
+            them; adding a check here would invent a rule no AC asks for (design note §11,
+            open item 7). */}
+        <Route path="/settings" element={<Settings />} />
         {/* US-005 — SCR-003's date controls only (ST-01/02/03); reserved by US-001 design
             note §9.1. The desk list and confirm action are US-006's and US-007's. */}
         <Route path="/book" element={<BookADesk />} />

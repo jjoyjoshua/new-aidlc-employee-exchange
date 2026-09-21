@@ -1460,7 +1460,22 @@
         "AC-10",
         "AC-11"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/config/index.spec.ts",
+        "apps/api/src/infra/logger/index.spec.ts",
+        "apps/api/src/modules/notifications/notifications.repository.spec.ts",
+        "apps/api/src/modules/notifications/notifications.service.spec.ts",
+        "apps/api/src/modules/notifications/notifications.routes.spec.ts",
+        "libs/contracts/src/notifications.spec.ts",
+        "apps/ui/src/lib/push-subscription.spec.ts",
+        "apps/ui/src/lib/push-settings.spec.ts",
+        "apps/ui/src/components/toggle/Toggle.spec.tsx",
+        "apps/ui/src/components/note-row/NoteRow.spec.tsx",
+        "apps/ui/src/components/definition-list/DefinitionList.spec.tsx",
+        "apps/ui/src/screens/settings/use-push-settings.spec.ts",
+        "apps/ui/src/screens/settings/Settings.spec.tsx",
+        "apps/ui/src/components/app-shell/AccountMenu.spec.tsx"
+      ],
       "screens": [
         "SCR-004"
       ]

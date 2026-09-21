@@ -24,6 +24,7 @@ import { cancellationCopy, type CancellationSource } from '../../domain/cancella
 import { formatShortDate } from '../../domain/format-display-date.js';
 import { logger } from '../../infra/logger/index.js';
 import { sendMail, type MailFailureReason, type MailMessage } from '../../infra/mailer/index.js';
+import { getVapidPublicKey } from '../../infra/webpush/index.js';
 import { notificationsRepository, type NotificationKind, type NotificationsRepository } from './notifications.repository.js';
 
 export interface NotificationsServiceDeps {
@@ -92,6 +93,22 @@ export interface BookingCancellationInput {
   /** Who cancelled it, read back from `bookings.cancellation_source` — never inferred by
    *  comparing ids (US-029/AC-04, AC-05, AC-06). */
   cancellationSource: CancellationSource;
+}
+
+/** US-031/FR-01. What `GET /api/notifications/push` returns. */
+export interface PushSettings {
+  pushOptIn: boolean;
+}
+
+/** US-031/FR-03. What the client posts to `/opt-in` — built explicitly by the browser from
+ *  `PushSubscription`'s three fields, never `subscription.toJSON()` (design note §4.4). */
+export interface PushSubscriptionInput {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  /** Truncated from the request's User-Agent header by the router — operator diagnosis only,
+   *  never taken from the request body (`db-design.md:177`). */
+  userAgent: string | undefined;
 }
 
 export function createNotificationsService({ deliveries, send }: NotificationsServiceDeps) {
@@ -249,6 +266,61 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
         subject: `Reminder — your desk tomorrow, ${input.deskNumber} on ${dateLabel}`,
         body: `Reminder: you're booked at desk ${input.deskNumber} on ${dateLabel}. If you no longer need it, please cancel so somebody else can use it.`,
       });
+    },
+
+    /**
+     * US-031/FR-01. `pushOptIn` rides on its OWN endpoint, never the session response (design
+     * note §3) — putting it on the session would make AC-08's failed read and AC-09's loading
+     * state both unreachable, since `requireSession` already resolves before this could run.
+     * `vapidPublicKey` is served from here rather than a browser-side build env, so the public
+     * and private halves of the key pair have exactly one source (design note §3).
+     */
+    async getPushSettings(userId: string): Promise<PushSettings & { vapidPublicKey: string }> {
+      const pushOptIn = await deliveries.getPushOptIn(userId);
+      return { pushOptIn, vapidPublicKey: getVapidPublicKey() };
+    },
+
+    /**
+     * US-031/FR-03, AC-02, AC-07. Subscription FIRST, flag SECOND — the only order that fails
+     * closed (design note §4.2). If the upsert throws, nothing is written and the account
+     * stays opted out, which is safe. If `setPushOptIn` throws AFTER a successful upsert, the
+     * subscription row is an orphan — harmless, because US-032 checks the flag before the
+     * subscriptions table — and this is deliberately NOT swallowed: the flag is the account's
+     * one authoritative fact, and AC-07 requires the toggle to report exactly what it says,
+     * which here is "still off". A retry re-upserts the same subscription (the endpoint
+     * conflict absorbs it) and only then risks the flag write again.
+     */
+    async optIntoPush(userId: string, subscription: PushSubscriptionInput): Promise<PushSettings> {
+      await deliveries.upsertPushSubscription({ userId, ...subscription });
+      const pushOptIn = await deliveries.setPushOptIn(userId, true);
+      return { pushOptIn };
+    },
+
+    /**
+     * US-031/FR-04, AC-03, AC-07. Flag FIRST, subscriptions SECOND (design note §4.3) — the
+     * mirror of `optIntoPush`'s ordering, and BR-001.15's own requirement that opting out
+     * needs no browser round-trip to succeed. If `setPushOptIn` throws, nothing has changed —
+     * the account is still opted in, ST-07 reports "still on" truthfully, and no delete runs.
+     *
+     * A delete failure AFTER the flag write succeeds is logged, not propagated: once the flag
+     * is false, US-032/AC-05 already guarantees nothing is sent, so the account's one
+     * authoritative fact — the flag — is exactly what AC-07 requires the toggle to report, and
+     * it is already true. Surfacing a failure here would tell the employee "still on" about an
+     * account that is, in fact, off — the false-negative AC-07 exists to prevent, just from
+     * the other direction. An orphaned subscription row is harmless dead data a later opt-out
+     * clears.
+     */
+    async optOutOfPush(userId: string): Promise<PushSettings> {
+      const pushOptIn = await deliveries.setPushOptIn(userId, false);
+      try {
+        await deliveries.deletePushSubscriptions(userId);
+      } catch (error) {
+        logger.error('push subscription cleanup failed after a successful opt-out', {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return { pushOptIn };
     },
   };
 }
