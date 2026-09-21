@@ -52,6 +52,18 @@ describe('DeskRow — selection (US-007/AC-01)', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
+
+  it('defaults tabIndex to 0 when the caller never passes it — a no-op for any other caller (#71)', () => {
+    render(<DeskRow deskNumber="A-01" status="available" />);
+
+    expect(screen.getByRole('radio', { name: /A-01/ })).toHaveAttribute('tabindex', '0');
+  });
+
+  it('renders whatever tabIndex the parent radiogroup assigns (#71)', () => {
+    render(<DeskRow deskNumber="A-01" status="available" tabIndex={-1} />);
+
+    expect(screen.getByRole('radio', { name: /A-01/ })).toHaveAttribute('tabindex', '-1');
+  });
 });
 
 describe('DeskRow — usual desk hint (US-008/AC-01, AC-06)', () => {

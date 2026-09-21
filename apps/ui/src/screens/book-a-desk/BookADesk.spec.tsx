@@ -226,6 +226,101 @@ describe('BookADesk — the availability list (US-006/AC-01, AC-05, AC-07)', () 
   });
 });
 
+describe('BookADesk — the desk list is a radio group: one tab stop, arrows move it (#71)', () => {
+  it('only one desk row is in the tab order, the rest are -1 (#71)', async () => {
+    const desks = [desk('A-01'), desk('A-02'), desk('A-03')];
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    const radios = await screen.findAllByRole('radio');
+    const tabbable = radios.filter((r) => r.getAttribute('tabindex') === '0');
+    expect(tabbable).toHaveLength(1);
+    expect(radios.filter((r) => r.getAttribute('tabindex') === '-1')).toHaveLength(radios.length - 1);
+  });
+
+  it('ArrowDown moves the roving tab stop to the next desk, across a zone boundary (#71)', async () => {
+    const user = userEvent.setup();
+    const desks = [desk('A-01'), desk('B-01'), desk('B-02')];
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    const a01 = await screen.findByRole('radio', { name: /A-01/ });
+    a01.focus();
+    await user.keyboard('{ArrowDown}');
+
+    expect(screen.getByRole('radio', { name: /B-01/ })).toHaveFocus();
+  });
+
+  it('ArrowUp moves the roving tab stop back, and neither arrow selects the desk by itself (#71)', async () => {
+    const user = userEvent.setup();
+    const desks = [desk('A-01'), desk('A-02')];
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    const a01 = await screen.findByRole('radio', { name: /A-01/ });
+    a01.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('radio', { name: /A-02/ })).toHaveFocus();
+
+    // SCR-003's own wording: "arrows move selection, Space or Enter selects" — two separate
+    // steps. Arrowing onto A-02 must not itself check it.
+    expect(screen.getByRole('radio', { name: /A-02/ })).toHaveAttribute('aria-checked', 'false');
+
+    await user.keyboard('{ArrowUp}');
+    expect(screen.getByRole('radio', { name: /A-01/ })).toHaveFocus();
+  });
+
+  it('a taken desk is skipped entirely — never a tab stop, never reachable by arrow keys (#71)', async () => {
+    const user = userEvent.setup();
+    const desks = [desk('A-01'), desk('A-02', 'taken'), desk('A-03')];
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    const a01 = await screen.findByRole('radio', { name: /A-01/ });
+    a01.focus();
+    await user.keyboard('{ArrowDown}');
+
+    expect(screen.getByRole('radio', { name: /A-03/ })).toHaveFocus();
+  });
+
+  it('the selected desk is the tab stop, not the first row (#71)', async () => {
+    const user = userEvent.setup();
+    const desks = [desk('A-01'), desk('A-02'), desk('A-03')];
+    const fetchAvailability: AvailabilityFetcher = ok({ date: '2026-09-18', desks, myBooking: null, usualDeskId: null, nextFreeDays: [] });
+
+    render(
+      <SignedIn office={OFFICE}>
+        <BookADesk fetchAvailability={fetchAvailability} />
+      </SignedIn>,
+    );
+
+    await user.click(await screen.findByRole('radio', { name: /A-02/ }));
+
+    expect(screen.getByRole('radio', { name: /A-01/ })).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('radio', { name: /A-02/ })).toHaveAttribute('tabindex', '0');
+  });
+});
+
 describe('BookADesk — a failed load (US-006/AC-08)', () => {
   it('replaces only the list region with an inline alert naming the date, keeps the date strip usable, and retries the same date', async () => {
     const fetchAvailability = vi

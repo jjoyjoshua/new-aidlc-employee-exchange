@@ -96,6 +96,27 @@ function BookADeskContent({
   );
   const availability = useAvailability(selectedDate, stableFetch);
 
+  // Issue #71 — one radiogroup, one tab stop, arrows move it (SCR-003's own promised keyboard
+  // model, mirroring DateStrip.tsx's proven roving-tabindex pattern exactly). `zones` is computed
+  // here (not inline in the JSX below) so `handleDeskKeyDown` can flatten the SAME rendered
+  // order back out — `groupByZone` re-sorts by desk number, so "the data array's order" and "the
+  // DOM's order" are not the same thing, and only the latter is what arrow keys must walk.
+  const zones = availability.status === 'ready' ? groupByZone(availability.data.desks) : [];
+  const interactiveDeskIds = zones.flatMap((zone) => zone.desks.filter((d) => d.status !== 'taken').map((d) => d.id));
+  // The selected desk is the tab stop if it's still interactive; otherwise the first interactive
+  // one, so the group is never entirely untabbable (same fallback DateStrip's own isTabStop uses).
+  const tabStopDeskId =
+    selectedDeskId !== undefined && interactiveDeskIds.includes(selectedDeskId) ? selectedDeskId : interactiveDeskIds[0];
+
+  const handleDeskKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const radios = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
+    const currentIndex = radios.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = currentIndex + (event.key === 'ArrowDown' ? 1 : -1);
+    radios[nextIndex]?.focus();
+  };
+
   const resolvedCreateBooking = useMemo(() => createBooking ?? createCreateBooking(api), [createBooking, api]);
   const { busy, confirm } = useBookDesk(resolvedCreateBooking);
   const resolvedCancelBooking = useMemo(() => cancelBooking ?? createCancelBooking(api), [cancelBooking, api]);
@@ -338,8 +359,13 @@ function BookADeskContent({
               </Alert>
             ) : null}
 
-            <div className="book-a-desk__zones" role="radiogroup" aria-label="Choose a desk">
-              {groupByZone(availability.data.desks).map((zone) => (
+            <div
+              className="book-a-desk__zones"
+              role="radiogroup"
+              aria-label="Choose a desk"
+              onKeyDown={handleDeskKeyDown}
+            >
+              {zones.map((zone) => (
                 <ZoneGroup
                   key={zone.letter}
                   letter={zone.letter}
@@ -347,6 +373,7 @@ function BookADeskContent({
                   selectedDeskId={selectedDeskId}
                   usualDeskId={availability.data.usualDeskId ?? undefined}
                   onSelectDesk={selectDesk}
+                  tabStopDeskId={tabStopDeskId}
                 />
               ))}
             </div>
