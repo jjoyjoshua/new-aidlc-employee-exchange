@@ -44,8 +44,8 @@
 | NFR-002 | US-033 | 0/9 | planned |
 | NFR-003 | US-001 | 8/8 | delivered |
 | NFR-004 | US-033 | 0/9 | planned |
-| NFR-005 | US-034 | 0/8 | planned |
+| NFR-005 | US-034 | 8/8 | delivered |
 | NFR-006 | US-031 | 0/11 | planned |
-| NFR-007 | US-034 | 0/8 | planned |
+| NFR-007 | US-034 | 8/8 | delivered |
 | NFR-008 | US-033 | 0/9 | planned |
 | NFR-009 | US-003 | 5/5 | delivered |

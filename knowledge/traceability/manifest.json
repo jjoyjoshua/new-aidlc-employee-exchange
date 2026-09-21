@@ -1509,7 +1509,13 @@
         "AC-07",
         "AC-08"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/infra/mailer/index.spec.ts",
+        "apps/api/src/config/index.spec.ts",
+        "apps/api/src/modules/notifications/notifications.repository.spec.ts",
+        "apps/api/src/modules/notifications/notifications.service.spec.ts",
+        "apps/api/src/eslint-boundaries.spec.ts"
+      ],
       "screens": []
     }
   },
