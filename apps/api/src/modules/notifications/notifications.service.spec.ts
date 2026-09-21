@@ -5,9 +5,15 @@
  * cannot exercise the failure paths these tests are about.
  */
 import { describe, expect, it } from 'vitest';
-import { createNotificationsService, type BookingConfirmationInput, type SendEmailInput } from './notifications.service.js';
+import {
+  createNotificationsService,
+  type BookingCancellationInput,
+  type BookingConfirmationInput,
+  type SendEmailInput,
+} from './notifications.service.js';
 import type { DeliveryRow, NotificationsRepository } from './notifications.repository.js';
 import type { MailMessage, SendMailResult } from '../../infra/mailer/index.js';
+import type { CancellationSource } from '../../domain/cancellation-copy.js';
 
 function recordingDeliveries(): NotificationsRepository & { rows: DeliveryRow[] } {
   const rows: DeliveryRow[] = [];
@@ -54,6 +60,15 @@ const CONFIRMATION_INPUT: BookingConfirmationInput = {
   email: 'dana@example.com',
   deskNumber: 'A-01',
   date: '2026-09-22',
+};
+
+const CANCELLATION_INPUT: BookingCancellationInput = {
+  bookingId: 'b1',
+  userId: 'u1',
+  email: 'dana@example.com',
+  deskNumber: 'A-02',
+  date: '2026-09-09',
+  cancellationSource: 'owner',
 };
 
 const INPUT: SendEmailInput = {
@@ -238,5 +253,108 @@ describe('sendBookingConfirmation — a mail failure is recorded, never thrown (
 
     expect(result).toEqual({ ok: false, error: 'transport_unreachable', recorded: true });
     expect(deliveries.rows[0]).toMatchObject({ outcome: 'failed', kind: 'confirmation' });
+  });
+});
+
+describe('sendBookingCancellation — sends to the owner alone (US-029/AC-01)', () => {
+  it('records exactly one sent, cancellation row, addressed to the given email and nobody else (US-029/AC-01)', async () => {
+    const deliveries = recordingDeliveries();
+    const { send } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    const result = await svc.sendBookingCancellation(CANCELLATION_INPUT);
+
+    expect(result).toEqual({ ok: true, recorded: true });
+    expect(deliveries.rows).toHaveLength(1);
+    expect(deliveries.rows[0]).toMatchObject({
+      bookingId: 'b1',
+      userId: 'u1',
+      kind: 'cancellation',
+      recipient: 'dana@example.com',
+      outcome: 'sent',
+    });
+  });
+});
+
+describe('sendBookingCancellation — names the desk and the date (US-029/AC-02)', () => {
+  it('composes a subject and body that both name the desk number and the formatted date (US-029/AC-02)', async () => {
+    const deliveries = recordingDeliveries();
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendBookingCancellation(CANCELLATION_INPUT);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.subject).toContain('A-02');
+    expect(messages[0]!.subject).toContain('Wed 9 Sep');
+    expect(messages[0]!.body).toContain('A-02');
+    expect(messages[0]!.body).toContain('Wed 9 Sep');
+  });
+});
+
+describe('sendBookingCancellation — the AC-04/AC-05/AC-06 wording matrix (BR-001.20)', () => {
+  const bySource = (cancellationSource: CancellationSource): BookingCancellationInput => ({
+    ...CANCELLATION_INPUT,
+    cancellationSource,
+  });
+
+  it('names no actor for a self-cancellation (US-029/AC-05)', async () => {
+    const deliveries = recordingDeliveries();
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendBookingCancellation(bySource('owner'));
+
+    expect(messages[0]!.body).toBe('Your desk A-02 for Wed 9 Sep was cancelled. You can book another desk any time.');
+  });
+
+  it('names the office admin role, never an individual, for an admin cancellation (US-029/AC-04)', async () => {
+    const deliveries = recordingDeliveries();
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendBookingCancellation(bySource('admin'));
+
+    expect(messages[0]!.body).toBe(
+      'Your desk A-02 for Wed 9 Sep was cancelled by your office admin. You can book another desk any time.',
+    );
+    expect(messages[0]!.body).not.toMatch(/admin@|Dana|Priya|[A-Z][a-z]+ (Admin|Kumar|Singh)/);
+  });
+
+  it('names the office admin role but omits the rebooking invite and any mention of the account closing for the deactivation cascade (US-029/AC-06)', async () => {
+    const deliveries = recordingDeliveries();
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendBookingCancellation(bySource('deactivation_cascade'));
+
+    expect(messages[0]!.body).toBe('Your desk A-02 for Wed 9 Sep was cancelled by your office admin.');
+    expect(messages[0]!.body).not.toContain('book another desk');
+    expect(messages[0]!.body.toLowerCase()).not.toContain('account');
+    expect(messages[0]!.body.toLowerCase()).not.toContain('closed');
+  });
+});
+
+describe('sendBookingCancellation — mandatory, unconditional (US-029/AC-08)', () => {
+  it('has no parameter that could suppress the send — every call reaches the transport (US-029/AC-08)', async () => {
+    const deliveries = recordingDeliveries();
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendBookingCancellation(CANCELLATION_INPUT);
+
+    expect(messages).toHaveLength(1);
+  });
+});
+
+describe('sendBookingCancellation — a mail failure is recorded, never thrown (US-029/AC-10)', () => {
+  it('resolves ok:false rather than rejecting when the transport is unavailable (US-029/AC-10)', async () => {
+    const deliveries = recordingDeliveries();
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: false, error: 'transport_unreachable' }) });
+
+    const result = await svc.sendBookingCancellation(CANCELLATION_INPUT);
+
+    expect(result).toEqual({ ok: false, error: 'transport_unreachable', recorded: true });
+    expect(deliveries.rows[0]).toMatchObject({ outcome: 'failed', kind: 'cancellation' });
   });
 });

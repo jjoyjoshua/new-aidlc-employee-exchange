@@ -1,10 +1,10 @@
 /**
  * The one send path (US-034/AC-08). `bookings` and `users` call this; it calls neither
  * (`modules/README.md`'s named asymmetry). Every message story composes its own wording HERE,
- * inside this module (US-028's `sendBookingConfirmation`; US-029/US-030 should add their own
- * `send*` functions the same way), then calls `recordAndSend` — the caller never receives
- * pre-written text to pass through. There is no second mail path, enforced by
- * `eslint.config.mjs`'s mailer boundary (FR-07).
+ * inside this module (US-028's `sendBookingConfirmation`, US-029's `sendBookingCancellation`;
+ * US-030 should add its own `send*` function the same way), then calls `recordAndSend` — the
+ * caller never receives pre-written text to pass through. There is no second mail path,
+ * enforced by `eslint.config.mjs`'s mailer boundary (FR-07).
  *
  * **This function is send-then-record, and that is a documented seam, not a finished
  * guarantee (Architect design note §2.3, F-6).** It is correct for the confirmation and
@@ -17,6 +17,9 @@
  * `recordAndSend` takes no transaction and opens none (`app-architecture.md` §4.1 step 6) — a
  * caller invokes it once its OWN write has already committed.
  */
+import type { OfficeDate } from '@desk-booking/contracts';
+import { cancellationCopy, type CancellationSource } from '../../domain/cancellation-copy.js';
+import { formatShortDate } from '../../domain/format-display-date.js';
 import { logger } from '../../infra/logger/index.js';
 import { sendMail, type MailFailureReason, type MailMessage } from '../../infra/mailer/index.js';
 import { notificationsRepository, type NotificationKind, type NotificationsRepository } from './notifications.repository.js';
@@ -63,6 +66,20 @@ export interface BookingConfirmationInput {
   email: string;
   deskNumber: string;
   date: string;
+}
+
+export interface BookingCancellationInput {
+  bookingId: string;
+  /** The booking OWNER's id — always the recipient, never the actor who cancelled it. */
+  userId: string;
+  /** The owner's CURRENT email — read once by the caller, never re-fetched here (US-029/D-02,
+   *  D-03), the same discipline `BookingConfirmationInput.email` states. */
+  email: string;
+  deskNumber: string;
+  date: OfficeDate;
+  /** Who cancelled it, read back from `bookings.cancellation_source` — never inferred by
+   *  comparing ids (US-029/AC-04, AC-05, AC-06). */
+  cancellationSource: CancellationSource;
 }
 
 export function createNotificationsService({ deliveries, send }: NotificationsServiceDeps) {
@@ -130,6 +147,30 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
         recipient: input.email,
         subject: `Your desk is booked — ${input.deskNumber} on ${input.date}`,
         body: `You're booked at desk ${input.deskNumber} on ${input.date}.`,
+      });
+    },
+
+    /**
+     * US-029. Composes the cancellation's wording the same way `sendBookingConfirmation` does —
+     * this module decides what the message says, the caller hands over facts. Every one of the
+     * three cancellation paths (US-011, US-015, US-025) that reaches `outcome.kind === 'ok'`
+     * calls this exactly once per cancelled booking (AC-01, AC-03, AC-09); there is no parameter
+     * here that could suppress it (AC-08). The actor-naming decision itself is `domain/`'s
+     * (`cancellationCopy`, BR-001.20) — this function only assembles the string.
+     */
+    async sendBookingCancellation(input: BookingCancellationInput): Promise<RecordAndSendResult> {
+      const dateLabel = formatShortDate(input.date);
+      const { actorClause, includeRebookInvite } = cancellationCopy(input.cancellationSource);
+      const rebookInvite = includeRebookInvite ? ' You can book another desk any time.' : '';
+      const body = `Your desk ${input.deskNumber} for ${dateLabel} was cancelled${actorClause}.${rebookInvite}`;
+
+      return recordAndSend({
+        kind: 'cancellation',
+        bookingId: input.bookingId,
+        userId: input.userId,
+        recipient: input.email,
+        subject: `Your desk booking was cancelled — ${input.deskNumber} on ${dateLabel}`,
+        body,
       });
     },
   };

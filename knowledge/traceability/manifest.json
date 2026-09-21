@@ -1400,7 +1400,18 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/domain/format-display-date.spec.ts",
+        "apps/api/src/domain/cancellation-copy.spec.ts",
+        "apps/api/src/modules/notifications/notifications.service.spec.ts",
+        "apps/api/src/modules/bookings/bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/bookings.service.spec.ts",
+        "apps/api/src/modules/bookings/bookings.routes.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.repository.spec.ts",
+        "apps/api/src/modules/bookings/admin-bookings.service.spec.ts",
+        "apps/api/src/modules/users/users.service.spec.ts",
+        "apps/api/src/modules/admin/admin.routes.spec.ts"
+      ],
       "screens": []
     },
     "US-030": {

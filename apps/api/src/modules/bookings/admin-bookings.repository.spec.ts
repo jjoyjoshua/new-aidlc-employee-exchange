@@ -31,8 +31,19 @@ interface RecordedCall {
 
 type FakeResponse = { data: unknown; error: { code: string; message: string } | null; count?: number | null };
 
-function fakeSupabase(response: FakeResponse) {
+/**
+ * `response` is either one fixed response reused for every call (US-013/US-014's own shape —
+ * one query per test), or a QUEUE of responses consumed one per call in order (US-029/D-03's
+ * `cancelAnyBooking`, which now issues the update then a separate follow-up read against the
+ * same table) — the last entry repeats once the queue is exhausted.
+ */
+function fakeSupabase(response: FakeResponse | FakeResponse[]) {
   const calls: RecordedCall[] = [];
+  const queue = Array.isArray(response) ? [...response] : undefined;
+  const nextResponse = (): FakeResponse => {
+    if (!queue) return response as FakeResponse;
+    return queue.length > 1 ? queue.shift()! : queue[0]!;
+  };
 
   function from(table: string) {
     const call: RecordedCall = { table, order: [], eq: [] };
@@ -73,11 +84,11 @@ function fakeSupabase(response: FakeResponse) {
       maybeSingle() {
         call.maybeSingle = true;
         calls.push(call);
-        return Promise.resolve(response);
+        return Promise.resolve(nextResponse());
       },
       then(onFulfilled: (value: FakeResponse) => unknown, onRejected?: (reason: unknown) => unknown) {
         calls.push(call);
-        return Promise.resolve(response).then(onFulfilled, onRejected);
+        return Promise.resolve(nextResponse()).then(onFulfilled, onRejected);
       },
     };
     return builder;
@@ -373,34 +384,47 @@ const ADMIN_ID = '9c858901-8a57-4791-81fe-4c455b099bc9';
 const CANCELLED_AT = new Date('2026-09-16T12:00:00.000Z');
 const TODAY: AdminBookingsFilter['from'] = '2026-09-16';
 
+const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+
+const DETAILS_ROW = {
+  user_id: OWNER_ID,
+  booking_date: '2026-09-16',
+  desks: { desk_number: 'A-02' },
+  user_profiles: { email: 'dana@company.com' },
+};
+
 describe('adminBookingsRepository.cancelAnyBooking — the write (US-015/AC-01, AC-02, AC-04, AC-05, AC-06, AC-07)', () => {
   it('updates by id/confirmed/not-past, writing cancellation_source admin and cancelled_by the acting admin — no user_id predicate anywhere', async () => {
-    const { calls, client } = fakeSupabase({ data: { id: BOOKING_ID }, error: null });
+    const { calls, client } = fakeSupabase([{ data: { id: BOOKING_ID }, error: null }, { data: DETAILS_ROW, error: null }]);
     setSupabaseForTesting(client);
 
     try {
       const result = await adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!);
 
-      expect(calls).toEqual([
-        {
-          table: 'bookings',
-          select: 'id',
-          update: {
-            status: 'cancelled',
-            cancelled_at: CANCELLED_AT.toISOString(),
-            cancelled_by: ADMIN_ID,
-            cancellation_source: 'admin',
-          },
-          eq: [
-            ['id', BOOKING_ID],
-            ['status', 'confirmed'],
-          ],
-          gte: ['booking_date', TODAY],
-          order: [],
-          maybeSingle: true,
+      expect(calls[0]).toEqual({
+        table: 'bookings',
+        select: 'id',
+        update: {
+          status: 'cancelled',
+          cancelled_at: CANCELLED_AT.toISOString(),
+          cancelled_by: ADMIN_ID,
+          cancellation_source: 'admin',
         },
-      ]);
-      expect(result).toEqual({ id: BOOKING_ID });
+        eq: [
+          ['id', BOOKING_ID],
+          ['status', 'confirmed'],
+        ],
+        gte: ['booking_date', TODAY],
+        order: [],
+        maybeSingle: true,
+      });
+      expect(result).toEqual({
+        id: BOOKING_ID,
+        ownerId: OWNER_ID,
+        deskNumber: 'A-02',
+        date: '2026-09-16',
+        ownerEmail: 'dana@company.com',
+      });
       // The absence is REQ-014 — assert no eq() call ever names user_id.
       expect(calls[0]?.eq.some(([column]) => column === 'user_id')).toBe(false);
     } finally {
@@ -408,13 +432,34 @@ describe('adminBookingsRepository.cancelAnyBooking — the write (US-015/AC-01, 
     }
   });
 
-  it('returns undefined when the update matches no row (already cancelled, past-dated, or no such booking)', async () => {
-    const { client } = fakeSupabase({ data: null, error: null });
+  it('resolves the desk number and the owner email with a SEPARATE follow-up read, scoped by id alone (US-029/D-03)', async () => {
+    const { calls, client } = fakeSupabase([{ data: { id: BOOKING_ID }, error: null }, { data: DETAILS_ROW, error: null }]);
+    setSupabaseForTesting(client);
+
+    try {
+      await adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!);
+
+      expect(calls).toHaveLength(2);
+      expect(calls[1]).toEqual({
+        table: 'bookings',
+        select: 'user_id, booking_date, desks(desk_number), user_profiles!user_id(email)',
+        eq: [['id', BOOKING_ID]],
+        order: [],
+        maybeSingle: true,
+      });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns undefined when the update matches no row (already cancelled, past-dated, or no such booking) — and never issues the follow-up read', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
     setSupabaseForTesting(client);
 
     try {
       const result = await adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!);
       expect(result).toBeUndefined();
+      expect(calls).toHaveLength(1);
     } finally {
       setSupabaseForTesting(undefined);
     }
@@ -427,6 +472,22 @@ describe('adminBookingsRepository.cancelAnyBooking — the write (US-015/AC-01, 
     try {
       await expect(adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!)).rejects.toThrow(
         /admin booking cancel failed/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws if the follow-up read finds no joined desk (desk_id is NOT NULL — a bug, not a valid state)', async () => {
+    const { client } = fakeSupabase([
+      { data: { id: BOOKING_ID }, error: null },
+      { data: { ...DETAILS_ROW, desks: null }, error: null },
+    ]);
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(adminBookingsRepository.cancelAnyBooking(BOOKING_ID, ADMIN_ID, CANCELLED_AT, TODAY!)).rejects.toThrow(
+        /no joined desk/,
       );
     } finally {
       setSupabaseForTesting(undefined);

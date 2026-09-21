@@ -117,7 +117,7 @@ export interface AdminBookingsRepository {
     adminId: string,
     cancelledAt: Date,
     today: OfficeDate,
-  ): Promise<{ id: string } | undefined>;
+  ): Promise<{ id: string; ownerId: string; deskNumber: string; date: OfficeDate; ownerEmail: string } | undefined>;
 
   /**
    * US-015/AC-09, design note §3.1, §3.3. Read-only, issued ONLY when `cancelAnyBooking` above
@@ -212,7 +212,39 @@ export const adminBookingsRepository: AdminBookingsRepository = {
       .maybeSingle();
 
     if (error) throw new Error(`admin booking cancel failed: ${error.message}`);
-    return (data as { id: string } | null) ?? undefined;
+    if (!data) return undefined;
+
+    // US-029/D-03. A SEPARATE plain read, never combined with the update above — this codebase
+    // has no precedent for `.update().select('...relation(...)')` and this repository already
+    // proves the identical embed shape works for `listBookings`. Unscoped by id alone, matching
+    // the write's own REQ-014 unscoping; the owner's email comes from here rather than crossing
+    // into `users`, keeping this module self-contained (`coding-standards.md`, no module imports
+    // another module's service).
+    const { data: details, error: detailsError } = await supabase()
+      .from('bookings')
+      .select('user_id, booking_date, desks(desk_number), user_profiles!user_id(email)')
+      .eq('id', bookingId)
+      .maybeSingle();
+
+    if (detailsError) throw new Error(`admin booking cancel — desk/owner lookup failed: ${detailsError.message}`);
+
+    const row = details as {
+      user_id: string;
+      booking_date: OfficeDate;
+      desks: { desk_number: string } | null;
+      user_profiles: { email: string } | null;
+    } | null;
+    if (!row) throw new Error(`booking ${bookingId} vanished between cancel and its own detail read — this is a bug`);
+    if (!row.desks) throw new Error(`booking ${bookingId} has no joined desk — desk_id is NOT NULL, this is a bug`);
+    if (!row.user_profiles) throw new Error(`booking ${bookingId} has no joined user_profiles — user_id is NOT NULL, this is a bug`);
+
+    return {
+      id: (data as { id: string }).id,
+      ownerId: row.user_id,
+      deskNumber: row.desks.desk_number,
+      date: row.booking_date,
+      ownerEmail: row.user_profiles.email,
+    };
   },
 
   async findBookingState(bookingId) {

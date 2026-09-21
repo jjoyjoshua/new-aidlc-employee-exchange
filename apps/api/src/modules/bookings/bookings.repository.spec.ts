@@ -401,17 +401,17 @@ describe('availabilityRepository.insertConfirmedBooking — US-007/FR-02, D-01 (
 });
 
 describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07, amended by US-011/AC-02', () => {
-  it('updates status, cancelled_at, cancelled_by and cancellation_source in one statement, scoped to id/user/confirmed/not-past', async () => {
+  it('updates status, cancelled_at, cancelled_by and cancellation_source in one statement, scoped to id/user/confirmed/not-past, and returns the desk and date for US-029', async () => {
     const cancelledAt = new Date('2026-09-16T10:00:00.000Z');
     const { calls, client } = fakeSupabase({
-      bookings: { data: { id: 'b1' }, error: null },
+      bookings: { data: { id: 'b1', desk_id: 'd1', booking_date: '2026-09-16' }, error: null },
     });
     setSupabaseForTesting(client);
 
     try {
       const result = await availabilityRepository.cancelOwnedBooking('user-1', 'b1', cancelledAt, '2026-09-16');
 
-      expect(result).toEqual({ id: 'b1' });
+      expect(result).toEqual({ id: 'b1', desk_id: 'd1', booking_date: '2026-09-16' });
       expect(calls).toEqual([
         {
           table: 'bookings',
@@ -421,7 +421,7 @@ describe('availabilityRepository.cancelOwnedBooking — US-007/FR-06, AC-07, ame
             cancelled_by: 'user-1',
             cancellation_source: 'owner',
           },
-          select: 'id',
+          select: 'id, desk_id, booking_date',
           eq: [
             ['id', 'b1'],
             ['user_id', 'user-1'],

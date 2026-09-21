@@ -20,6 +20,7 @@ import type {
 } from '../desks/desks.repository.js';
 import type { UserAccountRow, UsersRepository, UserSummaryRow } from '../users/users.repository.js';
 import type { UsersAuthAdapter } from '../users/users.adapter.js';
+import type { BookingCancellationInput, NotificationsService, RecordAndSendResult } from '../notifications/notifications.service.js';
 
 interface Row {
   id: string;
@@ -246,12 +247,48 @@ function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapt
   };
 }
 
+/**
+ * US-029/D-04. A recording no-op — every existing test in this file (US-013/014/015/025/etc.)
+ * exercises a route that may now trigger a cancellation email without caring what happens to
+ * it, and this file's `Config` fixture carries no `MAIL_*` keys, so the REAL `notificationsService`
+ * must never be reached here.
+ */
+function recordingNotifications(
+  result: RecordAndSendResult = { ok: true, recorded: true },
+): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> & {
+  cancellationCalls: BookingCancellationInput[];
+} {
+  const cancellationCalls: BookingCancellationInput[] = [];
+  return {
+    cancellationCalls,
+    async sendBookingConfirmation() {
+      throw new Error('sendBookingConfirmation not stubbed — this file exercises /api/admin only');
+    },
+    async sendBookingCancellation(input) {
+      cancellationCalls.push(input);
+      return result;
+    },
+  };
+}
+
+function throwingNotifications(): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> {
+  return {
+    async sendBookingConfirmation() {
+      throw new Error('sendBookingConfirmation not stubbed — this file exercises /api/admin only');
+    },
+    async sendBookingCancellation() {
+      throw new Error('unexpected notifications failure');
+    },
+  };
+}
+
 function appWith(options: {
   rows?: Row[];
   adminBookings?: Pick<AdminBookingsRepository, 'listBookings'> & Partial<AdminBookingsRepository>;
   desks?: DesksRepository;
   users?: UsersRepository;
   usersAuth?: UsersAuthAdapter;
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'>;
   /** US-027 test seam — a deterministic generator for reset-password route tests. */
   randomInt?: (maxExclusive: number) => number;
 }) {
@@ -281,6 +318,7 @@ function appWith(options: {
     desks: options.desks ?? noDesks,
     users: options.users ?? noUsers,
     usersAuth: options.usersAuth ?? notUsedUsersAuth,
+    notifications: options.notifications ?? recordingNotifications(),
     ...(options.randomInt ? { randomInt: options.randomInt } : {}),
   });
 }
@@ -1120,7 +1158,9 @@ describe('POST /api/admin/desks/:id/activate (US-019/AC-01, AC-09, AC-12)', () =
 describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
   const BOOKING_ID = '11111111-1111-4111-8111-111111111111';
 
-  function capturingCancel(outcome: { id: string } | undefined) {
+  function capturingCancel(
+    outcome: { id: string; ownerId: string; deskNumber: string; date: string; ownerEmail: string } | undefined,
+  ) {
     const calls: Array<{ bookingId: string; adminId: string; cancelledAt: Date; today: string }> = [];
     const repository: Pick<AdminBookingsRepository, 'listBookings' | 'cancelAnyBooking' | 'findBookingState'> = {
       async listBookings() {
@@ -1137,8 +1177,16 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
     return { repository, calls };
   }
 
+  const OWNER_ID = '22222222-2222-4222-8222-222222222222';
+
   it('cancels a confirmed booking: 200 empty body, and the acting admin session id reaches the repository as cancelled_by (US-015/AC-02, AC-04, AC-05, AC-06)', async () => {
-    const { repository, calls } = capturingCancel({ id: BOOKING_ID });
+    const { repository, calls } = capturingCancel({
+      id: BOOKING_ID,
+      ownerId: OWNER_ID,
+      deskNumber: 'A-02',
+      date: '2026-09-16',
+      ownerEmail: 'dana@company.com',
+    });
     const app = appWith({ adminBookings: repository });
 
     const response = await request(app)
@@ -1150,6 +1198,51 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.bookingId).toBe(BOOKING_ID);
     expect(calls[0]?.adminId).toBe(ADMIN.id);
+  });
+
+  it('sends the cancellation email to the OWNER, never the acting admin, naming the office admin role (US-029/AC-01, US-029/AC-02, US-029/AC-04, US-029/AC-07)', async () => {
+    const { repository } = capturingCancel({
+      id: BOOKING_ID,
+      ownerId: OWNER_ID,
+      deskNumber: 'A-02',
+      date: '2026-09-16',
+      ownerEmail: 'dana@company.com',
+    });
+    const notifications = recordingNotifications();
+    const app = appWith({ adminBookings: repository, notifications });
+
+    const response = await request(app)
+      .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(notifications.cancellationCalls).toEqual([
+      {
+        bookingId: BOOKING_ID,
+        userId: OWNER_ID,
+        email: 'dana@company.com',
+        deskNumber: 'A-02',
+        date: '2026-09-16',
+        cancellationSource: 'admin',
+      },
+    ]);
+  });
+
+  it('still returns 200 when the notify call fails or throws — a mail failure never loses the cancellation (US-029/AC-10)', async () => {
+    const { repository } = capturingCancel({
+      id: BOOKING_ID,
+      ownerId: OWNER_ID,
+      deskNumber: 'A-02',
+      date: '2026-09-16',
+      ownerEmail: 'dana@company.com',
+    });
+    const app = appWith({ adminBookings: repository, notifications: throwingNotifications() });
+
+    const response = await request(app)
+      .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
   });
 
   it('a past-dated or non-existent booking id gets 404 booking_not_found (US-015/AC-02)', async () => {
@@ -1164,7 +1257,7 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
     expect(response.body.code).toBe('booking_not_found');
   });
 
-  it('an already-cancelled booking gets 409 booking_already_cancelled (US-015/AC-09)', async () => {
+  it('an already-cancelled booking gets 409 booking_already_cancelled, and sends no cancellation email (US-015/AC-09, US-029/AC-09)', async () => {
     const repository: Pick<AdminBookingsRepository, 'listBookings' | 'cancelAnyBooking' | 'findBookingState'> = {
       async listBookings() {
         throw new Error('not used in this test');
@@ -1176,7 +1269,8 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
         return { status: 'cancelled', booking_date: '2026-09-10' };
       },
     };
-    const app = appWith({ adminBookings: repository });
+    const notifications = recordingNotifications();
+    const app = appWith({ adminBookings: repository, notifications });
 
     const response = await request(app)
       .post(`/api/admin/bookings/${BOOKING_ID}/cancel`)
@@ -1184,6 +1278,10 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
 
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('booking_already_cancelled');
+    // AC-09 at the layer that actually owns it — the DB's single-winner arbitration is already
+    // proven in bookings.repository.concurrency.spec.ts/admin.concurrency.spec.ts; this proves
+    // the layer above it: only outcome.kind === 'ok' ever reaches the notify call.
+    expect(notifications.cancellationCalls).toEqual([]);
   });
 
   it('a malformed id is refused at the edge with 400 invalid_request', async () => {
@@ -1197,7 +1295,13 @@ describe('POST /api/admin/bookings/:id/cancel (US-015)', () => {
   });
 
   it('refuses an Employee session with 403 admin_only', async () => {
-    const { repository } = capturingCancel({ id: BOOKING_ID });
+    const { repository } = capturingCancel({
+      id: BOOKING_ID,
+      ownerId: OWNER_ID,
+      deskNumber: 'A-02',
+      date: '2026-09-16',
+      ownerEmail: 'dana@company.com',
+    });
     const app = appWith({ adminBookings: repository });
 
     const response = await request(app)
@@ -2264,6 +2368,111 @@ describe('POST /api/admin/users/:id/deactivate (US-025/AC-01, AC-02, AC-04, AC-1
     const app = appWith({ users: usersFor() });
     const response = await request(app).post(`/api/admin/users/${USER_ID}/deactivate`);
     expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/admin/users/:id/deactivate — sends one cancellation email per booking (US-029/AC-03, AC-04, AC-06)', () => {
+  const USER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+  it('calls sendBookingCancellation once per cancelled booking, never a summary, each naming its own desk and date (US-029/AC-03)', async () => {
+    const notifications = recordingNotifications();
+    const app = appWith({
+      notifications,
+      users: usersFor({
+        async deactivateAccount({ id }) {
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: false },
+            cancelledBookings: [
+              { id: 'b-1', deskId: 'd-1', deskNumber: 'A-01', bookingDate: '2026-09-17', cancellationSource: 'deactivation_cascade' },
+              { id: 'b-2', deskId: 'd-2', deskNumber: 'B-02', bookingDate: '2026-09-18', cancellationSource: 'deactivation_cascade' },
+            ],
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(notifications.cancellationCalls).toEqual([
+      {
+        bookingId: 'b-1',
+        userId: USER_ID,
+        email: 'dana@company.com',
+        deskNumber: 'A-01',
+        date: '2026-09-17',
+        cancellationSource: 'deactivation_cascade',
+      },
+      {
+        bookingId: 'b-2',
+        userId: USER_ID,
+        email: 'dana@company.com',
+        deskNumber: 'B-02',
+        date: '2026-09-18',
+        cancellationSource: 'deactivation_cascade',
+      },
+    ]);
+  });
+
+  it('sends nothing for a person with no upcoming bookings', async () => {
+    const notifications = recordingNotifications();
+    const app = appWith({
+      notifications,
+      users: usersFor({
+        async deactivateAccount({ id }) {
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: false },
+            cancelledBookings: [],
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(notifications.cancellationCalls).toEqual([]);
+  });
+
+  it('one failed send does not stop the loop or the 200 response (US-029/AC-10)', async () => {
+    let calls = 0;
+    const app = appWith({
+      notifications: {
+        async sendBookingConfirmation() {
+          throw new Error('not exercised');
+        },
+        async sendBookingCancellation() {
+          calls += 1;
+          if (calls === 1) throw new Error('unexpected notifications failure');
+          return { ok: true, recorded: true };
+        },
+      },
+      users: usersFor({
+        async deactivateAccount({ id }) {
+          return {
+            kind: 'ok',
+            profile: { id, full_name: 'Dana Silva', email: 'dana@company.com', role: 'employee', is_active: false },
+            cancelledBookings: [
+              { id: 'b-1', deskId: 'd-1', deskNumber: 'A-01', bookingDate: '2026-09-17', cancellationSource: 'deactivation_cascade' },
+              { id: 'b-2', deskId: 'd-2', deskNumber: 'B-02', bookingDate: '2026-09-18', cancellationSource: 'deactivation_cascade' },
+            ],
+          };
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .post(`/api/admin/users/${USER_ID}/deactivate`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(calls).toBe(2);
   });
 });
 

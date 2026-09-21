@@ -280,7 +280,7 @@ describe('createAdminBookingsService.cancelAnyBooking — write first, then clas
       },
       async cancelAnyBooking() {
         writeCalls += 1;
-        return { id: BOOKING_ID };
+        return { id: BOOKING_ID, ownerId: 'owner-1', deskNumber: 'A-02', date: '2026-09-16', ownerEmail: 'dana@company.com' };
       },
       async findBookingState() {
         classifyCalls += 1;
@@ -290,7 +290,13 @@ describe('createAdminBookingsService.cancelAnyBooking — write first, then clas
 
     const outcome = await service(repository).cancelAnyBooking(ADMIN_ID, BOOKING_ID);
 
-    expect(outcome).toEqual({ kind: 'ok' });
+    expect(outcome).toEqual({
+      kind: 'ok',
+      ownerId: 'owner-1',
+      deskNumber: 'A-02',
+      date: '2026-09-16',
+      ownerEmail: 'dana@company.com',
+    });
     expect(writeCalls).toBe(1);
     expect(classifyCalls).toBe(0);
   });
@@ -305,7 +311,7 @@ describe('createAdminBookingsService.cancelAnyBooking — write first, then clas
       async cancelAnyBooking(_bookingId, _adminId, cancelledAt, today) {
         seenCancelledAt.push(cancelledAt);
         seenToday = today;
-        return { id: BOOKING_ID };
+        return { id: BOOKING_ID, ownerId: 'owner-1', deskNumber: 'A-02', date: '2026-09-16', ownerEmail: 'dana@company.com' };
       },
       async findBookingState() {
         throw new Error('should not be called when the write succeeds');

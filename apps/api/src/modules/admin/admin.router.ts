@@ -38,8 +38,10 @@ import {
   unauthorized,
   unprocessable,
 } from '../../http/errors.js';
+import { logger } from '../../infra/logger/index.js';
 import type { AdminBookingsService } from '../bookings/admin-bookings.service.js';
 import type { DesksService } from '../desks/desks.service.js';
+import type { NotificationsService } from '../notifications/notifications.service.js';
 import type { UsersService } from '../users/users.service.js';
 import '../../http/request-user.js';
 
@@ -47,6 +49,10 @@ export interface AdminRouterDeps {
   bookings: AdminBookingsService;
   desks: DesksService;
   users: UsersService;
+  /** US-029. Narrowed to the one function this router calls — `composition.ts`'s
+   *  `BuildAppOptions.notifications` wires the SAME real seam `bookings.router.ts` uses (D-01),
+   *  just typed wider there to cover both callers. */
+  notifications: Pick<NotificationsService, 'sendBookingCancellation'>;
 }
 
 /**
@@ -67,7 +73,7 @@ function requireActingAdmin(req: { user?: { id: string } }) {
   return user;
 }
 
-export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): Router {
+export function createAdminRouter({ bookings, desks, users, notifications }: AdminRouterDeps): Router {
   const router = Router();
 
   /**
@@ -319,6 +325,28 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
       }
       if (outcome.kind === 'not_found') {
         throw notFound(ERROR_CODES.user_not_found, 'That account could not be found.');
+      }
+
+      // US-029/AC-03, AC-04, AC-06, AC-10. One email per cancelled booking, never a summary —
+      // the deactivated person's OWN address (already on `outcome.account`), never re-fetched.
+      // Same D-05 defence as this router's other cancel call site: one booking's failed send
+      // must never stop the loop or affect the 200 response.
+      for (const booking of outcome.cancelledBookings) {
+        try {
+          await notifications.sendBookingCancellation({
+            bookingId: booking.id,
+            userId: outcome.account.id,
+            email: outcome.account.email,
+            deskNumber: booking.deskNumber,
+            date: booking.bookingDate,
+            cancellationSource: 'deactivation_cascade',
+          });
+        } catch (notifyError) {
+          logger.error('deactivation cascade cancellation send threw unexpectedly', {
+            bookingId: booking.id,
+            error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+          });
+        }
       }
 
       res.setHeader('Cache-Control', 'private, no-store');
@@ -574,6 +602,24 @@ export function createAdminRouter({ bookings, desks, users }: AdminRouterDeps): 
         // Covers "no such booking" AND a real, past-dated booking (AC-02) — deliberately
         // undiscriminated, matching the employee cancel endpoint (decisions.md D-07).
         throw notFound(ERROR_CODES.booking_not_found, 'That booking could not be found.');
+      }
+
+      try {
+        // US-029/AC-01, AC-02, AC-04, AC-07. The OWNER's email, never the acting admin's — same
+        // D-05 defence as `bookings.router.ts`'s own two notify call sites.
+        await notifications.sendBookingCancellation({
+          bookingId: parsed.data.id,
+          userId: outcome.ownerId,
+          email: outcome.ownerEmail,
+          deskNumber: outcome.deskNumber,
+          date: outcome.date,
+          cancellationSource: 'admin',
+        });
+      } catch (notifyError) {
+        logger.error('admin booking cancellation send threw unexpectedly', {
+          bookingId: parsed.data.id,
+          error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+        });
       }
 
       res.status(200).end();
