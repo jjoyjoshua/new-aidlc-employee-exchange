@@ -1069,6 +1069,7 @@ describe('createUsersService.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-1
       kind: 'ok',
       account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false },
       cancelledCount: 3,
+      cancelledBookings: [cancelledBookingRow({ id: 'b-1' }), cancelledBookingRow({ id: 'b-2' }), cancelledBookingRow({ id: 'b-3' })],
     });
   });
 
@@ -1084,6 +1085,7 @@ describe('createUsersService.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-1
       kind: 'ok',
       account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false },
       cancelledCount: 0,
+      cancelledBookings: [],
     });
   });
 
@@ -1099,7 +1101,23 @@ describe('createUsersService.deactivateAccount (US-025/AC-01, AC-02, AC-04, AC-1
       kind: 'ok',
       account: { id: UPDATE_INPUT.id, fullName: 'Dana Silva', email: 'dana@company.com', role: 'employee', isActive: false },
       cancelledCount: 0,
+      cancelledBookings: [],
     });
+  });
+
+  it('threads US-029\'s cancellation-email facts through unchanged — desk, date and the FIXED "deactivation_cascade" source, never re-derived here (US-029/D-04)', async () => {
+    const { repository } = stubForDeactivate(async () => ({
+      kind: 'ok',
+      profile: currentRow({ is_active: false }),
+      cancelledBookings: [cancelledBookingRow({ id: 'b-1', deskNumber: 'B-07', bookingDate: '2026-10-01' })],
+    }));
+
+    const outcome = await service(repository).deactivateAccount(UPDATE_INPUT.id, ACTOR_ID);
+
+    expect(outcome.kind).toBe('ok');
+    expect(outcome.kind === 'ok' ? outcome.cancelledBookings : undefined).toEqual([
+      { id: 'b-1', deskId: 'd-1', deskNumber: 'B-07', bookingDate: '2026-10-01', cancellationSource: 'deactivation_cascade' },
+    ]);
   });
 
   it('returns blocked when the trigger refuses it — the only active admin (US-025/AC-10)', async () => {

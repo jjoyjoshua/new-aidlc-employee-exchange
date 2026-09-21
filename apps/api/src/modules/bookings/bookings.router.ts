@@ -25,9 +25,10 @@ import '../../http/request-user.js';
 
 export interface BookingsRouterDeps {
   service: BookingsService;
-  /** US-028. Only `sendBookingConfirmation` is used — narrowed so a fake in tests needs to
-   *  implement nothing else (D-04, `composition.ts`'s `BuildAppOptions.notifications` seam). */
-  notifications: Pick<NotificationsService, 'sendBookingConfirmation'>;
+  /** US-028/US-029. Narrowed to the two `send*` functions this router calls, so a fake in tests
+   *  needs to implement nothing else (D-04, `composition.ts`'s `BuildAppOptions.notifications`
+   *  seam — the ONE seam both US-028 and US-029 share, US-029/D-01). */
+  notifications: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'>;
 }
 
 /**
@@ -212,6 +213,24 @@ export function createBookingsRouter({ service, notifications }: BookingsRouterD
       }
       if (outcome.kind === 'not_found') {
         throw notFound(ERROR_CODES.booking_not_found, 'That booking could not be found.');
+      }
+
+      try {
+        // US-029/AC-01, AC-02, AC-05. Same defence as POST / above (D-05) — a notify failure
+        // must never turn this 200 into a 500; the cancellation already committed.
+        await notifications.sendBookingCancellation({
+          bookingId: parsed.data.id,
+          userId: user.id,
+          email: user.email,
+          deskNumber: outcome.deskNumber,
+          date: outcome.date,
+          cancellationSource: 'owner',
+        });
+      } catch (notifyError) {
+        logger.error('booking cancellation send threw unexpectedly', {
+          bookingId: parsed.data.id,
+          error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+        });
       }
 
       res.status(200).end();

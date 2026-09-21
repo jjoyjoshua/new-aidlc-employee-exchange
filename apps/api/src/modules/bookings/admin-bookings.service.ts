@@ -30,7 +30,9 @@ export interface AdminBookingsQuery {
 }
 
 export type CancelAnyBookingOutcome =
-  | { kind: 'ok' }
+  /** `ownerId`/`deskNumber`/`date`/`ownerEmail` are for US-029's cancellation email — resolved
+   *  by the repository's own follow-up read (D-03), never a second query here. */
+  | { kind: 'ok'; ownerId: string; deskNumber: string; date: OfficeDate; ownerEmail: string }
   /** US-015/AC-09. The row exists and is ALREADY cancelled — the owner got there first (US-011),
    *  a concurrent admin request won, or a deactivation cascade (US-025) voided it. Deliberately
    *  ONE outcome, never split by `cancellation_source` (design note §3.3, `decisions.md` D-08). */
@@ -123,7 +125,15 @@ export function createAdminBookingsService({ bookings, nowMs, officeTimezone }: 
       const today = officeToday(now, officeTimezone);
 
       const cancelled = await bookings.cancelAnyBooking(bookingId, adminId, new Date(now), today);
-      if (cancelled) return { kind: 'ok' };
+      if (cancelled) {
+        return {
+          kind: 'ok',
+          ownerId: cancelled.ownerId,
+          deskNumber: cancelled.deskNumber,
+          date: cancelled.date,
+          ownerEmail: cancelled.ownerEmail,
+        };
+      }
 
       const existing = await bookings.findBookingState(bookingId);
       if (existing?.status === 'cancelled') return { kind: 'already_cancelled' };

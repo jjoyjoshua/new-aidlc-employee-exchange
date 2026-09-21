@@ -89,7 +89,7 @@ export interface AvailabilityRepository {
     bookingId: string,
     cancelledAt: Date,
     today: OfficeDate,
-  ): Promise<{ id: string } | undefined>;
+  ): Promise<{ id: string; desk_id: string; booking_date: OfficeDate } | undefined>;
   /** US-011/AC-09. The caller's own booking's current state, or `undefined`. Read-only, and
    *  issued ONLY after `cancelOwnedBooking` returns nothing, to classify the miss (design note
    *  §1.4).
@@ -275,11 +275,14 @@ export const availabilityRepository: AvailabilityRepository = {
       .eq('user_id', userId)
       .eq('status', 'confirmed')
       .gte('booking_date', today)
-      .select('id')
+      // `desk_id`/`booking_date` are plain columns off the SAME row being updated — no
+      // relational embed (US-029/D-02) — so `bookings.service.ts`'s `cancelBooking` can compose
+      // a cancellation email without a second disambiguating read.
+      .select('id, desk_id, booking_date')
       .maybeSingle();
 
     if (error) throw new Error(`booking cancel failed: ${error.message}`);
-    return (data as { id: string } | null) ?? undefined;
+    return (data as { id: string; desk_id: string; booking_date: OfficeDate } | null) ?? undefined;
   },
 
   /**

@@ -11,6 +11,8 @@ import {
   throwingAvailabilityRepository,
 } from './bookings.fixtures.js';
 
+const DESK_ID = '11111111-1111-4111-8111-111111111111';
+
 const OFFICE_TIMEZONE = 'Asia/Kolkata';
 const TODAY = '2026-09-16'; // Wednesday
 const CALLER_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
@@ -567,12 +569,15 @@ describe('bookings.service.getAvailability — nextFreeDays (US-009/AC-01, AC-02
 });
 
 describe('bookings.service.cancelBooking (US-007/AC-07, FR-06, amended by US-011/AC-02, AC-09)', () => {
-  it('maps a successful UPDATE to ok, and issues no disambiguating read at all — exactly one write, the invariant US-011/AC-10\'s "no second email" rests on (design note §1.5, §4.1)', async () => {
+  it('maps a successful UPDATE to ok, resolves the desk via getDeskById (US-029/D-02), and issues no disambiguating read at all — exactly one write, the invariant US-011/AC-10\'s "no second email" rests on (design note §1.5, §4.1)', async () => {
     let findMyBookingStateCalls = 0;
     const availability: AvailabilityRepository = {
       ...emptyAvailabilityRepository,
       async cancelOwnedBooking() {
-        return { id: 'b1' };
+        return { id: 'b1', desk_id: DESK_ID, booking_date: '2026-09-16' };
+      },
+      async getDeskById() {
+        return activeDeskRow(DESK_ID, 'A-01');
       },
       async findMyBookingState() {
         findMyBookingStateCalls += 1;
@@ -583,7 +588,7 @@ describe('bookings.service.cancelBooking (US-007/AC-07, FR-06, amended by US-011
 
     const outcome = await service.cancelBooking(CALLER_ID, 'b1');
 
-    expect(outcome).toEqual({ kind: 'ok' });
+    expect(outcome).toEqual({ kind: 'ok', deskNumber: 'A-01', date: '2026-09-16' });
     expect(findMyBookingStateCalls).toBe(0);
   });
 
@@ -646,7 +651,10 @@ describe('bookings.service.cancelBooking (US-007/AC-07, FR-06, amended by US-011
       async cancelOwnedBooking(_userId, _bookingId, cancelledAt, today) {
         capturedCancelledAt = cancelledAt;
         capturedToday = today;
-        return { id: 'b1' };
+        return { id: 'b1', desk_id: DESK_ID, booking_date: today };
+      },
+      async getDeskById() {
+        return activeDeskRow(DESK_ID, 'A-01');
       },
     };
     const service = createBookingsService({ availability, nowMs: nowMsFor(TODAY), officeTimezone: OFFICE_TIMEZONE });

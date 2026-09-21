@@ -75,11 +75,12 @@ export interface BuildAppOptions {
    *  (`domain/generate-reset-password.ts` takes `randomInt` as a parameter, never reading
    *  `crypto` itself, design note §5.1). */
   randomInt?: (maxExclusive: number) => number;
-  /** US-028 test seam — overrides the real `notificationsService`, which reads `MAIL_*` config
-   *  through `infra/mailer`. Every existing `POST /api/bookings` test builds a `Config` fixture
-   *  with no mail keys (`bookings.routes.spec.ts`), so a test that does not need to exercise
-   *  mail behaviour must not hit the real singleton (US-028/D-04). */
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation'>;
+  /** US-028/US-029 test seam — overrides the real `notificationsService`, which reads `MAIL_*`
+   *  config through `infra/mailer`. Every existing `POST /api/bookings`/admin test builds a
+   *  `Config` fixture with no mail keys, so a test that does not need to exercise mail behaviour
+   *  must not hit the real singleton (US-028/D-04). One seam for both routers (US-029/D-01) —
+   *  not one per caller. */
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'>;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -143,7 +144,12 @@ export function buildApp(options: BuildAppOptions = {}): Express {
       requireSession: sessionForPasswordChange,
       officeTimezone,
     }),
-    adminRouter: createAdminRouter({ bookings: adminBookingsService, desks: desksService, users: usersService }),
+    adminRouter: createAdminRouter({
+      bookings: adminBookingsService,
+      desks: desksService,
+      users: usersService,
+      notifications: options.notifications ?? notificationsService,
+    }),
     bookingsRouter: createBookingsRouter({
       service: bookingsService,
       notifications: options.notifications ?? notificationsService,

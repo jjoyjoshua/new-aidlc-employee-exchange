@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../composition.js';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 import type { SessionVerifier } from '../../http/middleware/require-session.js';
-import type { BookingConfirmationInput, NotificationsService, RecordAndSendResult } from '../notifications/notifications.service.js';
+import type {
+  BookingCancellationInput,
+  BookingConfirmationInput,
+  NotificationsService,
+  RecordAndSendResult,
+} from '../notifications/notifications.service.js';
 import type { AvailabilityRepository } from './bookings.repository.js';
 import {
   activeDeskRow,
@@ -68,27 +73,40 @@ const NOW_MS = () => Date.parse(`${TODAY}T12:00:00Z`);
 const noRows: AvailabilityRepository = emptyAvailabilityRepository;
 
 /**
- * US-028/D-04. A recording no-op — every existing test in this file (US-007/009/011) creates a
- * booking without caring what happens to the confirmation, and this file's `Config` fixture
- * below carries no `MAIL_*` keys, so the REAL `notificationsService` must never be reached here.
- * `calls` is read back as plain data (never asserted as a mock call) by this story's own tests.
+ * US-028/US-029/D-04. A recording no-op — every existing test in this file (US-007/009/011)
+ * creates or cancels a booking without caring what happens to the notification, and this file's
+ * `Config` fixture below carries no `MAIL_*` keys, so the REAL `notificationsService` must never
+ * be reached here. `calls`/`cancellationCalls` are read back as plain data (never asserted as a
+ * mock call) by this story's own tests.
  */
 function recordingNotifications(
   result: RecordAndSendResult = { ok: true, recorded: true },
-): Pick<NotificationsService, 'sendBookingConfirmation'> & { calls: BookingConfirmationInput[] } {
+): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> & {
+  calls: BookingConfirmationInput[];
+  cancellationCalls: BookingCancellationInput[];
+} {
   const calls: BookingConfirmationInput[] = [];
+  const cancellationCalls: BookingCancellationInput[] = [];
   return {
     calls,
+    cancellationCalls,
     async sendBookingConfirmation(input) {
       calls.push(input);
+      return result;
+    },
+    async sendBookingCancellation(input) {
+      cancellationCalls.push(input);
       return result;
     },
   };
 }
 
-function throwingNotifications(): Pick<NotificationsService, 'sendBookingConfirmation'> {
+function throwingNotifications(): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> {
   return {
     async sendBookingConfirmation() {
+      throw new Error('unexpected notifications failure');
+    },
+    async sendBookingCancellation() {
       throw new Error('unexpected notifications failure');
     },
   };
@@ -108,7 +126,7 @@ beforeEach(() => {
 function appWith(options: {
   rows?: Row[];
   availability?: AvailabilityRepository;
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation'>;
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'>;
 }) {
   const rows = options.rows ?? [EMPLOYEE, MUST_CHANGE_PASSWORD];
 
@@ -654,7 +672,13 @@ function repositoryOverRow(row: ReturnType<typeof bookingRow>): Partial<Availabi
       row.cancelled_at = cancelledAt.toISOString();
       row.cancelled_by = userId;
       row.cancellation_source = 'owner';
-      return { id: row.id };
+      return { id: row.id, desk_id: row.desk_id, booking_date: row.booking_date };
+    },
+    // US-029/D-02 — `bookings.service.ts`'s `cancelBooking` resolves the desk number this way
+    // on the success path.
+    async getDeskById(deskId) {
+      if (deskId !== row.desk_id) return undefined;
+      return { id: row.desk_id, desk_number: row.desk_number, is_active: true };
     },
     async findMyBookingState(userId, bookingId) {
       if (row.id !== bookingId || row.user_id !== userId) return undefined;
@@ -724,7 +748,11 @@ describe('POST /api/bookings/:id/cancel — US-007/AC-07, FR-06, amended by US-0
           row.cancelled_at = cancelledAt.toISOString();
           row.cancelled_by = userId;
           row.cancellation_source = 'owner';
-          return { id: row.id };
+          return { id: row.id, desk_id: row.desk_id, booking_date: row.booking_date };
+        },
+        async getDeskById(deskId) {
+          const row = rows.find((r) => r.desk_id === deskId);
+          return row ? { id: row.desk_id, desk_number: row.desk_number, is_active: true } : undefined;
         },
         async findMyBookingState(userId, bookingId) {
           const row = rows.find((r) => r.id === bookingId);
@@ -779,6 +807,72 @@ describe('POST /api/bookings/:id/cancel — US-007/AC-07, FR-06, amended by US-0
     const response = await request(app).post('/api/bookings/11111111-1111-4111-8111-111111111111/cancel');
     expect(response.status).toBe(401);
     expect(response.body.code).toBe('no_session');
+  });
+});
+
+describe('POST /api/bookings/:id/cancel — sends a cancellation email to the owner (US-029/AC-01, AC-02, AC-05)', () => {
+  it('calls sendBookingCancellation once with the callers email, the cancelled booking, its desk and date, and cancellationSource owner (US-029/AC-01, US-029/AC-02, US-029/AC-05)', async () => {
+    const row = bookingRow({});
+    const notifications = recordingNotifications();
+    const app = appWith({ notifications, availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) } });
+
+    const response = await cancelBooking(app, row.id);
+
+    expect(response.status).toBe(200);
+    expect(notifications.cancellationCalls).toEqual([
+      {
+        bookingId: row.id,
+        userId: EMPLOYEE.id,
+        email: EMPLOYEE.email,
+        deskNumber: row.desk_number,
+        date: row.booking_date,
+        cancellationSource: 'owner',
+      },
+    ]);
+  });
+
+  it('sends no cancellation email when the booking was already cancelled (US-029/AC-09)', async () => {
+    const row = bookingRow({
+      status: 'cancelled',
+      cancelled_at: '2026-09-15T09:00:00.000Z',
+      cancelled_by: EMPLOYEE.id,
+      cancellation_source: 'owner',
+    });
+    const notifications = recordingNotifications();
+    const app = appWith({ notifications, availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) } });
+
+    const response = await cancelBooking(app, row.id);
+
+    expect(response.status).toBe(409);
+    expect(notifications.cancellationCalls).toHaveLength(0);
+  });
+});
+
+describe('POST /api/bookings/:id/cancel — a mail failure never loses the cancellation (US-029/AC-10)', () => {
+  it('still returns 200 when sendBookingCancellation reports a failure', async () => {
+    const row = bookingRow({});
+    const app = appWith({
+      notifications: recordingNotifications({ ok: false, error: 'transport_unreachable', recorded: true }),
+      availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) },
+    });
+
+    const response = await cancelBooking(app, row.id);
+
+    expect(response.status).toBe(200);
+    expect(row.status).toBe('cancelled');
+  });
+
+  it('still returns 200 when sendBookingCancellation throws unexpectedly — the same D-05 defence as POST /', async () => {
+    const row = bookingRow({});
+    const app = appWith({
+      notifications: throwingNotifications(),
+      availability: { ...emptyAvailabilityRepository, ...repositoryOverRow(row) },
+    });
+
+    const response = await cancelBooking(app, row.id);
+
+    expect(response.status).toBe(200);
+    expect(row.status).toBe('cancelled');
   });
 });
 

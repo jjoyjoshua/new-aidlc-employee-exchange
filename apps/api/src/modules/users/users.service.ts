@@ -12,7 +12,7 @@
  * (design note §2.1). See that function's own docblock for the restore-compensation shape.
  */
 import type { AdminUser, AdminUsersResponse, AdminSummary, DeactivationPreview, UserRole } from '@desk-booking/contracts';
-import type { UserAccountRow, UserSummaryRow, UsersRepository } from './users.repository.js';
+import type { CancelledBookingRow, UserAccountRow, UserSummaryRow, UsersRepository } from './users.repository.js';
 import type { UsersAuthAdapter } from './users.adapter.js';
 import { logger } from '../../infra/logger/index.js';
 import { officeToday } from '../../domain/booking-window.js';
@@ -70,7 +70,10 @@ export type ChangeRoleOutcome =
  * promise AC-13 makes (cannot sign in, chip reads Deactivated) stays true with no invented copy.
  */
 export type DeactivateAccountOutcome =
-  | { kind: 'ok'; account: AdminUser; cancelledCount: number }
+  /** `cancelledBookings` is US-029's own — the repository already computes it (`users.repository
+   *  .ts`'s `CancelledBookingRow`); this widens what was reduced to `cancelledCount` alone,
+   *  additively (US-029/D-04). */
+  | { kind: 'ok'; account: AdminUser; cancelledCount: number; cancelledBookings: CancelledBookingRow[] }
   /** US-025/AC-10 (BR-001.11, V-11). The trigger refused it — never an in-app count. */
   | { kind: 'blocked' }
   | { kind: 'not_found' };
@@ -366,9 +369,9 @@ export function createUsersService({ users, usersAuth, nowMs, officeTimezone, ra
      * AC-13 makes — mapping it to `not_found` or a failure would ship copy that is false about
      * an account that plainly exists (design note §2.2).
      *
-     * `cancelledBookings` stops here, deliberately — reduced to a count. The rows exist for
-     * US-029/US-032 to consume when they land; a future caller widens this explicitly rather than
-     * finding a dead field (`desks.service.ts:113-115`'s own precedent for exactly this shape).
+     * `cancelledBookings` now passes through alongside `cancelledCount` (US-029/D-04) — the rows
+     * this docblock once said "stop here" now reach `admin.router.ts`'s `POST
+     * /users/:id/deactivate`, one `sendBookingCancellation` per row (AC-03).
      */
     async deactivateAccount(id: string, actorId: string): Promise<DeactivateAccountOutcome> {
       const now = nowMs();
@@ -389,13 +392,14 @@ export function createUsersService({ users, usersAuth, nowMs, officeTimezone, ra
 
       if (result.kind === 'already_inactive') {
         logger.warn('deactivation found the account already inactive — nothing was changed', { id });
-        return { kind: 'ok', account: mapAccount(result.profile), cancelledCount: 0 };
+        return { kind: 'ok', account: mapAccount(result.profile), cancelledCount: 0, cancelledBookings: [] };
       }
 
       return {
         kind: 'ok',
         account: mapAccount(result.profile),
         cancelledCount: result.cancelledBookings.length,
+        cancelledBookings: result.cancelledBookings,
       };
     },
 

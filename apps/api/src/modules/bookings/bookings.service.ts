@@ -56,7 +56,9 @@ export type CreateBookingOutcome =
   | { kind: 'user_conflict' };
 
 export type CancelBookingOutcome =
-  | { kind: 'ok' }
+  /** `deskNumber`/`date` are for US-029's cancellation email — resolved via `getDeskById` (D-02),
+   *  the same method `createBooking` already calls, rather than a new query shape. */
+  | { kind: 'ok'; deskNumber: string; date: OfficeDate }
   /** US-011/AC-09. The row is the caller's own and is ALREADY cancelled — an admin (US-015), a
    *  deactivation cascade (US-025), or a concurrent request of the caller's own won the race. */
   | { kind: 'already_cancelled' }
@@ -215,7 +217,14 @@ export function createBookingsService({ availability, nowMs, officeTimezone }: B
       const today = officeToday(now, officeTimezone);
 
       const cancelled = await availability.cancelOwnedBooking(userId, bookingId, new Date(now), today);
-      if (cancelled) return { kind: 'ok' };
+      if (cancelled) {
+        // desk_id is NOT NULL on bookings (0003_bookings.sql) and desks are deactivated, never
+        // deleted — a miss here means something is structurally wrong, `getDeskById`'s own
+        // callers elsewhere in this file share this reasoning.
+        const desk = await availability.getDeskById(cancelled.desk_id);
+        if (!desk) throw new Error(`booking ${cancelled.id} has no resolvable desk — desk_id is NOT NULL, this is a bug`);
+        return { kind: 'ok', deskNumber: desk.desk_number, date: cancelled.booking_date };
+      }
 
       const existing = await availability.findMyBookingState(userId, bookingId);
       if (existing?.status === 'cancelled') return { kind: 'already_cancelled' };

@@ -33,6 +33,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-027 | Reset somebody's password | Complex | implemented | [`US-027-reset-somebodys-password/`](US-027-reset-somebodys-password/) |
 | US-034 | Transactional email is configured, not hard-coded, and failures are logged | Complex | implemented | [`US-034-email-configuration-and-failure-logging/`](US-034-email-configuration-and-failure-logging/) |
 | US-028 | Get a confirmation email when my booking is made | Medium | implemented | [`US-028-booking-confirmation-email/`](US-028-booking-confirmation-email/) |
+| US-029 | Get a cancellation email when my booking is voided | Medium | implemented | [`US-029-booking-cancellation-email/`](US-029-booking-cancellation-email/) |
 
 ## How to update
 
