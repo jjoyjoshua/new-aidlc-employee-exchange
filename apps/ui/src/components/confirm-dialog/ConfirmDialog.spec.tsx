@@ -195,7 +195,7 @@ describe('ConfirmDialog — generic, no bookings vocabulary (D-06)', () => {
     expect(screen.getByRole('button', { name: /dismiss/i })).toBeDisabled();
   });
 
-  it('traps Tab focus within the dialog (US-011/AC-03)', async () => {
+  it('traps Tab focus within the dialog (US-011/AC-03, US-033/AC-07)', async () => {
     render(
       <ConfirmDialog
         title="Cancel this booking?"
@@ -221,7 +221,7 @@ describe('ConfirmDialog — generic, no bookings vocabulary (D-06)', () => {
     expect(dialog.contains(document.activeElement)).toBe(true);
   });
 
-  it('restores focus to the element that had it before the dialog opened, on unmount (US-011/AC-03)', () => {
+  it('restores focus to the element that had it before the dialog opened, on unmount (US-011/AC-03, US-033/AC-07)', () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Cancel';
     document.body.appendChild(trigger);

@@ -111,7 +111,7 @@ describe('AccountRowMenu — fixed order and labels (US-020/AC-10)', () => {
     expect(item).not.toBeDisabled();
   });
 
-  it('clicking Reset password calls onResetPassword with the account, dismisses the menu, and returns focus to the trigger (US-027)', async () => {
+  it('clicking Reset password calls onResetPassword with the account, dismisses the menu, and returns focus to the trigger (US-027, US-033/AC-07)', async () => {
     const onDismiss = vi.fn();
     const onResetPassword = vi.fn();
     render(<Harness account={EMPLOYEE} onDismiss={onDismiss} onResetPassword={onResetPassword} />);
@@ -300,7 +300,7 @@ describe('AccountRowMenu — focus, Escape and arrow keys (US-020/AC-12)', () =>
     expect(screen.getByRole('button', { name: 'Actions for Dana Silva' })).toHaveFocus();
   });
 
-  it('ArrowDown moves focus to the next item, ArrowUp moves back (design note §5.4, A9)', async () => {
+  it('ArrowDown moves focus to the next item, ArrowUp moves back (design note §5.4, A9, US-033/AC-07)', async () => {
     render(<Harness account={EMPLOYEE} />);
     const items = await screen.findAllByRole('menuitem');
     await waitFor(() => expect(items[0]).toHaveFocus());

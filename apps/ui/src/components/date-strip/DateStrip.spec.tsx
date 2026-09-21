@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -62,14 +65,14 @@ describe('DateStrip (US-005/AC-02, AC-03, AC-04)', () => {
     expect(onSelectDate).toHaveBeenCalledWith('2026-09-17');
   });
 
-  it('is one tab stop: only the selected chip is in the tab order (US-005 interaction/accessibility)', () => {
+  it('is one tab stop: only the selected chip is in the tab order (US-005 interaction/accessibility, US-033/AC-07)', () => {
     render(<DateStrip today={TODAY} selectedDate="2026-09-17" onSelectDate={() => undefined} />);
 
     expect(screen.getByRole('radio', { name: /Thu 17/ })).toHaveAttribute('tabindex', '0');
     expect(screen.getByRole('radio', { name: /Wed 16/ })).toHaveAttribute('tabindex', '-1');
   });
 
-  it('ArrowRight moves the roving tab stop to the next bookable day, skipping a refused one', async () => {
+  it('ArrowRight moves the roving tab stop to the next bookable day, skipping a refused one (US-033/AC-07)', async () => {
     const user = userEvent.setup();
     render(<DateStrip today={TODAY} selectedDate="2026-09-18" onSelectDate={() => undefined} />);
 
@@ -122,5 +125,23 @@ describe('DateStrip (US-005/AC-02, AC-03, AC-04)', () => {
     expect(screen.getByRole('radio', { name: /Wed 23/ })).toBeInTheDocument();
     // Paging back then reveals today again.
     expect(screen.getByRole('button', { name: 'Earlier dates' })).toBeEnabled();
+  });
+});
+
+describe('DateStrip — chip count per width (US-033/AC-03)', () => {
+  it('shows 3 chips at 360px, 5 from 768px, all 7 from 1280px (US-033/AC-03)', () => {
+    // jsdom performs no layout, so the stylesheet is the honest proxy for the breakpoint (same
+    // device Dialog.spec.tsx uses). All 7 chips always render; CSS is what hides the extra ones.
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, 'date-strip.css'), 'utf8');
+    const defaultRules = css.split('@media')[0] ?? '';
+    expect(defaultRules).toMatch(/\.date-strip__chip:nth-child\(n \+ 4\)\s*\{[^}]*display:\s*none/);
+
+    const at768 = css.match(/@media \(min-width: 768px\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+    expect(at768).toMatch(/\.date-strip__chip:nth-child\(n \+ 4\)\s*\{[^}]*display:\s*flex/);
+    expect(at768).toMatch(/\.date-strip__chip:nth-child\(n \+ 6\)\s*\{[^}]*display:\s*none/);
+
+    const at1280 = css.match(/@media \(min-width: 1280px\) \{[\s\S]*\}/)?.[0] ?? '';
+    expect(at1280).toMatch(/\.date-strip__chip:nth-child\(n \+ 6\)\s*\{[^}]*display:\s*flex/);
   });
 });

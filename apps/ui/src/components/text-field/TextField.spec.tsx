@@ -33,7 +33,7 @@ describe('TextField (US-001/AC-05)', () => {
     expect(input).toHaveAccessibleDescription('Enter a valid email address');
   });
 
-  it('carries an icon as well as the words, so colour is never the only signal (NFR-008)', () => {
+  it('carries an icon as well as the words, so colour is never the only signal (NFR-008, US-033/AC-05)', () => {
     const { container } = render(<TextField label="Email" error="Enter a valid email address" />);
 
     // NFR-008: a user who sees no colour difference must lose nothing. The icon and the text

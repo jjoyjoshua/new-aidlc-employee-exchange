@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -594,5 +597,20 @@ describe('Desks — admin only (US-016/AC-10)', () => {
     render(<SignedIn fetchDesks={async () => okDesks([])} user={ADMIN} guarded />);
 
     expect(await screen.findByText('No desks yet. Nobody can book until you add one.')).toBeInTheDocument();
+  });
+});
+
+describe('Desks — table/card breakpoint at 768px (US-033/AC-03)', () => {
+  it('is stacked cards at 768px — the table needs 1024px (US-033/AC-03)', () => {
+    // jsdom performs no layout, so the stylesheet is the honest proxy for the breakpoint (same
+    // device Dialog.spec.tsx uses). `.desk-inventory-table` is `display: none` by default
+    // (unguarded), only becoming a table inside the 1024px query — 768px is still below it.
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, 'desks.css'), 'utf8');
+    const defaultRules = css.split('@media')[0] ?? '';
+    expect(defaultRules).toMatch(/\.desk-inventory-table\s*\{[^}]*display:\s*none/);
+
+    const tableBreakpoint = css.match(/@media \(min-width: 1024px\) \{[\s\S]*\}/)?.[0] ?? '';
+    expect(tableBreakpoint).toMatch(/\.desk-inventory-table\s*\{[^}]*display:\s*table/);
   });
 });

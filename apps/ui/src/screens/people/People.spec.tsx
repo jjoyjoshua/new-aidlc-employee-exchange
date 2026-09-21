@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -750,5 +753,21 @@ describe('People — reset password is admin-only, at the UI layer (US-027/AC-11
 
     expect(await screen.findByText('My bookings')).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Reset password' })).not.toBeInTheDocument();
+  });
+});
+
+describe('People — table/card breakpoint at 768px (US-033/AC-03)', () => {
+  it('is stacked cards at 768px — the table needs 1024px (US-033/AC-03)', () => {
+    // jsdom performs no layout, so the stylesheet is the honest proxy for the breakpoint (same
+    // device Dialog.spec.tsx uses). `.people-table` is `display: none` by default (unguarded),
+    // only becoming a table inside the 1024px query — 768px is still below it.
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, 'people.css'), 'utf8');
+    const defaultRules = css.split('@media')[0] ?? '';
+    expect(defaultRules).toMatch(/\.people-table\s*\{[^}]*display:\s*none/);
+
+    const tableBreakpoint = css.match(/@media \(min-width: 1024px\) \{[\s\S]*\}/)?.[0] ?? '';
+    expect(tableBreakpoint).toMatch(/\.people-table\s*\{[^}]*display:\s*table/);
+    expect(tableBreakpoint).toMatch(/\.people-cards\s*\{[^}]*display:\s*none/);
   });
 });

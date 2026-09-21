@@ -37,6 +37,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-030 | Get a reminder email the day before | Complex | implemented | [`US-030-day-before-reminder-email/`](US-030-day-before-reminder-email/) |
 | US-031 | Turn browser push alerts on or off | Complex | implemented | [`US-031-turn-push-alerts-on-or-off/`](US-031-turn-push-alerts-on-or-off/) |
 | US-032 | Get a push alert when a booking is made or cancelled | Complex | implemented | [`US-032-push-alerts-on-book-and-cancel/`](US-032-push-alerts-on-book-and-cancel/) |
+| US-033 | Every screen holds up at three widths and never signals by colour alone | Medium | in progress | [`US-033-responsive-and-accessible-across-every-screen/`](US-033-responsive-and-accessible-across-every-screen/) |
 
 ## How to update
 

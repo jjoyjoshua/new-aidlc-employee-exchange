@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -15,6 +18,7 @@ const EMPLOYEE: AuthenticatedUser = {
   mustChangePassword: false,
 };
 const ADMIN: AuthenticatedUser = { ...EMPLOYEE, role: 'admin', fullName: 'Marcus Webb' };
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Signs a user in through the **real** provider, so no context is faked.
@@ -171,5 +175,29 @@ describe('RequireRole (US-001/AC-03)', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'All bookings' })).toBeInTheDocument();
+  });
+});
+
+describe('AppShell — the three responsive shells (US-033/AC-02, partial — see issue #70)', () => {
+  it('stacks nav above content by default, a 72px icon-only sidebar from 768px, and a 240px labelled sidebar from 1024px (US-033/AC-02)', () => {
+    // jsdom performs no layout, so the stylesheet is the honest proxy for the breakpoint (same
+    // device Dialog.spec.tsx and the desk inventory screen's own two-boundary tests use). The
+    // default (unguarded) rule is a vertical stack; the two `min-width` queries are what promote
+    // it to a sidebar, first icon-only, then labelled.
+    //
+    // NOT proven here, and not true today: ia.md:76 specifies the <768px shell is a fixed BOTTOM
+    // bar (thumb-reach rationale, top tabs explicitly rejected). The real browser sweep
+    // (verification-log.md) found the nav renders in normal flow at the TOP of the page instead
+    // (`position: static`) — filed as issue #70, not fixed here (this story verifies, it does
+    // not build).
+    const css = readFileSync(join(HERE, 'app-shell.css'), 'utf8');
+    const defaultRules = css.split('@media')[0] ?? '';
+    expect(defaultRules).toMatch(/\.app-shell\s*\{[^}]*flex-direction:\s*column/);
+
+    const collapsedSidebar = css.match(/@media \(min-width: 768px\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+    expect(collapsedSidebar).toMatch(/\.app-shell__sidebar\s*\{[^}]*width:\s*72px/);
+
+    const persistentSidebar = css.match(/@media \(min-width: 1024px\) \{[\s\S]*\}/)?.[0] ?? '';
+    expect(persistentSidebar).toMatch(/\.app-shell__sidebar\s*\{[^}]*width:\s*240px/);
   });
 });

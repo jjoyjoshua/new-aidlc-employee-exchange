@@ -1522,7 +1522,22 @@
         "AC-08",
         "AC-09"
       ],
-      "tests": [],
+      "tests": [
+        "apps/ui/src/components/app-shell/AppShell.spec.tsx",
+        "apps/ui/src/screens/all-bookings/AllBookings.spec.tsx",
+        "apps/ui/src/screens/desks/Desks.spec.tsx",
+        "apps/ui/src/screens/people/People.spec.tsx",
+        "apps/ui/src/components/date-strip/DateStrip.spec.tsx",
+        "apps/ui/src/screens/settings/Settings.spec.tsx",
+        "apps/ui/src/components/status-chip/StatusChip.spec.tsx",
+        "apps/ui/src/components/text-field/TextField.spec.tsx",
+        "apps/ui/src/components/toggle/Toggle.spec.tsx",
+        "apps/ui/src/verification/contrast-gate.spec.ts",
+        "apps/ui/src/components/dialog/Dialog.spec.tsx",
+        "apps/ui/src/components/confirm-dialog/ConfirmDialog.spec.tsx",
+        "apps/ui/src/screens/people/AccountRowMenu.spec.tsx",
+        "apps/ui/src/verification/location-selector-absence.spec.ts"
+      ],
       "screens": [
         "SCR-001",
         "SCR-002",
