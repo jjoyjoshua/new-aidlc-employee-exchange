@@ -3,6 +3,9 @@
  * (`MyBookings.spec.tsx`'s own reasoning: faking the context tests a stub's shape, not the
  * provider's behaviour), with a path-dispatching fake `ApiClient` standing in for the server.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -205,7 +208,7 @@ describe('Settings — ST-08 load error (US-031/AC-08)', () => {
   });
 });
 
-describe('Settings — the responsive column (US-031/AC-11)', () => {
+describe('Settings — the responsive column (US-031/AC-11, US-033/AC-03)', () => {
   it('renders the capped, narrow column the three widths share — 640px desktop, 520px at 768 (US-031/AC-11)', async () => {
     stubNavigator();
     const pushHandler: PushHandler = async () => ({ kind: 'ok', data: { pushOptIn: false, vapidPublicKey: VAPID_PUBLIC_KEY } });
@@ -218,6 +221,18 @@ describe('Settings — the responsive column (US-031/AC-11)', () => {
     // build" is that other story's own framing). What a unit test CAN prove is that the
     // capped-column structure the breakpoints hang off actually exists in the rendered DOM.
     expect(container.querySelector('.settings__column')).toBeInTheDocument();
+  });
+
+  it('the column is 640px by default and 520px between 768 and 1023.98px (US-033/AC-03)', () => {
+    // That "other story" has arrived — jsdom still has no layout engine, so the stylesheet is
+    // the honest proxy for the breakpoint value itself (same device Dialog.spec.tsx uses).
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, 'settings.css'), 'utf8');
+    const defaultRules = css.split('@media')[0] ?? '';
+    expect(defaultRules).toMatch(/\.settings__column\s*\{[^}]*max-width:\s*640px/);
+
+    const at768 = css.match(/@media \(min-width: 768px\) and \(max-width: 1023\.98px\) \{[\s\S]*\}/)?.[0] ?? '';
+    expect(at768).toMatch(/\.settings__column\s*\{[^}]*max-width:\s*520px/);
   });
 });
 

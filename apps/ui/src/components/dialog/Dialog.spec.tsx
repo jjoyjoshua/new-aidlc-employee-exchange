@@ -114,7 +114,7 @@ describe('Dialog — the shared shell (US-017 design note §5.2)', () => {
     expect(document.activeElement).toBe(screen.getByLabelText('Desk number'));
   });
 
-  it('traps Tab focus within the dialog', async () => {
+  it('traps Tab focus within the dialog (US-033/AC-07)', async () => {
     render(
       <Dialog
         title="Add desk"
@@ -231,7 +231,7 @@ describe('Dialog — the shared shell (US-017 design note §5.2)', () => {
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
-  it('restores focus to the element that had it before the dialog opened, on unmount', () => {
+  it('restores focus to the element that had it before the dialog opened, on unmount (US-033/AC-07)', () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Add desk';
     document.body.appendChild(trigger);

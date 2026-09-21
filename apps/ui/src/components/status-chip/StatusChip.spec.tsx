@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { StatusChip } from './StatusChip.js';
 
 describe('StatusChip (US-006/AC-02 — icon and word, never colour alone, NFR-008)', () => {
-  it('renders the text Available plus an icon element (US-006/AC-02)', () => {
+  it('renders the text Available plus an icon element (US-006/AC-02, US-033/AC-05)', () => {
     const { container } = render(<StatusChip status="available" />);
 
     expect(screen.getByText('Available')).toBeInTheDocument();
     expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
   });
 
-  it('renders the text "Taken" plus an icon element', () => {
+  it('renders the text "Taken" plus an icon element (US-033/AC-05)', () => {
     const { container } = render(<StatusChip status="taken" />);
 
     expect(screen.getByText('Taken')).toBeInTheDocument();
@@ -23,7 +23,7 @@ describe('StatusChip (US-006/AC-02 — icon and word, never colour alone, NFR-00
     expect(container.textContent?.replace(/\s+/g, '')).toBe('Taken');
   });
 
-  it('renders the text "Selected" plus an icon element (US-007/AC-01, NFR-01)', () => {
+  it('renders the text "Selected" plus an icon element (US-007/AC-01, NFR-01, US-033/AC-05)', () => {
     const { container } = render(<StatusChip status="selected" />);
 
     expect(screen.getByText('Selected')).toBeInTheDocument();
@@ -32,7 +32,7 @@ describe('StatusChip (US-006/AC-02 — icon and word, never colour alone, NFR-00
 });
 
 describe('StatusChip — booking-lifecycle variants (US-010/AC-05, design note §4.4)', () => {
-  it('renders "Confirmed" plus an aria-hidden icon', () => {
+  it('renders "Confirmed" plus an aria-hidden icon (US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="booking" status="confirmed" />);
 
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
@@ -41,14 +41,14 @@ describe('StatusChip — booking-lifecycle variants (US-010/AC-05, design note �
     expect(icon?.getAttribute('aria-hidden') ?? icon?.querySelector('[aria-hidden]')?.getAttribute('aria-hidden')).toBeTruthy();
   });
 
-  it('renders "Completed" plus an aria-hidden icon', () => {
+  it('renders "Completed" plus an aria-hidden icon (US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="booking" status="completed" />);
 
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
   });
 
-  it('renders "Cancelled" plus an aria-hidden icon', () => {
+  it('renders "Cancelled" plus an aria-hidden icon (US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="booking" status="cancelled" />);
 
     expect(screen.getByText('Cancelled')).toBeInTheDocument();
@@ -73,14 +73,14 @@ describe('StatusChip — booking-lifecycle variants (US-010/AC-05, design note �
 });
 
 describe('StatusChip — account variants (US-020/AC-01)', () => {
-  it('renders the word "Active" plus an icon for an active account (US-020/AC-01)', () => {
+  it('renders the word "Active" plus an icon for an active account (US-020/AC-01, US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="account" status="active" />);
 
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
   });
 
-  it('renders the word "Deactivated" (not "Inactive") plus an icon for a deactivated account (US-020/AC-01)', () => {
+  it('renders the word "Deactivated" (not "Inactive") plus an icon for a deactivated account (US-020/AC-01, US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="account" status="inactive" />);
 
     expect(screen.getByText('Deactivated')).toBeInTheDocument();
@@ -103,14 +103,14 @@ describe('StatusChip — account variants (US-020/AC-01)', () => {
 });
 
 describe('StatusChip — inventory variants (US-016/AC-02, AC-03)', () => {
-  it('renders the word "Active" plus an icon (US-016/AC-02)', () => {
+  it('renders the word "Active" plus an icon (US-016/AC-02, US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="inventory" status="active" />);
 
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(container.querySelector('.status-chip__icon')).toBeInTheDocument();
   });
 
-  it('renders the word "Inactive" plus an icon, never "Available"/"Taken" (US-016/AC-02)', () => {
+  it('renders the word "Inactive" plus an icon, never "Available"/"Taken" (US-016/AC-02, US-033/AC-05)', () => {
     const { container } = render(<StatusChip kind="inventory" status="inactive" />);
 
     expect(screen.getByText('Inactive')).toBeInTheDocument();

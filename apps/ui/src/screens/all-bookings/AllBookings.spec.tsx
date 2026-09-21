@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -488,5 +491,21 @@ describe('AllBookings — Show more (US-013/AC-04)', () => {
 
     await waitFor(() => expect(screen.getAllByText('Sam Okoro')).toHaveLength(2));
     expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('AllBookings — table/card breakpoint at 768px (US-033/AC-03)', () => {
+  it('is stacked cards at 768px — the table needs 1024px (US-033/AC-03)', () => {
+    // jsdom performs no layout, so the stylesheet is the honest proxy for the breakpoint (same
+    // device Dialog.spec.tsx uses). `.admin-bookings-table` is `display: none` by default
+    // (unguarded), only becoming a table inside the 1024px query — 768px is still below it.
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(HERE, 'all-bookings.css'), 'utf8');
+    const defaultRules = css.split('@media')[0] ?? '';
+    expect(defaultRules).toMatch(/\.admin-bookings-table\s*\{[^}]*display:\s*none/);
+
+    const tableBreakpoint = css.match(/@media \(min-width: 1024px\) \{[\s\S]*\}/)?.[0] ?? '';
+    expect(tableBreakpoint).toMatch(/\.admin-bookings-table\s*\{[^}]*display:\s*table/);
+    expect(tableBreakpoint).toMatch(/\.admin-bookings-cards\s*\{[^}]*display:\s*none/);
   });
 });

@@ -11,7 +11,7 @@ describe('Toggle (US-031 — SCR-004, NFR-008)', () => {
     expect(switchEl).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('carries its state as a visible word, never colour alone (NFR-008)', () => {
+  it('carries its state as a visible word, never colour alone (NFR-008, US-033/AC-05)', () => {
     render(<Toggle checked={false} label="Off" onChange={() => {}} />);
 
     expect(screen.getByText('Off')).toBeInTheDocument();
