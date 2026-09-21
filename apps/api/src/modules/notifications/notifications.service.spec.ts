@@ -9,6 +9,7 @@ import {
   createNotificationsService,
   type BookingCancellationInput,
   type BookingConfirmationInput,
+  type BookingReminderInput,
   type SendEmailInput,
 } from './notifications.service.js';
 import type { DeliveryRow, NotificationsRepository } from './notifications.repository.js';
@@ -22,6 +23,12 @@ function recordingDeliveries(): NotificationsRepository & { rows: DeliveryRow[] 
     async insertDelivery(row) {
       rows.push(row);
     },
+    async claimReminderSent() {
+      throw new Error('claimReminderSent not stubbed — this fake only exercises insertDelivery');
+    },
+    async markDeliveryFailed() {
+      throw new Error('markDeliveryFailed not stubbed — this fake only exercises insertDelivery');
+    },
   };
 }
 
@@ -29,6 +36,47 @@ function throwingDeliveries(): NotificationsRepository {
   return {
     async insertDelivery() {
       throw new Error('connection refused');
+    },
+    async claimReminderSent() {
+      throw new Error('claimReminderSent not stubbed — this fake only exercises insertDelivery');
+    },
+    async markDeliveryFailed() {
+      throw new Error('markDeliveryFailed not stubbed — this fake only exercises insertDelivery');
+    },
+  };
+}
+
+/** US-030. Controllable claim-first fake — `claimed` set once, consumed by the first call, so a
+ *  test can simulate "first run claims it, second run finds it already claimed" without a real
+ *  unique index. `rows`/`failedIds` are read back as plain data, matching this file's own
+ *  convention of never asserting a mock "was called with". */
+function claimingDeliveries(
+  claimed: boolean[] = [true],
+  options: { demotionThrows?: boolean } = {},
+): NotificationsRepository & {
+  claimedRows: DeliveryRow[];
+  failed: Array<{ id: string; errorDetail: string }>;
+} {
+  const claimedRows: DeliveryRow[] = [];
+  const failed: Array<{ id: string; errorDetail: string }> = [];
+  const queue = [...claimed];
+  let nextId = 0;
+  return {
+    claimedRows,
+    failed,
+    async insertDelivery() {
+      throw new Error('insertDelivery not stubbed — this fake only exercises the claim-first path');
+    },
+    async claimReminderSent(row) {
+      const willClaim = queue.length > 1 ? queue.shift()! : (queue[0] ?? true);
+      if (!willClaim) return { claimed: false };
+      claimedRows.push(row);
+      nextId += 1;
+      return { claimed: true, id: `delivery-${nextId}` };
+    },
+    async markDeliveryFailed(id, errorDetail) {
+      if (options.demotionThrows) throw new Error('connection refused');
+      failed.push({ id, errorDetail });
     },
   };
 }
@@ -60,6 +108,14 @@ const CONFIRMATION_INPUT: BookingConfirmationInput = {
   email: 'dana@example.com',
   deskNumber: 'A-01',
   date: '2026-09-22',
+};
+
+const REMINDER_INPUT: BookingReminderInput = {
+  bookingId: 'b1',
+  userId: 'u1',
+  email: 'dana@example.com',
+  deskNumber: 'A-02',
+  date: '2026-09-17',
 };
 
 const CANCELLATION_INPUT: BookingCancellationInput = {
@@ -104,7 +160,10 @@ describe('recordAndSend — a successful send (US-034/AC-05)', () => {
     const deliveries = recordingDeliveries();
     const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
 
-    await svc.recordAndSend({ ...INPUT, kind: 'reminder' });
+    // 'cancellation', not 'reminder' — since US-030, 'reminder' takes the claim-first path
+    // (a different repository fake entirely, `claimingDeliveries`); this test's point is that
+    // `channel` is kind-independent on the send-then-record path, proven with any OTHER kind.
+    await svc.recordAndSend({ ...INPUT, kind: 'cancellation' });
 
     expect(deliveries.rows[0]!.channel).toBe('email');
   });
@@ -356,5 +415,102 @@ describe('sendBookingCancellation — a mail failure is recorded, never thrown (
 
     expect(result).toEqual({ ok: false, error: 'transport_unreachable', recorded: true });
     expect(deliveries.rows[0]).toMatchObject({ outcome: 'failed', kind: 'cancellation' });
+  });
+});
+
+describe('sendBookingConfirmation / sendBookingCancellation — never touch the claim-first path (US-030/impact-analysis regression proof)', () => {
+  it('calls only insertDelivery — claimReminderSent and markDeliveryFailed are never reached for confirmation or cancellation', async () => {
+    const deliveries = recordingDeliveries();
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    // Both existing composers succeed without ever hitting the fakes' throwing claim/demote
+    // stubs — if the kind === 'reminder' branch in recordAndSend were mis-scoped, either call
+    // below would throw instead of resolving.
+    await expect(svc.sendBookingConfirmation(CONFIRMATION_INPUT)).resolves.toMatchObject({ ok: true });
+    await expect(svc.sendBookingCancellation(CANCELLATION_INPUT)).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('sendReminderEmail — sends to the owner alone, naming the desk and date (US-030/AC-01, AC-02)', () => {
+  it('composes a subject/body naming the desk and formatted date, and records exactly one sent, reminder row (US-030/AC-01, US-030/AC-02)', async () => {
+    const deliveries = claimingDeliveries();
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    const result = await svc.sendReminderEmail(REMINDER_INPUT);
+
+    expect(result).toEqual({ ok: true, recorded: true });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.subject).toContain('A-02');
+    expect(messages[0]!.subject).toContain('Thu 17 Sep');
+    expect(messages[0]!.body).toContain('A-02');
+    expect(messages[0]!.body).toContain('Thu 17 Sep');
+    expect(deliveries.claimedRows).toEqual([
+      {
+        bookingId: 'b1',
+        userId: 'u1',
+        channel: 'email',
+        kind: 'reminder',
+        recipient: 'dana@example.com',
+        outcome: 'sent',
+        errorDetail: undefined,
+      },
+    ]);
+  });
+});
+
+describe('sendReminderEmail — claims before it sends, and a second claim never sends again (US-030/AC-07)', () => {
+  it('claims the delivery row FIRST, then calls the transport, on a successful first send', async () => {
+    const deliveries = claimingDeliveries([true]);
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendReminderEmail(REMINDER_INPUT);
+
+    expect(deliveries.claimedRows).toHaveLength(1);
+    expect(messages).toHaveLength(1);
+  });
+
+  it('never calls the transport when the claim reports already-sent — exactly one reminder per booking (US-030/AC-07)', async () => {
+    const deliveries = claimingDeliveries([false]);
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    const result = await svc.sendReminderEmail(REMINDER_INPUT);
+
+    expect(messages).toHaveLength(0);
+    expect(result).toEqual({ ok: true, recorded: true });
+  });
+
+  it('across two sequential calls simulating two runs of the same job, the transport is called exactly once (US-030/AC-07)', async () => {
+    const deliveries = claimingDeliveries([true, false]);
+    const { send, messages } = capturingSend();
+    const svc = createNotificationsService({ deliveries, send });
+
+    await svc.sendReminderEmail(REMINDER_INPUT);
+    await svc.sendReminderEmail(REMINDER_INPUT);
+
+    expect(messages).toHaveLength(1);
+  });
+});
+
+describe('sendReminderEmail — a transport failure demotes the claimed row, never thrown (US-030/AC-10)', () => {
+  it('calls markDeliveryFailed with the sanitized reason when the claimed sends fails', async () => {
+    const deliveries = claimingDeliveries([true]);
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: false, error: 'transport_unreachable' }) });
+
+    const result = await svc.sendReminderEmail(REMINDER_INPUT);
+
+    expect(result).toEqual({ ok: false, error: 'transport_unreachable', recorded: true });
+    expect(deliveries.failed).toEqual([{ id: 'delivery-1', errorDetail: 'transport_unreachable' }]);
+  });
+
+  it('resolves recorded:false, never throws, when the demotion write itself fails', async () => {
+    const deliveries = claimingDeliveries([true], { demotionThrows: true });
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: false, error: 'transport_rejected' }) });
+
+    const result = await svc.sendReminderEmail(REMINDER_INPUT);
+
+    expect(result).toEqual({ ok: false, error: 'transport_rejected', recorded: false });
   });
 });

@@ -34,6 +34,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-034 | Transactional email is configured, not hard-coded, and failures are logged | Complex | implemented | [`US-034-email-configuration-and-failure-logging/`](US-034-email-configuration-and-failure-logging/) |
 | US-028 | Get a confirmation email when my booking is made | Medium | implemented | [`US-028-booking-confirmation-email/`](US-028-booking-confirmation-email/) |
 | US-029 | Get a cancellation email when my booking is voided | Medium | implemented | [`US-029-booking-cancellation-email/`](US-029-booking-cancellation-email/) |
+| US-030 | Get a reminder email the day before | Complex | implemented | [`US-030-day-before-reminder-email/`](US-030-day-before-reminder-email/) |
 
 ## How to update
 

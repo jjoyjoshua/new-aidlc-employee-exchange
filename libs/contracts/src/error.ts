@@ -89,6 +89,11 @@ export const errorCodeSchema = z.enum([
   'route_not_found',
   'service_unavailable',
   'internal_error',
+  // US-030 — `POST /api/internal/reminders/run` is guarded by a shared secret, never a user
+  // session (app-architecture.md §4.3). A missing header, an empty one, or a wrong secret all
+  // get this ONE code — no distinguishing detail, the same anti-enumeration posture
+  // `requireAdmin` takes for a wrong role.
+  'reminder_run_unauthorized',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

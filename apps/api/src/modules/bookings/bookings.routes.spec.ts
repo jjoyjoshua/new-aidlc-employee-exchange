@@ -81,7 +81,7 @@ const noRows: AvailabilityRepository = emptyAvailabilityRepository;
  */
 function recordingNotifications(
   result: RecordAndSendResult = { ok: true, recorded: true },
-): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> & {
+): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'> & {
   calls: BookingConfirmationInput[];
   cancellationCalls: BookingCancellationInput[];
 } {
@@ -98,16 +98,25 @@ function recordingNotifications(
       cancellationCalls.push(input);
       return result;
     },
+    async sendReminderEmail() {
+      throw new Error('sendReminderEmail not stubbed — this file exercises /api/bookings only');
+    },
   };
 }
 
-function throwingNotifications(): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> {
+function throwingNotifications(): Pick<
+  NotificationsService,
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'
+> {
   return {
     async sendBookingConfirmation() {
       throw new Error('unexpected notifications failure');
     },
     async sendBookingCancellation() {
       throw new Error('unexpected notifications failure');
+    },
+    async sendReminderEmail() {
+      throw new Error('sendReminderEmail not stubbed — this file exercises /api/bookings only');
     },
   };
 }
@@ -126,7 +135,7 @@ beforeEach(() => {
 function appWith(options: {
   rows?: Row[];
   availability?: AvailabilityRepository;
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'>;
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'>;
 }) {
   const rows = options.rows ?? [EMPLOYEE, MUST_CHANGE_PASSWORD];
 

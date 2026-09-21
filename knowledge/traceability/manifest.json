@@ -1430,7 +1430,16 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/reminders/reminders.repository.spec.ts",
+        "apps/api/src/modules/reminders/reminders.service.spec.ts",
+        "apps/api/src/modules/reminders/reminders.routes.spec.ts",
+        "apps/api/src/modules/notifications/notifications.repository.spec.ts",
+        "apps/api/src/modules/notifications/notifications.service.spec.ts",
+        "apps/api/src/modules/notifications/notifications.repository.concurrency.spec.ts",
+        "apps/api/src/http/middleware/require-reminder-secret.spec.ts",
+        "libs/contracts/src/error.spec.ts"
+      ],
       "screens": []
     },
     "US-031": {

@@ -3,6 +3,7 @@ import { config } from '../config/index.js';
 import { errorHandler, notFoundHandler } from './error-handler.js';
 import { requireAdmin } from './middleware/require-admin.js';
 import { requireHttps } from './middleware/require-https.js';
+import { requireReminderSecret } from './middleware/require-reminder-secret.js';
 
 /**
  * The Express application.
@@ -23,6 +24,8 @@ export interface AppDeps {
   authRouter: Router;
   adminRouter: Router;
   bookingsRouter: Router;
+  /** US-030. Guarded by `requireReminderSecret`, never `requireSession` — no user triggers it. */
+  remindersRouter: Router;
   requireSession: RequestHandler;
 }
 
@@ -82,6 +85,10 @@ export function createApp(deps: AppDeps): Express {
   // enforced `session` instance, not the password-change-exempt one — a user with
   // `must_change_password` set must not browse availability.
   app.use('/api/bookings', deps.requireSession, deps.bookingsRouter);
+
+  // US-030. Guarded by a shared secret, never `requireSession` — `app-architecture.md` §4.3 is
+  // explicit that no user triggers this route. Mount-level, same reasoning as `/api/admin` above.
+  app.use('/api/internal/reminders', requireReminderSecret, deps.remindersRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
