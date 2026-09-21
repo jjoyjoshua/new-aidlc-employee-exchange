@@ -6,12 +6,16 @@
  *   768–1023px  icon-only collapsed sidebar, 72px, label visually hidden (not removed —
  *               the accessible name survives for assistive tech; the Figma tooltip node
  *               that documents the hover/focus label is off by default and not built here)
- *   < 768px     bottom bar — unchanged pending its own design; no product lockup, no
- *               account footer, no icons, same text-only links as before
+ *   < 768px     bottom bar, fixed to the viewport bottom (issue #70) — icon + label per tab,
+ *               a top indicator bar (not the sidebar's left one) marks the active tab. No
+ *               product lockup, no account footer — reaching Settings/Sign-out on a phone is
+ *               issue #74, its own unbuilt design
  *
  * Hi-fi values below come from the approved Figma sidebar (file `xjFVgBbMrJUl7Ys3EX3Cbn`,
- * node `51:359`) — see `inception/specs/US-001-sign-in/implementation-plan.md`'s "hi-fi
- * sidebar" addendum. Every value is an existing `tokens.css` token; none were added.
+ * node `51:359`) and the bottom bar (same file, node `94:95`) — see
+ * `inception/specs/US-001-sign-in/implementation-plan.md`'s "hi-fi sidebar" addendum. Every
+ * value is an existing `tokens.css` token except the bottom bar's own 75px height and 3px
+ * indicator (Figma's own literal values, matching this file's existing 20px/40px/28px marks).
  */
 
 .app-shell {
@@ -110,6 +114,50 @@
 .app-shell__link:focus-visible {
   outline: var(--bw-2) solid var(--c-focus-ring);
   outline-offset: var(--bw-2);
+}
+
+/* The bottom bar itself (issue #70) — fixed to the viewport's bottom edge, thumb reach for a
+   one-handed phone (ia.md:70, INSIGHT-02, PRIN-4). Scoped to its own max-width query rather than
+   the unguarded default rule above, so nothing here has to be undone inside the 768px block. */
+@media (max-width: 767.98px) {
+  .app-shell__sidebar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 75px;
+    z-index: 10;
+  }
+
+  /* Reserves the bar's own height so the fixed bar never covers the last row of content. */
+  .app-shell__main {
+    padding-bottom: calc(75px + var(--s-24));
+  }
+
+  .app-shell__nav-list {
+    flex: 1;
+    justify-content: space-around;
+  }
+
+  .app-shell__link {
+    flex-direction: column;
+    gap: var(--s-4);
+    padding: var(--s-4);
+  }
+
+  .app-shell__icon {
+    display: block;
+  }
+
+  /* A horizontal bar above the tab, not the sidebar's vertical one on the left — Figma node
+     94:95's own "Active bar": 3px tall, 24px wide, centred, colour + shape never colour alone. */
+  .app-shell__link[aria-current='page']::before {
+    top: 0;
+    left: 50%;
+    width: 24px;
+    height: 3px;
+    transform: translateX(-50%);
+  }
 }
 
 /* Bottom bar below 768; sidebar from 768 up. */

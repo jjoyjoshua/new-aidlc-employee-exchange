@@ -178,26 +178,30 @@ describe('RequireRole (US-001/AC-03)', () => {
   });
 });
 
-describe('AppShell — the three responsive shells (US-033/AC-02, partial — see issue #70)', () => {
-  it('stacks nav above content by default, a 72px icon-only sidebar from 768px, and a 240px labelled sidebar from 1024px (US-033/AC-02)', () => {
+describe('AppShell — the three responsive shells (US-033/AC-02)', () => {
+  it('is a 72px icon-only sidebar from 768px, and a 240px labelled sidebar from 1024px (US-033/AC-02)', () => {
     // jsdom performs no layout, so the stylesheet is the honest proxy for the breakpoint (same
-    // device Dialog.spec.tsx and the desk inventory screen's own two-boundary tests use). The
-    // default (unguarded) rule is a vertical stack; the two `min-width` queries are what promote
-    // it to a sidebar, first icon-only, then labelled.
-    //
-    // NOT proven here, and not true today: ia.md:76 specifies the <768px shell is a fixed BOTTOM
-    // bar (thumb-reach rationale, top tabs explicitly rejected). The real browser sweep
-    // (verification-log.md) found the nav renders in normal flow at the TOP of the page instead
-    // (`position: static`) — filed as issue #70, not fixed here (this story verifies, it does
-    // not build).
+    // device Dialog.spec.tsx and the desk inventory screen's own two-boundary tests use).
     const css = readFileSync(join(HERE, 'app-shell.css'), 'utf8');
-    const defaultRules = css.split('@media')[0] ?? '';
-    expect(defaultRules).toMatch(/\.app-shell\s*\{[^}]*flex-direction:\s*column/);
 
     const collapsedSidebar = css.match(/@media \(min-width: 768px\) \{[\s\S]*?\n\}/)?.[0] ?? '';
     expect(collapsedSidebar).toMatch(/\.app-shell__sidebar\s*\{[^}]*width:\s*72px/);
 
     const persistentSidebar = css.match(/@media \(min-width: 1024px\) \{[\s\S]*\}/)?.[0] ?? '';
     expect(persistentSidebar).toMatch(/\.app-shell__sidebar\s*\{[^}]*width:\s*240px/);
+  });
+
+  it('is fixed to the viewport bottom below 768px, with icons and a top active-indicator bar (US-033/AC-02, #70)', () => {
+    // ia.md:76 specifies a fixed BOTTOM bar below 768px (thumb-reach rationale, top tabs
+    // explicitly rejected) — Figma node 94:95 is the visual authority for its icon+label+active
+    // bar. Confirmed live at 360px in the browser (verification-log.md's US-033 sweep found the
+    // opposite — a static top bar — before this fix).
+    const css = readFileSync(join(HERE, 'app-shell.css'), 'utf8');
+    const mobileBar = css.match(/@media \(max-width: 767\.98px\) \{[\s\S]*?(?=@media \(min-width: 768px\))/)?.[0] ?? '';
+
+    expect(mobileBar).toMatch(/\.app-shell__sidebar\s*\{[^}]*position:\s*fixed[^}]*bottom:\s*0/);
+    expect(mobileBar).toMatch(/\.app-shell__icon\s*\{[^}]*display:\s*block/);
+    // The horizontal top bar (Figma's shape cue), not the sidebar's vertical left one.
+    expect(mobileBar).toMatch(/\.app-shell__link\[aria-current='page'\]::before\s*\{[^}]*top:\s*0/);
   });
 });
