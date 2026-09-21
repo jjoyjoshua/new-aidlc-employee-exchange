@@ -38,9 +38,15 @@ export interface DeskRowProps {
    *  itself for anything beyond "a taken desk never fires it" — the screen decides the rest.
    *  `| undefined` because `ZoneGroup` assigns this conditionally (`exactOptionalPropertyTypes`). */
   onSelect?: (() => void) | undefined;
+  /** Issue #71 — roving tabindex: the parent radiogroup (`BookADesk`) decides which ONE row is
+   *  the tab stop; every other row gets `-1` so 40+ desks stay one tab stop, not 40+ (same
+   *  reasoning `DateStrip`'s own roving tabindex already documents). Defaults to `0` so this
+   *  stays a no-op for a caller that never passes it — ignored on a `taken` row, which renders
+   *  no focusable element at all. */
+  tabIndex?: number;
 }
 
-export function DeskRow({ deskNumber, status, selected = false, usual = false, onSelect }: DeskRowProps) {
+export function DeskRow({ deskNumber, status, selected = false, usual = false, onSelect, tabIndex = 0 }: DeskRowProps) {
   if (status === 'taken') {
     return (
       <div className="desk-row" data-desk-number={deskNumber}>
@@ -65,6 +71,7 @@ export function DeskRow({ deskNumber, status, selected = false, usual = false, o
         .filter(Boolean)
         .join(' ')}
       data-desk-number={deskNumber}
+      tabIndex={tabIndex}
       onClick={onSelect}
     >
       <span className="desk-row__number">{deskNumber}</span>

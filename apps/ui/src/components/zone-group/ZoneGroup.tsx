@@ -25,9 +25,13 @@ export interface ZoneGroupProps {
   /** Fires only for an `available` row — `DeskRow` itself already refuses to wire this for a
    *  `taken` one (US-007/AC-02). */
   onSelectDesk?: (deskId: string) => void;
+  /** Issue #71 — the one desk (by id), across every zone, that is this radiogroup's roving tab
+   *  stop; every other row gets `-1`. `BookADesk` owns the computation (it alone sees every
+   *  zone), `| undefined` to mirror `selectedDeskId`/`usualDeskId`. */
+  tabStopDeskId?: string | undefined;
 }
 
-export function ZoneGroup({ letter, desks, selectedDeskId, usualDeskId, onSelectDesk }: ZoneGroupProps) {
+export function ZoneGroup({ letter, desks, selectedDeskId, usualDeskId, onSelectDesk, tabStopDeskId }: ZoneGroupProps) {
   return (
     <div className="zone-group">
       <h2 className="zone-group__heading">Zone {letter}</h2>
@@ -41,6 +45,7 @@ export function ZoneGroup({ letter, desks, selectedDeskId, usualDeskId, onSelect
               selected={desk.id === selectedDeskId}
               usual={desk.id === usualDeskId}
               onSelect={onSelectDesk ? () => onSelectDesk(desk.id) : undefined}
+              tabIndex={desk.id === tabStopDeskId ? 0 : -1}
             />
           </div>
         ))}

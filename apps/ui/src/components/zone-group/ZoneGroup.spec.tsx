@@ -57,3 +57,12 @@ describe('ZoneGroup — threads usualDeskId through to DeskRow (US-008/AC-01, FR
     expect(screen.queryByText('your usual')).not.toBeInTheDocument();
   });
 });
+
+describe('ZoneGroup — threads tabStopDeskId through to DeskRow (#71)', () => {
+  it('gives tabIndex 0 to the desk matching tabStopDeskId and -1 to every other', () => {
+    render(<ZoneGroup letter="A" desks={[desk('A-01'), desk('A-02')]} tabStopDeskId="A-02" />);
+
+    expect(screen.getByRole('radio', { name: /A-01/ })).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('radio', { name: /A-02/ })).toHaveAttribute('tabindex', '0');
+  });
+});
