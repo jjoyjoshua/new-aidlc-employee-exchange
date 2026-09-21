@@ -31,6 +31,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-025 | Deactivate an account and release the desks it holds | Complex | implemented (AC-08/AC-09 moved to US-029/US-032, issue #59) | [`US-025-deactivate-an-account/`](US-025-deactivate-an-account/) |
 | US-026 | Reactivate an account | Complex | implemented | [`US-026-reactivate-an-account/`](US-026-reactivate-an-account/) |
 | US-027 | Reset somebody's password | Complex | implemented | [`US-027-reset-somebodys-password/`](US-027-reset-somebodys-password/) |
+| US-034 | Transactional email is configured, not hard-coded, and failures are logged | Complex | implemented | [`US-034-email-configuration-and-failure-logging/`](US-034-email-configuration-and-failure-logging/) |
 
 ## How to update
 

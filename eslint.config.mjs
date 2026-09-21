@@ -21,26 +21,61 @@ const MAY_IMPORT = {
   notifications: [],
 };
 
-/** One rule per module: you may not reach into a sibling module's internals. */
+// Hoisted so every block that needs the ADR-001 ban restates the IDENTICAL entry. Flat config
+// REPLACES `no-restricted-imports` per matching block rather than merging it (see the comment
+// on the "Configuration is read in one place" block below) — a block that sets the rule with
+// its OWN `paths`/`patterns` and forgets one of these silently drops that ban for every file it
+// matches. `moduleBoundaries` below did exactly this before US-034 (Architect design note §3.3,
+// F-7): all five module directories could import `@supabase/supabase-js` directly, because
+// their `no-restricted-imports` never restated Boundary 1's `paths`. Fixed here, in the same
+// change that adds the mailer boundary, since both are instances of the same mistake.
+// `allowTypeImports: true` (the TS-aware `@typescript-eslint/no-restricted-imports`, not the
+// core rule) — a repository-fake test file legitimately writes `import type { SupabaseClient }`
+// for its fake's return type (bookings.repository.spec.ts and siblings). That carries no
+// runtime client and no service-role key; only a VALUE import constructs one.
+const SUPABASE_CLIENT_BAN = {
+  name: '@supabase/supabase-js',
+  message:
+    'Only apps/api/src/infra/supabase may construct a Supabase client. ADR-001 is worthless ' +
+    'if any module can open its own connection, and it keeps the service-role key in one file.',
+  allowTypeImports: true,
+};
+
+// US-034/AC-08. `infra/mailer` is importable only from `modules/notifications` — a second mail
+// path must not be able to appear silently. Every block below that owns `no-restricted-imports`
+// for a file `infra/mailer` could reach adds this pattern, EXCEPT the `notifications` module's
+// own block, which needs to import it. (Architect design note §3.2, F-1 — the original draft of
+// this boundary was a single new block over `apps/**/*.ts`, which would have replaced, not
+// merged, the rule for every other file it matched, silently deleting the bans above.)
+const MAILER_BAN = {
+  group: ['**/infra/mailer/**', '../infra/mailer/**', '../../infra/mailer/**'],
+  message:
+    'infra/mailer is importable only from modules/notifications (US-034/AC-08) — every message ' +
+    'type sends through notifications.service.ts’s recordAndSend, so there is exactly one mail ' +
+    'path. Add a port there instead of importing the transport directly.',
+};
+
+/** One rule per module: you may not reach into a sibling module's internals, you may not open
+ *  your own Supabase client (F-7), and — except `notifications` itself — you may not import
+ *  `infra/mailer` directly (FR-07). */
 const moduleBoundaries = MODULES.map((self) => {
   const forbidden = MODULES.filter(
     (other) => other !== self && !MAY_IMPORT[self].includes(other),
   );
+  const patterns = forbidden.map((other) => ({
+    group: [`../${other}`, `../${other}/**`, `**/modules/${other}/**`],
+    message:
+      `modules/${self} may not import modules/${other}. Modules collaborate through ` +
+      `domain/ or a declared port — see app-architecture.md §3. A module that imports ` +
+      `another module's service is a module that can no longer be changed alone.`,
+  }));
+  if (self !== 'notifications') patterns.push(MAILER_BAN);
+
   return {
     files: [`apps/api/src/modules/${self}/**/*.ts`],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: forbidden.map((other) => ({
-            group: [`../${other}`, `../${other}/**`, `**/modules/${other}/**`],
-            message:
-              `modules/${self} may not import modules/${other}. Modules collaborate through ` +
-              `domain/ or a declared port — see app-architecture.md §3. A module that imports ` +
-              `another module's service is a module that can no longer be changed alone.`,
-          })),
-        },
-      ],
+      '@typescript-eslint/no-restricted-imports': ['error', { paths: [SUPABASE_CLIENT_BAN] }],
+      'no-restricted-imports': ['error', { patterns }],
     },
   };
 });
@@ -104,24 +139,22 @@ export default tseslint.config(
   // ---- Boundary 1: the service-role key lives in exactly one module -----------
   // It bypasses every RLS policy in the project (ADR-001). One file constructs the client;
   // everything else asks that file. A second importer is a blocker finding, not a style note.
+  //
+  // Also carries the mailer boundary (US-034/AC-08, MAILER_BAN) for everything this block
+  // covers that `moduleBoundaries` does not re-cover more specifically — http/, domain/, infra/
+  // itself. `ignores` excludes infra/supabase (this ban) but NOT infra/mailer: MAILER_BAN's own
+  // group excludes nothing, because `notifications` needing the exemption is handled by
+  // `moduleBoundaries` overriding this block for files under `modules/notifications/**` (flat
+  // config: the LAST matching block wins, and `moduleBoundaries` is appended after this one).
   {
     files: ['apps/**/*.ts', 'apps/**/*.tsx'],
     ignores: ['apps/api/src/infra/supabase/**'],
     rules: {
-      'no-restricted-imports': [
+      '@typescript-eslint/no-restricted-imports': [
         'error',
-        {
-          paths: [
-            {
-              name: '@supabase/supabase-js',
-              message:
-                'Only apps/api/src/infra/supabase may construct a Supabase client. ADR-001 is ' +
-                'worthless if any module can open its own connection, and it keeps the ' +
-                'service-role key in one file. The browser client is the single exception below.',
-            },
-          ],
-        },
+        { paths: [{ ...SUPABASE_CLIENT_BAN, message: SUPABASE_CLIENT_BAN.message + ' The browser client is the single exception below.' }] },
       ],
+      'no-restricted-imports': ['error', { patterns: [MAILER_BAN] }],
     },
   },
 
@@ -138,7 +171,7 @@ export default tseslint.config(
     files: ['apps/ui/**/*.ts', 'apps/ui/**/*.tsx'],
     ignores: ['apps/ui/src/lib/supabase-client.ts'],
     rules: {
-      'no-restricted-imports': [
+      '@typescript-eslint/no-restricted-imports': [
         'error',
         {
           paths: [
@@ -147,8 +180,14 @@ export default tseslint.config(
               message:
                 'Only apps/api/src/infra/supabase (server) and apps/ui/src/lib/supabase-client.ts ' +
                 '(browser, anon key, token refresh only) may construct a Supabase client.',
+              allowTypeImports: true,
             },
           ],
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
           patterns: [
             {
               // Three forms, because this rule matches the import STRING, not the resolved
@@ -161,6 +200,11 @@ export default tseslint.config(
                 'service-role key, which bypasses every RLS policy in the project. Shared wire ' +
                 'shapes go in @desk-booking/contracts (ADR-002).',
             },
+            // US-034/AC-08. Restated because this block sets its own `patterns` (flat config
+            // replaces, not merges) — the browser has no business reaching infra/mailer at all,
+            // but the general form above already covers `apps/api/**`; this entry is here so
+            // the intent is explicit rather than incidental.
+            MAILER_BAN,
           ],
         },
       ],
@@ -196,7 +240,7 @@ export default tseslint.config(
   // This must stay AFTER Boundary 4 or it exempts nothing.
   {
     files: ['apps/ui/src/lib/supabase-client.ts'],
-    rules: { 'no-restricted-imports': 'off' },
+    rules: { 'no-restricted-imports': 'off', '@typescript-eslint/no-restricted-imports': 'off' },
   },
 
   // ---- Boundary 2: domain/ is pure -------------------------------------------

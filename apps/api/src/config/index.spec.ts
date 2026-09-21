@@ -10,15 +10,20 @@
  * When that story is implemented, its DEV adds the AC-named tests and the manifest entry;
  * these stay as the unit-level tests underneath.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ConfigurationError, loadConfig } from './index.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const valid = {
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_ANON_KEY: 'anon-key',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
   OFFICE_TIMEZONE: 'Asia/Kolkata',
-  MAIL_PROVIDER: 'postmark',
+  MAIL_PROVIDER: 'console',
   MAIL_API_KEY: 'mail-key',
   MAIL_FROM_ADDRESS: 'desks@example.com',
   VAPID_PUBLIC_KEY: 'vapid-public',
@@ -126,5 +131,56 @@ describe('loadConfig — session lifetime (NFR-009)', () => {
   it('accepts a throttle just below the lifetime (US-003/AC-02)', () => {
     const config = loadConfig({ ...valid, SESSION_LIFETIME_DAYS: '1', SESSION_LAST_SEEN_THROTTLE_MINUTES: '1439' });
     expect(config.SESSION_LAST_SEEN_THROTTLE_MINUTES).toBe(1439);
+  });
+});
+
+/**
+ * US-034 — the mail configuration is validated at boot, not guessed at send time. AC-04 is a
+ * boot-time guarantee (app-architecture.md §5.4); the two cases below are exactly the two ways
+ * a mail configuration could otherwise fail silently instead (Architect design note §1.2, F-3).
+ */
+describe('loadConfig — mail (US-034)', () => {
+  it('accepts the only implemented transport (US-034/AC-04)', () => {
+    const config = loadConfig(valid);
+    expect(config.MAIL_PROVIDER).toBe('console');
+  });
+
+  it('refuses a MAIL_PROVIDER value nothing implements, rather than booting and failing at the first send (US-034/AC-04)', () => {
+    expect(() => loadConfig({ ...valid, MAIL_PROVIDER: 'postmark' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses MAIL_PROVIDER=console in production — it never sends, so that would be silently dropped mail with a `sent` row to match (US-034/AC-04)', () => {
+    expect(() => loadConfig({ ...valid, NODE_ENV: 'production' })).toThrow(ConfigurationError);
+  });
+
+  it('accepts MAIL_PROVIDER=console outside production (US-034/AC-04)', () => {
+    const config = loadConfig({ ...valid, NODE_ENV: 'development' });
+    expect(config.MAIL_PROVIDER).toBe('console');
+  });
+});
+
+/**
+ * US-034/AC-03 — the production sender address and mail service are absent or clearly
+ * placeholder, and the repository says so. Proven two ways: the schema has no default (so a
+ * checked-out repo with no `.env` refuses to boot rather than silently picking a value), and
+ * `.env.example` ships the keys blank with a comment naming the owner (Architect design note
+ * §6, F-2, F-11).
+ */
+describe('.env.example — mail placeholders (US-034/AC-03)', () => {
+  const envExample = readFileSync(resolve(HERE, '../../../../.env.example'), 'utf8');
+
+  it('ships MAIL_PROVIDER, MAIL_API_KEY and MAIL_FROM_ADDRESS with no value (US-034/AC-03)', () => {
+    for (const key of ['MAIL_PROVIDER', 'MAIL_API_KEY', 'MAIL_FROM_ADDRESS']) {
+      expect(envExample).toMatch(new RegExp(`^${key}=$`, 'm'));
+    }
+  });
+
+  it('says the production values are TBD, owned by IT, rather than leaving the blank unexplained (US-034/AC-03)', () => {
+    expect(envExample).toMatch(/TBD.*owner:\s*IT/i);
+  });
+
+  it('has no default for MAIL_FROM_ADDRESS — a missing address refuses to boot rather than falling back to one (US-034/AC-03)', () => {
+    const { MAIL_FROM_ADDRESS: _omitted, ...incomplete } = valid;
+    expect(() => loadConfig(incomplete)).toThrow(ConfigurationError);
   });
 });

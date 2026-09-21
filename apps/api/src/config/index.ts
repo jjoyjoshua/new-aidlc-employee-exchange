@@ -46,7 +46,12 @@ const schema = z.object({
 
   OFFICE_TIMEZONE: ianaTimeZone,
 
-  MAIL_PROVIDER: nonEmpty('MAIL_PROVIDER'),
+  /** The set of transports `infra/mailer` actually implements — currently just `console`, which
+   *  logs and never sends. A provider we have not written is a configuration error, not a
+   *  runtime surprise: `app-architecture.md` §5.4 cites US-034/AC-04 as a BOOT-time guarantee,
+   *  so an unrecognised value must fail here, not the first time somebody books a desk
+   *  (Architect design note §1.2, US-034/F-3). */
+  MAIL_PROVIDER: z.enum(['console']),
   MAIL_API_KEY: nonEmpty('MAIL_API_KEY'),
   MAIL_FROM_ADDRESS: nonEmpty('MAIL_FROM_ADDRESS').email(),
 
@@ -92,6 +97,21 @@ const schema = z.object({
         code: z.ZodIssueCode.custom,
         path: ['SESSION_LAST_SEEN_THROTTLE_MINUTES'],
         message: 'SESSION_LAST_SEEN_THROTTLE_MINUTES must be less than SESSION_LIFETIME_DAYS, or sessions never renew',
+      });
+    }
+
+    /** `console` never sends — it logs and reports success. In production that is mail
+     *  silently dropped with a `sent` row to match, which is exactly what US-034/AC-04 forbids
+     *  (Architect design note §1.2, F-3). The real provider is `TBD (owner: IT)` — this refusal
+     *  is what makes going live without one a boot failure instead of a quiet one. */
+    if (value.NODE_ENV === 'production' && value.MAIL_PROVIDER === 'console') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MAIL_PROVIDER'],
+        message:
+          'MAIL_PROVIDER=console writes mail to the log and sends nothing. In production that ' +
+          'is silently dropped mail with a `sent` row to match (US-034/AC-04). Set the real ' +
+          'provider once chosen — TBD (owner: IT), BRD-001 open question #7.',
       });
     }
   });
