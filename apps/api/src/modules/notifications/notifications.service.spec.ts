@@ -12,9 +12,27 @@ import {
   type BookingReminderInput,
   type SendEmailInput,
 } from './notifications.service.js';
-import type { DeliveryRow, NotificationsRepository } from './notifications.repository.js';
+import type { DeliveryRow, NotificationsRepository, PushSubscriptionRow } from './notifications.repository.js';
 import type { MailMessage, SendMailResult } from '../../infra/mailer/index.js';
 import type { CancellationSource } from '../../domain/cancellation-copy.js';
+import { setConfigForTesting, type Config } from '../../config/index.js';
+
+/** US-031's four methods, not stubbed — none of the email-path fakes above exercise push.
+ *  Spread into each fake so `NotificationsRepository`'s wider surface still typechecks here. */
+const NOT_STUBBED_PUSH = {
+  async getPushOptIn(): Promise<boolean> {
+    throw new Error('getPushOptIn not stubbed — this fake only exercises the email path');
+  },
+  async setPushOptIn(): Promise<boolean> {
+    throw new Error('setPushOptIn not stubbed — this fake only exercises the email path');
+  },
+  async upsertPushSubscription(): Promise<void> {
+    throw new Error('upsertPushSubscription not stubbed — this fake only exercises the email path');
+  },
+  async deletePushSubscriptions(): Promise<void> {
+    throw new Error('deletePushSubscriptions not stubbed — this fake only exercises the email path');
+  },
+};
 
 function recordingDeliveries(): NotificationsRepository & { rows: DeliveryRow[] } {
   const rows: DeliveryRow[] = [];
@@ -29,6 +47,7 @@ function recordingDeliveries(): NotificationsRepository & { rows: DeliveryRow[] 
     async markDeliveryFailed() {
       throw new Error('markDeliveryFailed not stubbed — this fake only exercises insertDelivery');
     },
+    ...NOT_STUBBED_PUSH,
   };
 }
 
@@ -43,6 +62,7 @@ function throwingDeliveries(): NotificationsRepository {
     async markDeliveryFailed() {
       throw new Error('markDeliveryFailed not stubbed — this fake only exercises insertDelivery');
     },
+    ...NOT_STUBBED_PUSH,
   };
 }
 
@@ -78,8 +98,190 @@ function claimingDeliveries(
       if (options.demotionThrows) throw new Error('connection refused');
       failed.push({ id, errorDetail });
     },
+    ...NOT_STUBBED_PUSH,
   };
 }
+
+/** The email-path methods, not stubbed — none of the push fakes below exercise the mail path. */
+const NOT_STUBBED_EMAIL = {
+  async insertDelivery(): Promise<void> {
+    throw new Error('insertDelivery not stubbed — this fake only exercises the push path');
+  },
+  async claimReminderSent(): Promise<never> {
+    throw new Error('claimReminderSent not stubbed — this fake only exercises the push path');
+  },
+  async markDeliveryFailed(): Promise<void> {
+    throw new Error('markDeliveryFailed not stubbed — this fake only exercises the push path');
+  },
+};
+
+/**
+ * A controllable push-path fake. `optIn` is the flag's CURRENT stored value, read by
+ * `getPushOptIn` and mutated by `setPushOptIn`. `subscriptions`/`deletedFor` are read back as
+ * plain data (this file's own convention), never asserted as "was called with" via a mock.
+ * `failing` names which method(s) throw, so a test can prove the write-ordering rule directly.
+ */
+function pushDeliveries(
+  options: { optIn?: boolean; failing?: Set<'upsert' | 'setFlag' | 'delete'> } = {},
+): NotificationsRepository & {
+  subscriptions: PushSubscriptionRow[];
+  deletedFor: string[];
+  flag: boolean;
+} {
+  let flag = options.optIn ?? false;
+  const failing = options.failing ?? new Set();
+  const subscriptions: PushSubscriptionRow[] = [];
+  const deletedFor: string[] = [];
+
+  return {
+    ...NOT_STUBBED_EMAIL,
+    subscriptions,
+    deletedFor,
+    get flag() {
+      return flag;
+    },
+    async getPushOptIn() {
+      return flag;
+    },
+    async setPushOptIn(_userId, value) {
+      if (failing.has('setFlag')) throw new Error('connection refused');
+      flag = value;
+      return flag;
+    },
+    async upsertPushSubscription(row) {
+      if (failing.has('upsert')) throw new Error('connection refused');
+      subscriptions.push(row);
+    },
+    async deletePushSubscriptions(userId) {
+      if (failing.has('delete')) throw new Error('connection refused');
+      deletedFor.push(userId);
+    },
+  };
+}
+
+const BASE_CONFIG: Config = {
+  NODE_ENV: 'development',
+  PORT: 3000,
+  SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_ANON_KEY: 'anon',
+  SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+  OFFICE_TIMEZONE: 'Asia/Kolkata',
+  MAIL_PROVIDER: 'console',
+  MAIL_API_KEY: 'mail-key',
+  MAIL_FROM_ADDRESS: 'desks@example.com',
+  VAPID_PUBLIC_KEY: 'O88gaQz1WqucBQoIRTHLl44h3g_AiFgmOeDGCpZbOJQweweXvs4O1skpArPwIJoSaSueadKE4yJysus0Vg6da-k',
+  VAPID_PRIVATE_KEY: '8C5_EzOg2Bo50ZwbHWqgjgGyRtjrDMBLz1qqQ9Qssvw',
+  VAPID_SUBJECT: 'mailto:desks@example.com',
+  REMINDER_RUN_SECRET: 'reminder-secret',
+  CORS_ORIGINS: ['http://localhost:5173'],
+  SESSION_LIFETIME_DAYS: 30,
+  SESSION_LAST_SEEN_THROTTLE_MINUTES: 60,
+};
+
+const USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const SUBSCRIPTION = {
+  endpoint: 'https://fcm.googleapis.com/fcm/send/abc123',
+  p256dh: 'O88gaQz1WqucBQoIRTHLl44h3g_AiFgmOeDGCpZbOJQweweXvs4O1skpArPwIJoSaSueadKE4yJysus0Vg6da-k',
+  auth: '6_vGXk9KyNjRxqt5n23www',
+  userAgent: 'Mozilla/5.0',
+};
+
+describe('getPushSettings (US-031/FR-01, AC-08, AC-09)', () => {
+  it('returns the stored flag alongside the VAPID public key, never anything about a subscription', async () => {
+    setConfigForTesting(BASE_CONFIG);
+    try {
+      const svc = createNotificationsService({ deliveries: pushDeliveries({ optIn: true }), send: fixedSend({ ok: true }) });
+
+      const result = await svc.getPushSettings(USER_ID);
+
+      expect(result).toEqual({ pushOptIn: true, vapidPublicKey: BASE_CONFIG.VAPID_PUBLIC_KEY });
+    } finally {
+      setConfigForTesting(undefined);
+    }
+  });
+
+  it('propagates a read failure rather than guessing a default (US-031/AC-08)', async () => {
+    setConfigForTesting(BASE_CONFIG);
+    const deliveries = pushDeliveries();
+    deliveries.getPushOptIn = async () => {
+      throw new Error('connection refused');
+    };
+    try {
+      const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+      await expect(svc.getPushSettings(USER_ID)).rejects.toThrow('connection refused');
+    } finally {
+      setConfigForTesting(undefined);
+    }
+  });
+});
+
+describe('optIntoPush — subscription FIRST, flag SECOND (US-031/AC-02, AC-07, design note §4.2)', () => {
+  it('writes the subscription, then the flag, and returns the confirmed flag value', async () => {
+    const deliveries = pushDeliveries();
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    const result = await svc.optIntoPush(USER_ID, SUBSCRIPTION);
+
+    expect(result).toEqual({ pushOptIn: true });
+    expect(deliveries.subscriptions).toEqual([{ userId: USER_ID, ...SUBSCRIPTION }]);
+    expect(deliveries.flag).toBe(true);
+  });
+
+  it('leaves the flag untouched, and throws, when the subscription upsert fails — nothing is written', async () => {
+    const deliveries = pushDeliveries({ failing: new Set(['upsert']) });
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    await expect(svc.optIntoPush(USER_ID, SUBSCRIPTION)).rejects.toThrow('connection refused');
+
+    expect(deliveries.flag).toBe(false);
+    expect(deliveries.subscriptions).toEqual([]);
+  });
+
+  it("throws, reporting the account's real (still off) state, when the flag write fails after a successful subscription upsert — AC-07's exact case", async () => {
+    const deliveries = pushDeliveries({ failing: new Set(['setFlag']) });
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    await expect(svc.optIntoPush(USER_ID, SUBSCRIPTION)).rejects.toThrow('connection refused');
+
+    // The orphaned subscription is harmless: sending later checks the flag before subscriptions,
+    // and the flag is still false.
+    expect(deliveries.subscriptions).toEqual([{ userId: USER_ID, ...SUBSCRIPTION }]);
+    expect(deliveries.flag).toBe(false);
+  });
+});
+
+describe('optOutOfPush — flag FIRST, subscriptions SECOND (US-031/AC-03, AC-07, design note §4.3)', () => {
+  it('writes the flag off, then deletes every subscription for the account', async () => {
+    const deliveries = pushDeliveries({ optIn: true });
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    const result = await svc.optOutOfPush(USER_ID);
+
+    expect(result).toEqual({ pushOptIn: false });
+    expect(deliveries.flag).toBe(false);
+    expect(deliveries.deletedFor).toEqual([USER_ID]);
+  });
+
+  it('throws, changing nothing, when the flag write itself fails — no delete is attempted', async () => {
+    const deliveries = pushDeliveries({ optIn: true, failing: new Set(['setFlag']) });
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    await expect(svc.optOutOfPush(USER_ID)).rejects.toThrow('connection refused');
+
+    expect(deliveries.flag).toBe(true);
+    expect(deliveries.deletedFor).toEqual([]);
+  });
+
+  it('still reports success when the flag write succeeds but the subscription cleanup fails — the flag is already the true, safe state', async () => {
+    const deliveries = pushDeliveries({ optIn: true, failing: new Set(['delete']) });
+    const svc = createNotificationsService({ deliveries, send: fixedSend({ ok: true }) });
+
+    const result = await svc.optOutOfPush(USER_ID);
+
+    expect(result).toEqual({ pushOptIn: false });
+    expect(deliveries.flag).toBe(false);
+  });
+});
 
 function fixedSend(result: SendMailResult): (message: MailMessage) => Promise<SendMailResult> {
   return async () => result;

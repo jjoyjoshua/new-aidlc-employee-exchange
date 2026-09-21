@@ -79,15 +79,33 @@ const noRows: AvailabilityRepository = emptyAvailabilityRepository;
  * be reached here. `calls`/`cancellationCalls` are read back as plain data (never asserted as a
  * mock call) by this story's own tests.
  */
+/** None of this file's tests exercise the push-opt-in seam; every fixture below shares this
+ *  stub set so `BuildAppOptions.notifications`'s one shared seam type still typechecks. */
+const NOT_STUBBED_PUSH = {
+  async getPushSettings(): Promise<never> {
+    throw new Error('getPushSettings not stubbed — this file exercises /api/bookings only');
+  },
+  async optIntoPush(): Promise<never> {
+    throw new Error('optIntoPush not stubbed — this file exercises /api/bookings only');
+  },
+  async optOutOfPush(): Promise<never> {
+    throw new Error('optOutOfPush not stubbed — this file exercises /api/bookings only');
+  },
+};
+
 function recordingNotifications(
   result: RecordAndSendResult = { ok: true, recorded: true },
-): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'> & {
+): Pick<
+  NotificationsService,
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+> & {
   calls: BookingConfirmationInput[];
   cancellationCalls: BookingCancellationInput[];
 } {
   const calls: BookingConfirmationInput[] = [];
   const cancellationCalls: BookingCancellationInput[] = [];
   return {
+    ...NOT_STUBBED_PUSH,
     calls,
     cancellationCalls,
     async sendBookingConfirmation(input) {
@@ -106,9 +124,10 @@ function recordingNotifications(
 
 function throwingNotifications(): Pick<
   NotificationsService,
-  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
 > {
   return {
+    ...NOT_STUBBED_PUSH,
     async sendBookingConfirmation() {
       throw new Error('unexpected notifications failure');
     },
@@ -135,7 +154,10 @@ beforeEach(() => {
 function appWith(options: {
   rows?: Row[];
   availability?: AvailabilityRepository;
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'>;
+  notifications?: Pick<
+    NotificationsService,
+    'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+  >;
 }) {
   const rows = options.rows ?? [EMPLOYEE, MUST_CHANGE_PASSWORD];
 

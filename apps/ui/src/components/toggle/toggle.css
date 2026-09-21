@@ -1,0 +1,93 @@
+/*
+ * Toggle — SCR-004 `HF / SCR-004 · Settings / ST-02 Push off · 1280` and `.../ST-04 Push on`,
+ * confirmed via Figma metadata (US-031). Track/knob geometry is not itself a named token in
+ * `tokens.css` (no switch existed before this story); every colour value below IS one.
+ */
+
+.toggle-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--c-border-control);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle {
+    transition: none;
+  }
+}
+
+.toggle--on {
+  background: var(--c-action);
+}
+
+.toggle:focus-visible {
+  outline: var(--bw-2) solid var(--c-focus-ring);
+  outline-offset: var(--bw-2);
+}
+
+.toggle__track {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.toggle__knob {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--c-surface-raised);
+  transform: translateX(0);
+  transition: transform 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle__knob {
+    transition: none;
+  }
+}
+
+.toggle--on .toggle__knob {
+  transform: translateX(20px);
+}
+
+/* ST-03 — busy, NOT snapped to the on position: the knob sits at the track's midpoint, which
+   is what "the browser has not agreed yet" looks like without inventing a fifth colour. */
+.toggle--busy .toggle__knob {
+  transform: translateX(10px);
+}
+
+.toggle--busy,
+.toggle[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+/* ST-05 — disabled, but never the native `disabled` attribute (see Toggle.tsx's own note) —
+   this is the ONLY visual cue restricted to `aria-disabled`, so the quiet fill plus the
+   adjacent word ("Off") together carry the state, matching NFR-008. */
+.toggle[aria-disabled='true'] {
+  background: var(--c-fill-disabled);
+  opacity: 0.7;
+}
+
+.toggle__label {
+  font-family: var(--f-body);
+  font-size: var(--t-body-sm);
+  line-height: var(--lh-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}

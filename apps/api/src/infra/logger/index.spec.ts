@@ -17,7 +17,17 @@ describe('logger redaction', () => {
   it("replaces a push subscription's keys", () => {
     const out = redact({ subscription: { endpoint: 'https://push', keys: { p256dh: 'k', auth: 'a' } } }) as Record<string, any>;
     expect(out.subscription.keys).toBe('[redacted]');
-    expect(out.subscription.endpoint).toBe('https://push');
+  });
+
+  /**
+   * US-031 design note §4.5. `endpoint` is a capability URL — anyone holding it can push to
+   * that browser — so it is redacted the same as the subscription's keys, not left as an
+   * apparently-harmless string (a real regression: the pre-US-031 version of this test
+   * asserted the opposite).
+   */
+  it('replaces a push subscription endpoint, not just its keys (US-031)', () => {
+    const out = redact({ endpoint: 'https://fcm.googleapis.com/fcm/send/abc123' }) as Record<string, unknown>;
+    expect(out.endpoint).toBe('[redacted]');
   });
 
   it('leaves ordinary request fields alone', () => {

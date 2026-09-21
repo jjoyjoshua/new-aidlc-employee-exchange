@@ -253,13 +253,31 @@ function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapt
  * it, and this file's `Config` fixture carries no `MAIL_*` keys, so the REAL `notificationsService`
  * must never be reached here.
  */
+/** None of this file's tests exercise the push-opt-in seam; every fixture below shares this
+ *  stub set so `BuildAppOptions.notifications`'s one shared seam type still typechecks. */
+const NOT_STUBBED_PUSH = {
+  async getPushSettings(): Promise<never> {
+    throw new Error('getPushSettings not stubbed — this file exercises /api/admin only');
+  },
+  async optIntoPush(): Promise<never> {
+    throw new Error('optIntoPush not stubbed — this file exercises /api/admin only');
+  },
+  async optOutOfPush(): Promise<never> {
+    throw new Error('optOutOfPush not stubbed — this file exercises /api/admin only');
+  },
+};
+
 function recordingNotifications(
   result: RecordAndSendResult = { ok: true, recorded: true },
-): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'> & {
+): Pick<
+  NotificationsService,
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+> & {
   cancellationCalls: BookingCancellationInput[];
 } {
   const cancellationCalls: BookingCancellationInput[] = [];
   return {
+    ...NOT_STUBBED_PUSH,
     cancellationCalls,
     async sendBookingConfirmation() {
       throw new Error('sendBookingConfirmation not stubbed — this file exercises /api/admin only');
@@ -276,9 +294,10 @@ function recordingNotifications(
 
 function throwingNotifications(): Pick<
   NotificationsService,
-  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
 > {
   return {
+    ...NOT_STUBBED_PUSH,
     async sendBookingConfirmation() {
       throw new Error('sendBookingConfirmation not stubbed — this file exercises /api/admin only');
     },
@@ -297,7 +316,10 @@ function appWith(options: {
   desks?: DesksRepository;
   users?: UsersRepository;
   usersAuth?: UsersAuthAdapter;
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'>;
+  notifications?: Pick<
+    NotificationsService,
+    'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail' | 'getPushSettings' | 'optIntoPush' | 'optOutOfPush'
+  >;
   /** US-027 test seam — a deterministic generator for reset-password route tests. */
   randomInt?: (maxExclusive: number) => number;
 }) {
@@ -2453,6 +2475,7 @@ describe('POST /api/admin/users/:id/deactivate — sends one cancellation email 
     let calls = 0;
     const app = appWith({
       notifications: {
+        ...NOT_STUBBED_PUSH,
         async sendBookingConfirmation() {
           throw new Error('not exercised');
         },

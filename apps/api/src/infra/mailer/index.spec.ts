@@ -12,8 +12,9 @@ const BASE_CONFIG: Config = {
   MAIL_PROVIDER: 'console',
   MAIL_API_KEY: 'mail-key',
   MAIL_FROM_ADDRESS: 'desks@example.com',
-  VAPID_PUBLIC_KEY: 'vapid-public',
-  VAPID_PRIVATE_KEY: 'vapid-private',
+  // Real-shaped, not real — see apps/api/src/config/index.spec.ts for the same fixture values.
+  VAPID_PUBLIC_KEY: 'O88gaQz1WqucBQoIRTHLl44h3g_AiFgmOeDGCpZbOJQweweXvs4O1skpArPwIJoSaSueadKE4yJysus0Vg6da-k',
+  VAPID_PRIVATE_KEY: '8C5_EzOg2Bo50ZwbHWqgjgGyRtjrDMBLz1qqQ9Qssvw',
   VAPID_SUBJECT: 'mailto:desks@example.com',
   REMINDER_RUN_SECRET: 'reminder-secret',
   CORS_ORIGINS: ['http://localhost:5173'],

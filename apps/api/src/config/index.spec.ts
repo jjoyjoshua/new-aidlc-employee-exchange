@@ -26,8 +26,11 @@ const valid = {
   MAIL_PROVIDER: 'console',
   MAIL_API_KEY: 'mail-key',
   MAIL_FROM_ADDRESS: 'desks@example.com',
-  VAPID_PUBLIC_KEY: 'vapid-public',
-  VAPID_PRIVATE_KEY: 'vapid-private',
+  // Real-shaped, not real: 87/43 base64url characters, matching an uncompressed P-256 public
+  // key and a P-256 private scalar respectively (US-031 design note §4.4, §7). Safe to commit —
+  // they sign nothing and were generated for this fixture only.
+  VAPID_PUBLIC_KEY: 'O88gaQz1WqucBQoIRTHLl44h3g_AiFgmOeDGCpZbOJQweweXvs4O1skpArPwIJoSaSueadKE4yJysus0Vg6da-k',
+  VAPID_PRIVATE_KEY: '8C5_EzOg2Bo50ZwbHWqgjgGyRtjrDMBLz1qqQ9Qssvw',
   VAPID_SUBJECT: 'mailto:desks@example.com',
   REMINDER_RUN_SECRET: 'reminder-secret',
   CORS_ORIGINS: 'http://localhost:5173',
@@ -166,6 +169,37 @@ describe('loadConfig — mail (US-034)', () => {
  * `.env.example` ships the keys blank with a comment naming the owner (Architect design note
  * §6, F-2, F-11).
  */
+/**
+ * US-031 design note §7 — the VAPID keys were non-empty strings and nothing else until this
+ * story. A wrong-length key boots fine and fails only at `web-push.setVapidDetails()` (or,
+ * worse, silently at the browser's `subscribe()` call) — exactly the class of failure
+ * US-034/AC-04's boot-time guarantee exists to prevent everywhere else.
+ */
+describe('loadConfig — VAPID keys (US-031)', () => {
+  it('accepts a well-formed key pair and subject (US-031/AC-02)', () => {
+    const config = loadConfig(valid);
+    expect(config.VAPID_PUBLIC_KEY).toHaveLength(87);
+    expect(config.VAPID_PRIVATE_KEY).toHaveLength(43);
+  });
+
+  it('refuses a VAPID_PUBLIC_KEY that is not 87 base64url characters', () => {
+    expect(() => loadConfig({ ...valid, VAPID_PUBLIC_KEY: 'too-short' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses a VAPID_PRIVATE_KEY that is not 43 base64url characters', () => {
+    expect(() => loadConfig({ ...valid, VAPID_PRIVATE_KEY: 'too-short' })).toThrow(ConfigurationError);
+  });
+
+  it('refuses a VAPID_SUBJECT that is neither a mailto: nor an https: URL', () => {
+    expect(() => loadConfig({ ...valid, VAPID_SUBJECT: 'desks@example.com' })).toThrow(ConfigurationError);
+  });
+
+  it('accepts an https: subject as well as mailto:', () => {
+    const config = loadConfig({ ...valid, VAPID_SUBJECT: 'https://example.com/contact' });
+    expect(config.VAPID_SUBJECT).toBe('https://example.com/contact');
+  });
+});
+
 describe('.env.example — mail placeholders (US-034/AC-03)', () => {
   const envExample = readFileSync(resolve(HERE, '../../../../.env.example'), 'utf8');
 

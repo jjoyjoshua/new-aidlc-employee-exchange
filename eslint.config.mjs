@@ -55,6 +55,18 @@ const MAILER_BAN = {
     'path. Add a port there instead of importing the transport directly.',
 };
 
+// US-031 design note §2.1, C6. `infra/webpush` is importable only from `modules/notifications`,
+// mirroring MAILER_BAN exactly and for the same reason: one send path, or there will eventually
+// be two. Restated everywhere MAILER_BAN is restated below — never folded into a new broad
+// block, which is the mistake this file's own MAILER_BAN comment (line 28) already documents.
+const WEBPUSH_BAN = {
+  group: ['**/infra/webpush/**', '../infra/webpush/**', '../../infra/webpush/**'],
+  message:
+    'infra/webpush is importable only from modules/notifications (US-031 design note §2.1) — ' +
+    'the same reasoning MAILER_BAN carries for infra/mailer. Add a port there instead of ' +
+    'importing infra/webpush directly.',
+};
+
 /** One rule per module: you may not reach into a sibling module's internals, you may not open
  *  your own Supabase client (F-7), and — except `notifications` itself — you may not import
  *  `infra/mailer` directly (FR-07). */
@@ -69,7 +81,9 @@ const moduleBoundaries = MODULES.map((self) => {
       `domain/ or a declared port — see app-architecture.md §3. A module that imports ` +
       `another module's service is a module that can no longer be changed alone.`,
   }));
-  if (self !== 'notifications') patterns.push(MAILER_BAN);
+  if (self !== 'notifications') {
+    patterns.push(MAILER_BAN, WEBPUSH_BAN);
+  }
 
   return {
     files: [`apps/api/src/modules/${self}/**/*.ts`],
@@ -140,12 +154,13 @@ export default tseslint.config(
   // It bypasses every RLS policy in the project (ADR-001). One file constructs the client;
   // everything else asks that file. A second importer is a blocker finding, not a style note.
   //
-  // Also carries the mailer boundary (US-034/AC-08, MAILER_BAN) for everything this block
-  // covers that `moduleBoundaries` does not re-cover more specifically — http/, domain/, infra/
-  // itself. `ignores` excludes infra/supabase (this ban) but NOT infra/mailer: MAILER_BAN's own
-  // group excludes nothing, because `notifications` needing the exemption is handled by
-  // `moduleBoundaries` overriding this block for files under `modules/notifications/**` (flat
-  // config: the LAST matching block wins, and `moduleBoundaries` is appended after this one).
+  // Also carries the mailer and webpush boundaries (US-034/AC-08, MAILER_BAN; US-031, WEBPUSH_BAN)
+  // for everything this block covers that `moduleBoundaries` does not re-cover more
+  // specifically — http/, domain/, infra/ itself. `ignores` excludes infra/supabase (this ban)
+  // but NOT infra/mailer or infra/webpush: their own `group`s exclude nothing, because
+  // `notifications` needing the exemption is handled by `moduleBoundaries` overriding this block
+  // for files under `modules/notifications/**` (flat config: the LAST matching block wins, and
+  // `moduleBoundaries` is appended after this one).
   {
     files: ['apps/**/*.ts', 'apps/**/*.tsx'],
     ignores: ['apps/api/src/infra/supabase/**'],
@@ -154,7 +169,7 @@ export default tseslint.config(
         'error',
         { paths: [{ ...SUPABASE_CLIENT_BAN, message: SUPABASE_CLIENT_BAN.message + ' The browser client is the single exception below.' }] },
       ],
-      'no-restricted-imports': ['error', { patterns: [MAILER_BAN] }],
+      'no-restricted-imports': ['error', { patterns: [MAILER_BAN, WEBPUSH_BAN] }],
     },
   },
 
@@ -200,11 +215,13 @@ export default tseslint.config(
                 'service-role key, which bypasses every RLS policy in the project. Shared wire ' +
                 'shapes go in @desk-booking/contracts (ADR-002).',
             },
-            // US-034/AC-08. Restated because this block sets its own `patterns` (flat config
-            // replaces, not merges) — the browser has no business reaching infra/mailer at all,
-            // but the general form above already covers `apps/api/**`; this entry is here so
-            // the intent is explicit rather than incidental.
+            // US-034/AC-08 and US-031. Restated because this block sets its own `patterns`
+            // (flat config replaces, not merges) — the browser has no business reaching
+            // infra/mailer or infra/webpush at all, but the general form above already covers
+            // `apps/api/**`; these entries are here so the intent is explicit rather than
+            // incidental.
             MAILER_BAN,
+            WEBPUSH_BAN,
           ],
         },
       ],
@@ -329,6 +346,17 @@ export default tseslint.config(
       'no-console': 'off',
       'no-restricted-globals': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+
+  // ---- The service worker's own globals (US-031, design note §8.1) -----------
+  // Unbundled and not type-checked (`apps/ui/public/sw.js` is served by Vite's `public/` as-is),
+  // so `self`/`clients`/`caches` are otherwise `no-undef` — this file never runs in a browser
+  // window context, so `window`/`document` are correctly absent instead.
+  {
+    files: ['apps/ui/public/sw.js'],
+    languageOptions: {
+      globals: { self: 'readonly', clients: 'readonly', caches: 'readonly' },
     },
   },
 );

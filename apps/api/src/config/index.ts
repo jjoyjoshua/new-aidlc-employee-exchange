@@ -55,9 +55,26 @@ const schema = z.object({
   MAIL_API_KEY: nonEmpty('MAIL_API_KEY'),
   MAIL_FROM_ADDRESS: nonEmpty('MAIL_FROM_ADDRESS').email(),
 
-  VAPID_PUBLIC_KEY: nonEmpty('VAPID_PUBLIC_KEY'),
-  VAPID_PRIVATE_KEY: nonEmpty('VAPID_PRIVATE_KEY'),
-  VAPID_SUBJECT: nonEmpty('VAPID_SUBJECT'),
+  /** Uncompressed P-256 point, 65 bytes → 87 base64url characters (US-031 design note §4.4,
+   *  §7). Non-empty was enough to boot and not enough to work: `web-push.setVapidDetails()`
+   *  throws on a wrong-length key, and this key is additionally served to the browser
+   *  (US-031/FR-01) — a malformed one there is an opaque `subscribe()` failure a user cannot
+   *  explain. Structural validation belongs at boot, same as every other US-034/AC-04 case. */
+  VAPID_PUBLIC_KEY: nonEmpty('VAPID_PUBLIC_KEY').regex(
+    /^[A-Za-z0-9_-]{87}$/,
+    'must be an uncompressed P-256 public key, 87 base64url characters',
+  ),
+  /** P-256 private scalar, 32 bytes → 43 base64url characters. */
+  VAPID_PRIVATE_KEY: nonEmpty('VAPID_PRIVATE_KEY').regex(
+    /^[A-Za-z0-9_-]{43}$/,
+    'must be a P-256 private key, 43 base64url characters',
+  ),
+  /** A VAPID subject is a contact URL for the push service, and `web-push` accepts only these
+   *  two schemes — a wrong one is a 403 from every push service (US-031 design note §7). */
+  VAPID_SUBJECT: nonEmpty('VAPID_SUBJECT').refine(
+    (value) => value.startsWith('mailto:') || value.startsWith('https://'),
+    { message: 'must be a mailto: or https: URL' },
+  ),
 
   /** The reminder run is guarded by a shared secret, not a user session — no user triggers
    *  it (app-architecture.md §4.3). */

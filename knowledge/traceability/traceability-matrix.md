@@ -29,7 +29,7 @@
 | REQ-023 | US-028 | 8/8 | delivered |
 | REQ-024 | US-029 | 10/10 | delivered |
 | REQ-025 | US-030 | 10/10 | delivered |
-| REQ-026 | US-031 | 0/11 | planned |
+| REQ-026 | US-031 | 11/11 | delivered |
 | REQ-027 | US-032 | 0/10 | planned |
 | REQ-028 | US-010, US-013 | 21/21 | delivered |
 | REQ-029 | US-004 | 8/8 | delivered |
@@ -45,7 +45,7 @@
 | NFR-003 | US-001 | 8/8 | delivered |
 | NFR-004 | US-033 | 0/9 | planned |
 | NFR-005 | US-034 | 8/8 | delivered |
-| NFR-006 | US-031 | 0/11 | planned |
+| NFR-006 | US-031 | 11/11 | delivered |
 | NFR-007 | US-034 | 8/8 | delivered |
 | NFR-008 | US-033 | 0/9 | planned |
 | NFR-009 | US-003 | 5/5 | delivered |

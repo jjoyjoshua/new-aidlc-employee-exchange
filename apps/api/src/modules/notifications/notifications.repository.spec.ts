@@ -12,6 +12,9 @@ interface RecordedCall {
   table: string;
   insert?: unknown;
   update?: unknown;
+  upsert?: unknown;
+  upsertOptions?: unknown;
+  delete?: true;
   eq: Array<[string, unknown]>;
   select?: string;
   single?: boolean;
@@ -31,6 +34,15 @@ function fakeSupabase(response: FakeResponse) {
       },
       update(row: unknown) {
         call.update = row;
+        return builder;
+      },
+      upsert(row: unknown, options: unknown) {
+        call.upsert = row;
+        call.upsertOptions = options;
+        return builder;
+      },
+      delete() {
+        call.delete = true;
         return builder;
       },
       eq(column: string, value: unknown) {
@@ -304,6 +316,156 @@ describe('notificationsRepository.markDeliveryFailed — demoting a claimed row 
     try {
       await expect(notificationsRepository.markDeliveryFailed('delivery-1', 'transport_unreachable')).rejects.toThrow(
         /could not be recorded/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/abc123';
+
+describe('notificationsRepository.getPushOptIn / setPushOptIn — the one column this module touches (US-031/design note §4.6)', () => {
+  it('reads push_opt_in by an explicit column list, never select(*)', async () => {
+    const { calls, client } = fakeSupabase({ data: { push_opt_in: true }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await notificationsRepository.getPushOptIn(USER_ID);
+
+      expect(result).toBe(true);
+      expect(calls).toEqual([{ table: 'user_profiles', select: 'push_opt_in', eq: [['id', USER_ID]], single: true }]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the read itself errors', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.getPushOptIn(USER_ID)).rejects.toThrow(/push opt-in read failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('writes only push_opt_in, and returns the value the database actually holds (US-031/AC-07)', async () => {
+    const { calls, client } = fakeSupabase({ data: { push_opt_in: true }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await notificationsRepository.setPushOptIn(USER_ID, true);
+
+      expect(result).toBe(true);
+      expect(calls).toEqual([
+        { table: 'user_profiles', update: { push_opt_in: true }, select: 'push_opt_in', eq: [['id', USER_ID]], single: true },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the write itself errors', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.setPushOptIn(USER_ID, false)).rejects.toThrow(/push opt-in write failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('notificationsRepository.upsertPushSubscription — one row per browser (US-031/FR-02, FR-03)', () => {
+  it('upserts on the endpoint conflict target, writing user_id, p256dh, auth and user_agent', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await notificationsRepository.upsertPushSubscription({
+        userId: USER_ID,
+        endpoint: ENDPOINT,
+        p256dh: 'p256dh-value',
+        auth: 'auth-value',
+        userAgent: 'Mozilla/5.0',
+      });
+
+      expect(calls).toEqual([
+        {
+          table: 'push_subscriptions',
+          upsert: { user_id: USER_ID, endpoint: ENDPOINT, p256dh: 'p256dh-value', auth: 'auth-value', user_agent: 'Mozilla/5.0' },
+          upsertOptions: { onConflict: 'endpoint' },
+          eq: [],
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('writes a null user_agent when none is given, never an empty string', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await notificationsRepository.upsertPushSubscription({
+        userId: USER_ID,
+        endpoint: ENDPOINT,
+        p256dh: 'p256dh-value',
+        auth: 'auth-value',
+        userAgent: undefined,
+      });
+
+      expect(calls[0]!.upsert).toMatchObject({ user_agent: null });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the upsert itself errors, rather than reporting success', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        notificationsRepository.upsertPushSubscription({
+          userId: USER_ID,
+          endpoint: ENDPOINT,
+          p256dh: 'p256dh-value',
+          auth: 'auth-value',
+          userAgent: undefined,
+        }),
+      ).rejects.toThrow(/push subscription upsert failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('notificationsRepository.deletePushSubscriptions — ALL of the account\'s rows (US-031/AC-03)', () => {
+  it('deletes every row for the given user_id', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await notificationsRepository.deletePushSubscriptions(USER_ID);
+
+      expect(calls).toEqual([{ table: 'push_subscriptions', delete: true, eq: [['user_id', USER_ID]] }]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the delete itself errors, rather than reporting success', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.deletePushSubscriptions(USER_ID)).rejects.toThrow(
+        /push subscription delete failed/,
       );
     } finally {
       setSupabaseForTesting(undefined);

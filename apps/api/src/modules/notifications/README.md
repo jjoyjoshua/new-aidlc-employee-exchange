@@ -26,3 +26,25 @@ desk number, date) and composes the confirmation's subject/body itself, then cal
 directly, and never composes text. US-029/US-030 should add their own `send*` functions the
 same way, each composing its own wording, rather than receiving pre-written text from `bookings`
 or `users`.
+
+## US-031 — the module's first router, and its one write outside `push_subscriptions`
+
+**This module owns `push_subscriptions` outright** (`0007_push_subscriptions.sql`), and
+**writes exactly one column of `user_profiles` — `push_opt_in`** — an ADR-004 exception
+`app-architecture.md:89` grants in writing (this row's own Owns column names *opt-in*), not a
+boundary violation. The alternative — a port `modules/users` exposes that this module calls — is
+banned outright: `eslint.config.mjs`'s `MAY_IMPORT.notifications = []` means this module may
+import no other module at all. `modules/users/README.md` records the same exception from the
+other side. Nothing else in `user_profiles` is read or written from here.
+
+**The write ordering is the one rule that makes AC-07 true, and it is asymmetric on purpose**
+(design note §4.2, §4.3): opting in writes the subscription, THEN the flag; opting out writes
+the flag, THEN deletes the subscriptions. The flag always moves toward "push enabled" LAST and
+toward "push disabled" FIRST — get this backwards and a partial failure produces a toggle that
+lies about whether push will actually fire (PRIN-5).
+
+**`infra/webpush` is importable only from this module** (`eslint.config.mjs`'s `WEBPUSH_BAN`,
+mirroring `MAILER_BAN` exactly, for the same reason: one send path, or there will eventually be
+two). US-031 uses only `getVapidPublicKey()` — sending is US-032's, which extends
+`recordAndSend` with a `channel: 'push'` branch rather than writing a second send path, the same
+discipline US-030 already followed for the reminder run.
