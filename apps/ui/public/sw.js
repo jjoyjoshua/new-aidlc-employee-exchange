@@ -19,14 +19,38 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// US-032 fills these in. `userVisibleOnly: true` is promised at `subscribe()` time
-// (`lib/push-subscription.ts`), so a `push` event that shows nothing risks the browser
-// penalising the subscription — this story sends no push, so the handlers stay stubbed rather
-// than absent, so the next story extends this file instead of adding a second one.
-self.addEventListener('push', () => {
-  // US-032.
+// US-032. The server sends JSON.stringify({ title, body }) as the push payload (design note
+// §7.1) — not a shared type, since this file is unbundled and imports nothing. `waitUntil` is
+// mandatory: without it the browser can terminate the worker before `showNotification` resolves,
+// which presents as push that works locally and silently fails in the field. Something is always
+// shown, even when the payload is missing or unparseable — `userVisibleOnly: true` was promised
+// at `subscribe()` time (`lib/push-subscription.ts`), and a handler that shows nothing risks the
+// browser penalising the subscription. No `tag` — a shared tag would collapse a multi-booking
+// cascade's several pushes into one visible notification (US-032/AC-09, design note C12).
+self.addEventListener('push', (event) => {
+  let title = 'Desk booking update';
+  let body = 'Open the app to see the change.';
+
+  try {
+    const data = event.data ? event.data.json() : undefined;
+    if (data && typeof data.title === 'string') title = data.title;
+    if (data && typeof data.body === 'string') body = data.body;
+  } catch {
+    // Falls through to the generic copy above — an unparseable payload still shows something.
+  }
+
+  event.waitUntil(self.registration.showNotification(title, { body }));
 });
 
-self.addEventListener('notificationclick', () => {
-  // US-032.
+// US-032. Not required to deep-link (story §UI edge cases) — close the notification, then focus
+// an existing client if one is open, or open the app fresh. No action buttons.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => 'focus' in client);
+      if (existing) return existing.focus();
+      return self.clients.openWindow('/');
+    }),
+  );
 });

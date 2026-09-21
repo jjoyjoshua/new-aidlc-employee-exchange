@@ -30,7 +30,7 @@
 | REQ-024 | US-029 | 10/10 | delivered |
 | REQ-025 | US-030 | 10/10 | delivered |
 | REQ-026 | US-031 | 11/11 | delivered |
-| REQ-027 | US-032 | 0/10 | planned |
+| REQ-027 | US-032 | 10/10 | delivered |
 | REQ-028 | US-010, US-013 | 21/21 | delivered |
 | REQ-029 | US-004 | 8/8 | delivered |
 | REQ-030 | US-025 | 12/12 | delivered |
