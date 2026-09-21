@@ -6,13 +6,15 @@
  * caller never receives pre-written text to pass through. There is no second mail path,
  * enforced by `eslint.config.mjs`'s mailer boundary (FR-07).
  *
- * **This function is send-then-record, and that is a documented seam, not a finished
- * guarantee (Architect design note §2.3, F-6).** It is correct for the confirmation and
- * cancellation paths, each caused by a one-time user action. The reminder run (US-030,
- * `app-architecture.md` §4.3) is triggered by a scheduler that retries and needs a **claim
- * before the send** — most likely inserting the `sent` row first and demoting it to `failed`
- * if the transport rejects, which is what makes §4.3's "a retry resends only what failed" true.
- * US-030 must extend this function, not write a second one, or AC-08 breaks.
+ * **`recordAndSend` is two paths behind one name, not one (US-030/D-01).** Confirmation and
+ * cancellation, each caused by a one-time user action, are still send-then-record. The reminder
+ * (`kind === 'reminder'`) is claim-then-send: the delivery row is inserted as `sent` FIRST, via
+ * the reminder partial-unique index (`0006_notification_deliveries.sql:52-54`); only a
+ * successful claim calls the transport, and a transport failure demotes the row to `failed`
+ * rather than inserting a second one. An unclaimed row (the index already fired — a prior run,
+ * or a retry) returns success without calling the transport at all — that is what makes
+ * `app-architecture.md` §4.3's "a retry resends only what failed" true, and it is what AC-07
+ * rests on. US-030 extends this function; it does not write a second one.
  *
  * `recordAndSend` takes no transaction and opens none (`app-architecture.md` §4.1 step 6) — a
  * caller invokes it once its OWN write has already committed.
@@ -68,6 +70,16 @@ export interface BookingConfirmationInput {
   date: string;
 }
 
+export interface BookingReminderInput {
+  bookingId: string;
+  userId: string;
+  /** The owner's CURRENT email — read once by the caller, never re-fetched here (same
+   *  discipline as `BookingConfirmationInput.email`/`BookingCancellationInput.email`). */
+  email: string;
+  deskNumber: string;
+  date: OfficeDate;
+}
+
 export interface BookingCancellationInput {
   bookingId: string;
   /** The booking OWNER's id — always the recipient, never the actor who cancelled it. */
@@ -90,6 +102,8 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
    * write it down" signal — the log line below is then the last resort AC-05 actually needs.
    */
   async function recordAndSend(input: SendEmailInput): Promise<RecordAndSendResult> {
+    if (input.kind === 'reminder') return recordAndSendClaimFirst(input);
+
     const result = await send({ to: input.recipient, subject: input.subject, body: input.body });
     const outcome: 'sent' | 'failed' = result.ok ? 'sent' : 'failed';
     const safeError: MailFailureReason | undefined = result.ok ? undefined : safeFailureReason(result.error);
@@ -128,6 +142,51 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
     }
 
     return safeError === undefined ? { ok: true, recorded } : { ok: false, error: safeError, recorded };
+  }
+
+  /**
+   * US-030/D-01, D-02. Claim first, send only on a successful claim. An unclaimed row (the
+   * reminder partial-unique index already fired) is not a failure — it is the SAME booking's
+   * reminder, already sent by an earlier call, and this resolves `{ ok: true, recorded: true }`
+   * without touching the transport (AC-07).
+   */
+  async function recordAndSendClaimFirst(input: SendEmailInput): Promise<RecordAndSendResult> {
+    const claim = await deliveries.claimReminderSent({
+      bookingId: input.bookingId,
+      userId: input.userId,
+      channel: 'email',
+      kind: input.kind,
+      recipient: input.recipient,
+      outcome: 'sent',
+      errorDetail: undefined,
+    });
+
+    if (!claim.claimed) return { ok: true, recorded: true };
+
+    const result = await send({ to: input.recipient, subject: input.subject, body: input.body });
+    if (result.ok) return { ok: true, recorded: true };
+
+    const safeError = safeFailureReason(result.error);
+    logger.error('notification send failed', {
+      kind: input.kind,
+      bookingId: input.bookingId,
+      recipient: input.recipient,
+      reason: safeError,
+    });
+
+    try {
+      await deliveries.markDeliveryFailed(claim.id, safeError);
+      return { ok: false, error: safeError, recorded: true };
+    } catch (updateError) {
+      logger.error('notification delivery could not be demoted to failed', {
+        kind: input.kind,
+        bookingId: input.bookingId,
+        recipient: input.recipient,
+        sendError: safeError,
+        updateError: updateError instanceof Error ? updateError.message : String(updateError),
+      });
+      return { ok: false, error: safeError, recorded: false };
+    }
   }
 
   return {
@@ -171,6 +230,24 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
         recipient: input.email,
         subject: `Your desk booking was cancelled — ${input.deskNumber} on ${dateLabel}`,
         body,
+      });
+    },
+
+    /**
+     * US-030. Composes the reminder's wording the same way the other two composers do. Calling
+     * `recordAndSend({ kind: 'reminder', ... })` is what routes this through the claim-first
+     * path above — this function itself has no idempotency logic of its own (AC-07 lives in
+     * `recordAndSendClaimFirst`, not here).
+     */
+    async sendReminderEmail(input: BookingReminderInput): Promise<RecordAndSendResult> {
+      const dateLabel = formatShortDate(input.date);
+      return recordAndSend({
+        kind: 'reminder',
+        bookingId: input.bookingId,
+        userId: input.userId,
+        recipient: input.email,
+        subject: `Reminder — your desk tomorrow, ${input.deskNumber} on ${dateLabel}`,
+        body: `Reminder: you're booked at desk ${input.deskNumber} on ${dateLabel}. If you no longer need it, please cancel so somebody else can use it.`,
       });
     },
   };

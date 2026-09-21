@@ -114,6 +114,12 @@ describe('ERROR_CODES', () => {
     expect(ERROR_CODES.last_active_admin).not.toBe(ERROR_CODES.desk_has_upcoming_bookings);
     expect(errorCodeSchema.parse('last_active_admin')).toBe('last_active_admin');
   });
+
+  it('carries reminder_run_unauthorized, distinct from no_session (US-030)', () => {
+    expect(ERROR_CODES.reminder_run_unauthorized).toBe('reminder_run_unauthorized');
+    expect(ERROR_CODES.reminder_run_unauthorized).not.toBe(ERROR_CODES.no_session);
+    expect(errorCodeSchema.parse('reminder_run_unauthorized')).toBe('reminder_run_unauthorized');
+  });
 });
 
 describe('errorBodySchema.details (US-019/AC-04, ADR-009)', () => {

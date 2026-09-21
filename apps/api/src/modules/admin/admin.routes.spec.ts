@@ -255,7 +255,7 @@ function usersAuthFor(overrides: Partial<UsersAuthAdapter> = {}): UsersAuthAdapt
  */
 function recordingNotifications(
   result: RecordAndSendResult = { ok: true, recorded: true },
-): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> & {
+): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'> & {
   cancellationCalls: BookingCancellationInput[];
 } {
   const cancellationCalls: BookingCancellationInput[] = [];
@@ -268,16 +268,25 @@ function recordingNotifications(
       cancellationCalls.push(input);
       return result;
     },
+    async sendReminderEmail() {
+      throw new Error('sendReminderEmail not stubbed — this file exercises /api/admin only');
+    },
   };
 }
 
-function throwingNotifications(): Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'> {
+function throwingNotifications(): Pick<
+  NotificationsService,
+  'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'
+> {
   return {
     async sendBookingConfirmation() {
       throw new Error('sendBookingConfirmation not stubbed — this file exercises /api/admin only');
     },
     async sendBookingCancellation() {
       throw new Error('unexpected notifications failure');
+    },
+    async sendReminderEmail() {
+      throw new Error('sendReminderEmail not stubbed — this file exercises /api/admin only');
     },
   };
 }
@@ -288,7 +297,7 @@ function appWith(options: {
   desks?: DesksRepository;
   users?: UsersRepository;
   usersAuth?: UsersAuthAdapter;
-  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation'>;
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation' | 'sendBookingCancellation' | 'sendReminderEmail'>;
   /** US-027 test seam — a deterministic generator for reset-password route tests. */
   randomInt?: (maxExclusive: number) => number;
 }) {
@@ -2451,6 +2460,9 @@ describe('POST /api/admin/users/:id/deactivate — sends one cancellation email 
           calls += 1;
           if (calls === 1) throw new Error('unexpected notifications failure');
           return { ok: true, recorded: true };
+        },
+        async sendReminderEmail() {
+          throw new Error('not exercised');
         },
       },
       users: usersFor({

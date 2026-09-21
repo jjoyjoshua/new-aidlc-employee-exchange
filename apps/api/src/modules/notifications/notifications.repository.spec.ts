@@ -11,6 +11,10 @@ import { notificationsRepository } from './notifications.repository.js';
 interface RecordedCall {
   table: string;
   insert?: unknown;
+  update?: unknown;
+  eq: Array<[string, unknown]>;
+  select?: string;
+  single?: boolean;
 }
 
 type FakeResponse = { data: unknown; error: { code?: string; message: string } | null };
@@ -19,10 +23,26 @@ function fakeSupabase(response: FakeResponse) {
   const calls: RecordedCall[] = [];
 
   function from(table: string) {
-    const call: RecordedCall = { table };
+    const call: RecordedCall = { table, eq: [] };
     const builder = {
       insert(row: unknown) {
         call.insert = row;
+        return builder;
+      },
+      update(row: unknown) {
+        call.update = row;
+        return builder;
+      },
+      eq(column: string, value: unknown) {
+        call.eq.push([column, value]);
+        return builder;
+      },
+      select(columns: string) {
+        call.select = columns;
+        return builder;
+      },
+      single() {
+        call.single = true;
         return builder;
       },
       then(onFulfilled: (value: FakeResponse) => unknown, onRejected?: (reason: unknown) => unknown) {
@@ -139,6 +159,152 @@ describe('notificationsRepository.insertDelivery — the exact row written (US-0
           errorDetail: undefined,
         }),
       ).rejects.toThrow(/notification delivery insert failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+const REMINDER_INDEX_VIOLATION = {
+  code: '23505',
+  message:
+    'duplicate key value violates unique constraint "notification_deliveries_one_sent_reminder_per_booking"',
+};
+
+describe('notificationsRepository.claimReminderSent — the write half of US-030/AC-07', () => {
+  it('inserts the row as sent and returns { claimed: true, id } on success', async () => {
+    const { calls, client } = fakeSupabase({ data: { id: 'delivery-1' }, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await notificationsRepository.claimReminderSent({
+        bookingId: BOOKING_ID,
+        userId: USER_ID,
+        channel: 'email',
+        kind: 'reminder',
+        recipient: 'dana@example.com',
+        outcome: 'sent',
+        errorDetail: undefined,
+      });
+
+      expect(result).toEqual({ claimed: true, id: 'delivery-1' });
+      expect(calls).toEqual([
+        {
+          table: 'notification_deliveries',
+          insert: {
+            booking_id: BOOKING_ID,
+            user_id: USER_ID,
+            channel: 'email',
+            kind: 'reminder',
+            recipient: 'dana@example.com',
+            outcome: 'sent',
+            error_detail: null,
+          },
+          select: 'id',
+          eq: [],
+          single: true,
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('returns { claimed: false } — never throws — when the reminder partial-unique index rejects a duplicate (US-030/AC-07)', async () => {
+    const { client } = fakeSupabase({ data: null, error: REMINDER_INDEX_VIOLATION });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await notificationsRepository.claimReminderSent({
+        bookingId: BOOKING_ID,
+        userId: USER_ID,
+        channel: 'email',
+        kind: 'reminder',
+        recipient: 'dana@example.com',
+        outcome: 'sent',
+        errorDetail: undefined,
+      });
+
+      expect(result).toEqual({ claimed: false });
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a 23505 that does not name the reminder index, rather than guessing (design note §1.2\'s own precedent)', async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_index"' },
+    });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        notificationsRepository.claimReminderSent({
+          bookingId: BOOKING_ID,
+          userId: USER_ID,
+          channel: 'email',
+          kind: 'reminder',
+          recipient: 'dana@example.com',
+          outcome: 'sent',
+          errorDetail: undefined,
+        }),
+      ).rejects.toThrow(/unrecognised unique violation/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws on a non-23505 error rather than treating it as a duplicate', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(
+        notificationsRepository.claimReminderSent({
+          bookingId: BOOKING_ID,
+          userId: USER_ID,
+          channel: 'email',
+          kind: 'reminder',
+          recipient: 'dana@example.com',
+          outcome: 'sent',
+          errorDetail: undefined,
+        }),
+      ).rejects.toThrow(/reminder claim failed/);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('notificationsRepository.markDeliveryFailed — demoting a claimed row (US-030/AC-10)', () => {
+  it('updates outcome and error_detail by id', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await notificationsRepository.markDeliveryFailed('delivery-1', 'transport_unreachable');
+
+      expect(calls).toEqual([
+        {
+          table: 'notification_deliveries',
+          update: { outcome: 'failed', error_detail: 'transport_unreachable' },
+          eq: [['id', 'delivery-1']],
+        },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the update itself errors, rather than reporting success', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.markDeliveryFailed('delivery-1', 'transport_unreachable')).rejects.toThrow(
+        /could not be recorded/,
+      );
     } finally {
       setSupabaseForTesting(undefined);
     }
