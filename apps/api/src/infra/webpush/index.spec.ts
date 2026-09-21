@@ -1,3 +1,8 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 
@@ -29,9 +34,26 @@ const RECIPIENT = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh:
 import { WebPushError, sendNotification } from 'web-push';
 import { sendPush } from './index.js';
 
+// `index.ts` reads `sendNotification`/`WebPushError` off the DEFAULT export (issue #69 — Node's
+// real ESM loader never reliably synthesizes named exports for this CJS-only package, so the
+// default export, which is always synthesized, is the only reliable path). Vitest's own
+// transform *does* synthesize named exports correctly (that's what makes `import {
+// sendNotification }` above work at all here), so the mock has to override BOTH the top-level
+// named binding this file asserts against AND `default.sendNotification`, which is what
+// `index.ts` actually calls — otherwise index.ts silently calls the real, unmocked function.
 vi.mock('web-push', async (importOriginal) => {
   const actual = await importOriginal<typeof import('web-push')>();
-  return { ...actual, sendNotification: vi.fn() };
+  const mockedSendNotification = vi.fn();
+  // `@types/web-push` declares only named exports — no `default` — because the real package has
+  // none either; Node's CJS interop synthesizes one anyway at runtime, which is the exact gap
+  // issue #69 is about. `actual` genuinely carries a `default` property at runtime (Vitest's own
+  // synthesized one), the type just doesn't know it.
+  const actualDefault = (actual as unknown as { default: typeof actual }).default;
+  return {
+    ...actual,
+    sendNotification: mockedSendNotification,
+    default: { ...actualDefault, sendNotification: mockedSendNotification },
+  };
 });
 
 describe('sendPush (US-032/AC-08)', () => {
@@ -152,4 +174,45 @@ describe('sendPush (US-032/AC-08)', () => {
       setConfigForTesting(undefined);
     }
   });
+});
+
+describe('module import resolves under the real Node ESM loader, not just Vitest (#69)', () => {
+  it('boots this module via tsx (the same loader `npm run dev` uses) without throwing (#69)', () => {
+    // Regression for issue #69: `vi.mock('web-push', ...)` above goes through Vitest's own
+    // module transform, which correctly synthesizes `web-push`'s named exports even when it is
+    // plain CommonJS with no `exports` map. Node's native ESM loader (what `tsx watch` — and
+    // this repo's `npm run dev -w apps/api` — actually uses) relies on a static scan
+    // (cjs-module-lexer) instead, which failed to find `sendNotification`/`WebPushError` and
+    // crashed the whole process on boot. Only a real, unmocked boot catches that gap.
+    const API_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const REPO_ROOT = join(API_ROOT, '..', '..');
+    const tsxBin = join(REPO_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
+
+    const moduleUrl = pathToFileURL(join(API_ROOT, 'src', 'infra', 'webpush', 'index.ts')).href;
+    const checkDir = mkdtempSync(join(tmpdir(), 'webpush-esm-boot-'));
+    const checkFile = join(checkDir, 'check.mts');
+    writeFileSync(
+      checkFile,
+      [
+        `import { getVapidPublicKey, sendPush } from '${moduleUrl}';`,
+        "if (typeof getVapidPublicKey !== 'function' || typeof sendPush !== 'function') {",
+        "  console.error('missing expected exports');",
+        '  process.exit(1);',
+        '}',
+      ].join('\n'),
+    );
+
+    try {
+      const result = spawnSync(tsxBin, [checkFile], {
+        cwd: API_ROOT,
+        encoding: 'utf8',
+        shell: true,
+        timeout: 20_000,
+      });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+    } finally {
+      rmSync(checkDir, { recursive: true, force: true });
+    }
+  }, 25_000);
 });

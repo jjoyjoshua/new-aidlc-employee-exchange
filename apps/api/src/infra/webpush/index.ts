@@ -17,7 +17,13 @@
  * is, so a raw `WebPushError.body`/`.headers`/`.endpoint` or a raw network error can never reach
  * a caller, a log line, or `notification_deliveries.error_detail` (US-032 design note §6.3).
  */
-import { sendNotification, WebPushError } from 'web-push';
+// `web-push` is CommonJS with no `exports` map (`node_modules/web-push/package.json`). Node's
+// ESM loader falls back to a static scan (cjs-module-lexer) to synthesize named exports for the
+// interop, and it does not find `sendNotification`/`WebPushError` there — a named import
+// resolves to `undefined` and throws `SyntaxError` at boot (issue #69). The default export is
+// always synthesized for a CJS module, so destructuring off it is the reliable path.
+import webPush from 'web-push';
+const { sendNotification, WebPushError } = webPush;
 import { config } from '../../config/index.js';
 
 /** The public half of the VAPID key pair — safe to send to the browser as-is; it signs nothing
