@@ -214,9 +214,9 @@ describe('Settings — the responsive column (US-031/AC-11)', () => {
 
     await screen.findByText('Priya Sharma');
     // The full three-width sweep (360/768/1280, no horizontal scroll) is a manual/visual
-    // check, US-033's own job (its own story: "this story verifies; it does not build").
-    // What a unit test CAN prove is that the capped-column structure the breakpoints hang
-    // off actually exists in the rendered DOM.
+    // check, done separately from this unit suite ("this story verifies; it does not
+    // build" is that other story's own framing). What a unit test CAN prove is that the
+    // capped-column structure the breakpoints hang off actually exists in the rendered DOM.
     expect(container.querySelector('.settings__column')).toBeInTheDocument();
   });
 });
