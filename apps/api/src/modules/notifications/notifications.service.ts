@@ -1,8 +1,10 @@
 /**
  * The one send path (US-034/AC-08). `bookings` and `users` call this; it calls neither
- * (`modules/README.md`'s named asymmetry). Every future message story (US-028 confirmation,
- * US-029 cancellation, US-030 reminder) calls `recordAndSend` — there is no second mail path,
- * enforced by `eslint.config.mjs`'s mailer boundary (FR-07).
+ * (`modules/README.md`'s named asymmetry). Every message story composes its own wording HERE,
+ * inside this module (US-028's `sendBookingConfirmation`; US-029/US-030 should add their own
+ * `send*` functions the same way), then calls `recordAndSend` — the caller never receives
+ * pre-written text to pass through. There is no second mail path, enforced by
+ * `eslint.config.mjs`'s mailer boundary (FR-07).
  *
  * **This function is send-then-record, and that is a documented seam, not a finished
  * guarantee (Architect design note §2.3, F-6).** It is correct for the confirmation and
@@ -53,53 +55,82 @@ function safeFailureReason(error: string): MailFailureReason {
   return KNOWN_MAIL_FAILURE_REASONS.has(error) ? (error as MailFailureReason) : 'transport_unknown';
 }
 
+export interface BookingConfirmationInput {
+  bookingId: string;
+  userId: string;
+  /** The account's CURRENT email — read once by the caller (`bookings.router.ts`, from the
+   *  already-loaded session), never re-fetched here (US-028/AC-06, D-02). */
+  email: string;
+  deskNumber: string;
+  date: string;
+}
+
 export function createNotificationsService({ deliveries, send }: NotificationsServiceDeps) {
+  /**
+   * Never throws (AC-07) and never silent (design note §2.2, F-4): a delivery-log write that
+   * itself fails is logged in full, not swallowed by the same guard that protects the caller
+   * from a mail failure. `recorded: false` is the "we know something happened and could not
+   * write it down" signal — the log line below is then the last resort AC-05 actually needs.
+   */
+  async function recordAndSend(input: SendEmailInput): Promise<RecordAndSendResult> {
+    const result = await send({ to: input.recipient, subject: input.subject, body: input.body });
+    const outcome: 'sent' | 'failed' = result.ok ? 'sent' : 'failed';
+    const safeError: MailFailureReason | undefined = result.ok ? undefined : safeFailureReason(result.error);
+
+    if (safeError !== undefined) {
+      logger.error('notification send failed', {
+        kind: input.kind,
+        bookingId: input.bookingId,
+        recipient: input.recipient,
+        reason: safeError,
+      });
+    }
+
+    let recorded = true;
+    try {
+      await deliveries.insertDelivery({
+        bookingId: input.bookingId,
+        userId: input.userId,
+        // This function IS the email path — channel is not an input (design note §2.1, F-12).
+        channel: 'email',
+        kind: input.kind,
+        recipient: input.recipient,
+        outcome,
+        errorDetail: safeError,
+      });
+    } catch (insertError) {
+      recorded = false;
+      logger.error('notification delivery could not be recorded', {
+        kind: input.kind,
+        bookingId: input.bookingId,
+        recipient: input.recipient,
+        sendOutcome: outcome,
+        sendError: safeError,
+        insertError: insertError instanceof Error ? insertError.message : String(insertError),
+      });
+    }
+
+    return safeError === undefined ? { ok: true, recorded } : { ok: false, error: safeError, recorded };
+  }
+
   return {
+    recordAndSend,
+
     /**
-     * Never throws (AC-07) and never silent (design note §2.2, F-4): a delivery-log write that
-     * itself fails is logged in full, not swallowed by the same guard that protects the caller
-     * from a mail failure. `recorded: false` is the "we know something happened and could not
-     * write it down" signal — the log line below is then the last resort AC-05 actually needs.
+     * US-028. Composes the confirmation's wording — this module decides "what the message
+     * should say" (`modules/README.md`), the caller hands over facts, not text (D-01). Every
+     * booking that reaches `outcome.kind === 'ok'` gets exactly one call to this (US-028/AC-05);
+     * there is no parameter here that could suppress it (AC-04 — booking emails are mandatory).
      */
-    async recordAndSend(input: SendEmailInput): Promise<RecordAndSendResult> {
-      const result = await send({ to: input.recipient, subject: input.subject, body: input.body });
-      const outcome: 'sent' | 'failed' = result.ok ? 'sent' : 'failed';
-      const safeError: MailFailureReason | undefined = result.ok ? undefined : safeFailureReason(result.error);
-
-      if (safeError !== undefined) {
-        logger.error('notification send failed', {
-          kind: input.kind,
-          bookingId: input.bookingId,
-          recipient: input.recipient,
-          reason: safeError,
-        });
-      }
-
-      let recorded = true;
-      try {
-        await deliveries.insertDelivery({
-          bookingId: input.bookingId,
-          userId: input.userId,
-          // This function IS the email path — channel is not an input (design note §2.1, F-12).
-          channel: 'email',
-          kind: input.kind,
-          recipient: input.recipient,
-          outcome,
-          errorDetail: safeError,
-        });
-      } catch (insertError) {
-        recorded = false;
-        logger.error('notification delivery could not be recorded', {
-          kind: input.kind,
-          bookingId: input.bookingId,
-          recipient: input.recipient,
-          sendOutcome: outcome,
-          sendError: safeError,
-          insertError: insertError instanceof Error ? insertError.message : String(insertError),
-        });
-      }
-
-      return safeError === undefined ? { ok: true, recorded } : { ok: false, error: safeError, recorded };
+    async sendBookingConfirmation(input: BookingConfirmationInput): Promise<RecordAndSendResult> {
+      return recordAndSend({
+        kind: 'confirmation',
+        bookingId: input.bookingId,
+        userId: input.userId,
+        recipient: input.email,
+        subject: `Your desk is booked — ${input.deskNumber} on ${input.date}`,
+        body: `You're booked at desk ${input.deskNumber} on ${input.date}.`,
+      });
     },
   };
 }

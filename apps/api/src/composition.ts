@@ -24,6 +24,7 @@ import { adminBookingsRepository, type AdminBookingsRepository } from './modules
 import { createAdminBookingsService } from './modules/bookings/admin-bookings.service.js';
 import { desksRepository, type DesksRepository } from './modules/desks/desks.repository.js';
 import { createDesksService } from './modules/desks/desks.service.js';
+import { notificationsService, type NotificationsService } from './modules/notifications/notifications.service.js';
 import { usersRepository, type UsersRepository } from './modules/users/users.repository.js';
 import { createUsersService } from './modules/users/users.service.js';
 import { usersAuthAdapter, type UsersAuthAdapter } from './modules/users/users.adapter.js';
@@ -74,6 +75,11 @@ export interface BuildAppOptions {
    *  (`domain/generate-reset-password.ts` takes `randomInt` as a parameter, never reading
    *  `crypto` itself, design note §5.1). */
   randomInt?: (maxExclusive: number) => number;
+  /** US-028 test seam — overrides the real `notificationsService`, which reads `MAIL_*` config
+   *  through `infra/mailer`. Every existing `POST /api/bookings` test builds a `Config` fixture
+   *  with no mail keys (`bookings.routes.spec.ts`), so a test that does not need to exercise
+   *  mail behaviour must not hit the real singleton (US-028/D-04). */
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation'>;
 }
 
 /** Assemble the application. Every dependency is overridable, and none has to be. */
@@ -138,7 +144,10 @@ export function buildApp(options: BuildAppOptions = {}): Express {
       officeTimezone,
     }),
     adminRouter: createAdminRouter({ bookings: adminBookingsService, desks: desksService, users: usersService }),
-    bookingsRouter: createBookingsRouter({ service: bookingsService }),
+    bookingsRouter: createBookingsRouter({
+      service: bookingsService,
+      notifications: options.notifications ?? notificationsService,
+    }),
     requireSession: session,
   });
 }

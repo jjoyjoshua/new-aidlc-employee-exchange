@@ -18,11 +18,16 @@ import {
   type DateRefusal,
 } from '@desk-booking/contracts';
 import { ERROR_CODES, badRequest, conflict, notFound, unauthorized, unprocessable } from '../../http/errors.js';
+import { logger } from '../../infra/logger/index.js';
+import type { NotificationsService } from '../notifications/notifications.service.js';
 import type { BookingsService } from './bookings.service.js';
 import '../../http/request-user.js';
 
 export interface BookingsRouterDeps {
   service: BookingsService;
+  /** US-028. Only `sendBookingConfirmation` is used — narrowed so a fake in tests needs to
+   *  implement nothing else (D-04, `composition.ts`'s `BuildAppOptions.notifications` seam). */
+  notifications: Pick<NotificationsService, 'sendBookingConfirmation'>;
 }
 
 /**
@@ -51,7 +56,7 @@ function requireUser(req: { user?: { id: string; email: string } }) {
   return user;
 }
 
-export function createBookingsRouter({ service }: BookingsRouterDeps): Router {
+export function createBookingsRouter({ service, notifications }: BookingsRouterDeps): Router {
   const router = Router();
 
   /**
@@ -112,8 +117,18 @@ export function createBookingsRouter({ service }: BookingsRouterDeps): Router {
   /**
    * US-007/FR-01–FR-04. Validates, delegates to `createBooking` (which runs the date guard, the
    * desk guard, then the no-precheck insert — D-04), and maps its outcome to a status code.
-   * `confirmationEmail` is `req.user.email`, already loaded by `requireSession` — no second read,
-   * no call into `modules/notifications` (spec.md's AC-04 constraint).
+   * `confirmationEmail` is `req.user.email`, already loaded by `requireSession` — no second read.
+   *
+   * US-028/AC-01, AC-06. The insert IS the commit point (a single-row write); `sendBookingConfirmation`
+   * fires immediately after, using the SAME `user.email` the response already carries — never a
+   * second read of `user_profiles` (design note US-028/D-02). Only the `outcome.kind === 'ok'`
+   * branch reaches this, and the desk/user partial-unique indexes make that branch reachable at
+   * most once per booking — a retry after an ambiguous failure lands on `desk_conflict`/
+   * `user_conflict` instead, never a second `ok` (US-028/AC-05, US-007/AC-10).
+   *
+   * US-028/AC-07, D-05. `recordAndSend`'s own contract is "never throws" (US-034), but this
+   * `try/catch` does not trust that from three files away — a caught error is logged and the
+   * booking's response ships regardless. The booking already committed; nothing here can lose it.
    */
   router.post('/', async (req, res, next) => {
     try {
@@ -143,6 +158,23 @@ export function createBookingsRouter({ service }: BookingsRouterDeps): Router {
         // US-007/AC-05 — the user-per-day index fired. The caller already holds a Confirmed
         // booking for that date, made elsewhere between page load and this request.
         throw conflict(ERROR_CODES.already_booked_that_date, 'You already have a booking for that date.');
+      }
+
+      try {
+        await notifications.sendBookingConfirmation({
+          bookingId: outcome.booking.id,
+          userId: user.id,
+          email: user.email,
+          deskNumber: outcome.booking.deskNumber,
+          date: outcome.booking.date,
+        });
+      } catch (notifyError) {
+        // D-05 — defence beyond recordAndSend's own "never throws" contract (US-034/AC-07).
+        // The booking already committed; this must never turn a 201 into a 500.
+        logger.error('booking confirmation send threw unexpectedly', {
+          bookingId: outcome.booking.id,
+          error: notifyError instanceof Error ? notifyError.message : String(notifyError),
+        });
       }
 
       res.status(201).json({ ...outcome.booking, confirmationEmail: user.email });

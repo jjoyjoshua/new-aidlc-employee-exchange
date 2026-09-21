@@ -18,4 +18,11 @@ transport rejects, which is what makes §4.3's "a retry resends only what failed
 **US-030 must extend `recordAndSend`, not write a second function** — a second path breaks
 AC-08, the criterion this module exists to hold.
 
-Message wording (subject, body) is each calling story's own — this module does not compose it.
+**US-028 corrects an earlier framing.** Message wording is composed *inside this module*, not
+handed in by the caller — that is what "this module decides ... what the message should say"
+(`../README.md`) actually means. `sendBookingConfirmation(input)` takes plain facts (email,
+desk number, date) and composes the confirmation's subject/body itself, then calls
+`recordAndSend`. `bookings.router.ts` calls `sendBookingConfirmation`, never `recordAndSend`
+directly, and never composes text. US-029/US-030 should add their own `send*` functions the
+same way, each composing its own wording, rather than receiving pre-written text from `bookings`
+or `users`.

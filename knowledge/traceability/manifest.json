@@ -1378,7 +1378,10 @@
         "AC-07",
         "AC-08"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/modules/notifications/notifications.service.spec.ts",
+        "apps/api/src/modules/bookings/bookings.routes.spec.ts"
+      ],
       "screens": []
     },
     "US-029": {

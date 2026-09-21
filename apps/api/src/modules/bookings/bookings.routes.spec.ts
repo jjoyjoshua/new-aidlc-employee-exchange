@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../composition.js';
 import { setConfigForTesting, type Config } from '../../config/index.js';
 import type { SessionVerifier } from '../../http/middleware/require-session.js';
+import type { BookingConfirmationInput, NotificationsService, RecordAndSendResult } from '../notifications/notifications.service.js';
 import type { AvailabilityRepository } from './bookings.repository.js';
 import {
   activeDeskRow,
@@ -66,6 +67,33 @@ const NOW_MS = () => Date.parse(`${TODAY}T12:00:00Z`);
 
 const noRows: AvailabilityRepository = emptyAvailabilityRepository;
 
+/**
+ * US-028/D-04. A recording no-op — every existing test in this file (US-007/009/011) creates a
+ * booking without caring what happens to the confirmation, and this file's `Config` fixture
+ * below carries no `MAIL_*` keys, so the REAL `notificationsService` must never be reached here.
+ * `calls` is read back as plain data (never asserted as a mock call) by this story's own tests.
+ */
+function recordingNotifications(
+  result: RecordAndSendResult = { ok: true, recorded: true },
+): Pick<NotificationsService, 'sendBookingConfirmation'> & { calls: BookingConfirmationInput[] } {
+  const calls: BookingConfirmationInput[] = [];
+  return {
+    calls,
+    async sendBookingConfirmation(input) {
+      calls.push(input);
+      return result;
+    },
+  };
+}
+
+function throwingNotifications(): Pick<NotificationsService, 'sendBookingConfirmation'> {
+  return {
+    async sendBookingConfirmation() {
+      throw new Error('unexpected notifications failure');
+    },
+  };
+}
+
 beforeEach(() => {
   setConfigForTesting({
     NODE_ENV: 'test',
@@ -77,7 +105,11 @@ beforeEach(() => {
   } as unknown as Config);
 });
 
-function appWith(options: { rows?: Row[]; availability?: AvailabilityRepository }) {
+function appWith(options: {
+  rows?: Row[];
+  availability?: AvailabilityRepository;
+  notifications?: Pick<NotificationsService, 'sendBookingConfirmation'>;
+}) {
   const rows = options.rows ?? [EMPLOYEE, MUST_CHANGE_PASSWORD];
 
   const profiles = {
@@ -100,6 +132,7 @@ function appWith(options: { rows?: Row[]; availability?: AvailabilityRepository 
     profiles,
     verifier,
     availability: options.availability ?? noRows,
+    notifications: options.notifications ?? recordingNotifications(),
     nowMs: NOW_MS,
   });
 }
@@ -315,6 +348,79 @@ describe('POST /api/bookings — a valid request creates a Confirmed booking (US
   });
 });
 
+describe('POST /api/bookings — sends exactly one confirmation, to the owner, naming the desk and date (US-028/AC-01, AC-02, AC-06)', () => {
+  it('calls sendBookingConfirmation once with the callers email, the new booking id, the desk and the date (US-028/AC-01, US-028/AC-02, US-028/AC-06)', async () => {
+    const notifications = recordingNotifications();
+    const app = appWith({
+      notifications,
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          return { kind: 'ok', id: 'new-booking-id' };
+        },
+      },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(201);
+    expect(notifications.calls).toEqual([
+      {
+        bookingId: 'new-booking-id',
+        userId: EMPLOYEE.id,
+        email: EMPLOYEE.email,
+        deskNumber: 'A-02',
+        date: TODAY,
+      },
+    ]);
+  });
+});
+
+describe('POST /api/bookings — a mail failure never loses the booking (US-028/AC-07)', () => {
+  it('still returns 201 when the confirmation send reports a failure (US-028/AC-07)', async () => {
+    const app = appWith({
+      notifications: recordingNotifications({ ok: false, error: 'transport_unreachable', recorded: true }),
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          return { kind: 'ok', id: 'new-booking-id' };
+        },
+      },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(201);
+    expect(response.body.id).toBe('new-booking-id');
+  });
+
+  it('still returns 201 even when sendBookingConfirmation throws unexpectedly — D-05, defence beyond recordAndSends own contract (US-028/AC-07)', async () => {
+    const app = appWith({
+      notifications: throwingNotifications(),
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          return { kind: 'ok', id: 'new-booking-id' };
+        },
+      },
+    });
+
+    const response = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+
+    expect(response.status).toBe(201);
+    expect(response.body.id).toBe('new-booking-id');
+  });
+});
+
 describe('POST /api/bookings — the date guard is enforced server-side, bypassing the client entirely (US-007/AC-11)', () => {
   const refusesBeforeAnyDeskLookup: AvailabilityRepository = {
     ...emptyAvailabilityRepository,
@@ -453,6 +559,34 @@ describe('POST /api/bookings — two sequential requests, same user and date (US
     const second = await createBooking(app, { date: TODAY, deskId: DESK_ID });
     expect(second.status).toBe(409);
     expect(second.body.code).toBe('already_booked_that_date');
+  });
+});
+
+describe('POST /api/bookings — a retried request never sends a second confirmation (US-028/AC-05, same shape as US-007/AC-09/AC-10)', () => {
+  it('sends exactly one confirmation across two sequential identical requests, since only the first reaches outcome.kind === ok (US-028/AC-05)', async () => {
+    let attempts = 0;
+    const notifications = recordingNotifications();
+    const app = appWith({
+      notifications,
+      availability: {
+        ...emptyAvailabilityRepository,
+        async getDeskById() {
+          return DESK;
+        },
+        async insertConfirmedBooking() {
+          attempts += 1;
+          return attempts === 1 ? { kind: 'ok', id: `booking-${attempts}` } : { kind: 'user_conflict' };
+        },
+      },
+    });
+
+    const first = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+    expect(first.status).toBe(201);
+
+    const second = await createBooking(app, { date: TODAY, deskId: DESK_ID });
+    expect(second.status).toBe(409);
+
+    expect(notifications.calls).toHaveLength(1);
   });
 });
 
