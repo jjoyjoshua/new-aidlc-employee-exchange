@@ -36,6 +36,7 @@ Every development spec package in this repo. **Check here before creating a new 
 | US-029 | Get a cancellation email when my booking is voided | Medium | implemented | [`US-029-booking-cancellation-email/`](US-029-booking-cancellation-email/) |
 | US-030 | Get a reminder email the day before | Complex | implemented | [`US-030-day-before-reminder-email/`](US-030-day-before-reminder-email/) |
 | US-031 | Turn browser push alerts on or off | Complex | implemented | [`US-031-turn-push-alerts-on-or-off/`](US-031-turn-push-alerts-on-or-off/) |
+| US-032 | Get a push alert when a booking is made or cancelled | Complex | implemented | [`US-032-push-alerts-on-book-and-cancel/`](US-032-push-alerts-on-book-and-cancel/) |
 
 ## How to update
 

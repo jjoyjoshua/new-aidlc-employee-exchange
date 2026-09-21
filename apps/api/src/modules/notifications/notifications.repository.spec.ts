@@ -472,3 +472,95 @@ describe('notificationsRepository.deletePushSubscriptions — ALL of the account
     }
   });
 });
+
+describe('notificationsRepository.listPushSubscriptions — an explicit column list, one user (US-032/FR-04)', () => {
+  it('selects endpoint, p256dh and auth for the given user_id only', async () => {
+    const rows = [{ endpoint: ENDPOINT, p256dh: 'p256dh-value', auth: 'auth-value' }];
+    const { calls, client } = fakeSupabase({ data: rows, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      const result = await notificationsRepository.listPushSubscriptions(USER_ID);
+
+      expect(result).toEqual(rows);
+      expect(calls).toEqual([
+        { table: 'push_subscriptions', select: 'endpoint, p256dh, auth', eq: [['user_id', USER_ID]] },
+      ]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the read itself errors, rather than reporting an empty list', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.listPushSubscriptions(USER_ID)).rejects.toThrow(
+        /push subscription list failed/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('notificationsRepository.deletePushSubscriptionByEndpoint — one browser, not the account (US-032/FR-09)', () => {
+  it('deletes by endpoint, never by user_id', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await notificationsRepository.deletePushSubscriptionByEndpoint(ENDPOINT);
+
+      expect(calls).toEqual([{ table: 'push_subscriptions', delete: true, eq: [['endpoint', ENDPOINT]] }]);
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the delete itself errors, rather than reporting success', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.deletePushSubscriptionByEndpoint(ENDPOINT)).rejects.toThrow(
+        /push subscription delete-by-endpoint failed/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});
+
+describe('notificationsRepository.markPushSubscriptionDelivered — last_success_at only (US-032/D-19)', () => {
+  it('stamps last_success_at for the given endpoint', async () => {
+    const { calls, client } = fakeSupabase({ data: null, error: null });
+    setSupabaseForTesting(client);
+
+    try {
+      await notificationsRepository.markPushSubscriptionDelivered(ENDPOINT);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.table).toBe('push_subscriptions');
+      expect(calls[0]!.eq).toEqual([['endpoint', ENDPOINT]]);
+      expect(calls[0]!.update).toHaveProperty('last_success_at');
+      expect(typeof (calls[0]!.update as { last_success_at: string }).last_success_at).toBe('string');
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+
+  it('throws when the update itself errors', async () => {
+    const { client } = fakeSupabase({ data: null, error: { code: 'XX000', message: 'boom' } });
+    setSupabaseForTesting(client);
+
+    try {
+      await expect(notificationsRepository.markPushSubscriptionDelivered(ENDPOINT)).rejects.toThrow(
+        /push subscription delivery stamp failed/,
+      );
+    } finally {
+      setSupabaseForTesting(undefined);
+    }
+  });
+});

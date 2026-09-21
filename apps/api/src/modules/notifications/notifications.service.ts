@@ -18,18 +18,35 @@
  *
  * `recordAndSend` takes no transaction and opens none (`app-architecture.md` §4.1 step 6) — a
  * caller invokes it once its OWN write has already committed.
+ *
+ * **`recordAndSend` is three paths behind one name, not two (US-032 design note §3.1).** Email
+ * (send-then-record) and the reminder claim-first path are unchanged by this story. A
+ * `channel: 'push'` input takes a third arm, `recordAndSendPush`, which fans out to every
+ * opted-in subscription — still through this one function, never a second send path
+ * (US-034/AC-08, `modules/README.md`). `sendBookingConfirmation`/`sendBookingCancellation` are
+ * what call it: each awaits its email send, then fans a push out internally, unconditionally,
+ * wrapped so it can never throw out and never delay past its own outcome — the push is additive,
+ * never a gate on the email (US-032/AC-07, AC-08).
  */
 import type { OfficeDate } from '@desk-booking/contracts';
 import { cancellationCopy, type CancellationSource } from '../../domain/cancellation-copy.js';
 import { formatShortDate } from '../../domain/format-display-date.js';
 import { logger } from '../../infra/logger/index.js';
 import { sendMail, type MailFailureReason, type MailMessage } from '../../infra/mailer/index.js';
-import { getVapidPublicKey } from '../../infra/webpush/index.js';
-import { notificationsRepository, type NotificationKind, type NotificationsRepository } from './notifications.repository.js';
+import { getVapidPublicKey, sendPush as sendPushNotification, type PushFailureReason } from '../../infra/webpush/index.js';
+import {
+  notificationsRepository,
+  type NotificationKind,
+  type NotificationsRepository,
+  type PushSubscriptionRecipient,
+} from './notifications.repository.js';
 
 export interface NotificationsServiceDeps {
   deliveries: NotificationsRepository;
   send: (message: MailMessage) => ReturnType<typeof sendMail>;
+  /** US-032. `infra/webpush.sendPush` — the one send path into a push service, enforced by
+   *  `eslint.config.mjs`'s `WEBPUSH_BAN` (only this module may import `infra/webpush` at all). */
+  sendPush: (subscription: PushSubscriptionRecipient, payload: string) => Promise<{ ok: true } | { ok: false; error: PushFailureReason }>;
 }
 
 export interface SendEmailInput {
@@ -43,9 +60,30 @@ export interface SendEmailInput {
   body: string;
 }
 
+/**
+ * US-032/FR-03, AC-06. `kind` deliberately excludes `'reminder'` — a compile error, not a
+ * runtime branch (design note §3.2, C3). `NotificationKind` (the repository's enum) still
+ * includes it, because `notification_deliveries.kind` genuinely can hold it for email; this
+ * narrower type is what makes a push reminder unrepresentable at the one call site that matters.
+ *
+ * No `channel` field on `SendEmailInput`, and `'push'` here, is the discriminant `recordAndSend`
+ * switches on (`'channel' in input`) — chosen over a `channel: 'email'` field on every existing
+ * email input so that every current caller of `recordAndSend` keeps typechecking unmodified.
+ */
+export interface SendPushInput {
+  channel: 'push';
+  kind: 'confirmation' | 'cancellation';
+  bookingId: string;
+  userId: string;
+  title: string;
+  body: string;
+}
+
+export type SendNotificationInput = SendEmailInput | SendPushInput;
+
 export type RecordAndSendResult =
   | { ok: true; recorded: boolean }
-  | { ok: false; error: MailFailureReason; recorded: boolean };
+  | { ok: false; error: MailFailureReason | PushFailureReason; recorded: boolean };
 
 /** `MailFailureReason` closes this off at the type level (D-06), but nothing stops a
  *  misbehaving transport from returning something else at runtime — TypeScript has no runtime
@@ -111,14 +149,15 @@ export interface PushSubscriptionInput {
   userAgent: string | undefined;
 }
 
-export function createNotificationsService({ deliveries, send }: NotificationsServiceDeps) {
+export function createNotificationsService({ deliveries, send, sendPush }: NotificationsServiceDeps) {
   /**
    * Never throws (AC-07) and never silent (design note §2.2, F-4): a delivery-log write that
    * itself fails is logged in full, not swallowed by the same guard that protects the caller
    * from a mail failure. `recorded: false` is the "we know something happened and could not
    * write it down" signal — the log line below is then the last resort AC-05 actually needs.
    */
-  async function recordAndSend(input: SendEmailInput): Promise<RecordAndSendResult> {
+  async function recordAndSend(input: SendNotificationInput): Promise<RecordAndSendResult> {
+    if ('channel' in input) return recordAndSendPush(input);
     if (input.kind === 'reminder') return recordAndSendClaimFirst(input);
 
     const result = await send({ to: input.recipient, subject: input.subject, body: input.body });
@@ -206,6 +245,146 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
     }
   }
 
+  /**
+   * US-032/FR-04, AC-05, V-14, BR-001.15. The flag is checked FIRST and `push_subscriptions` is
+   * NOT read at all when it is false — the order is the acceptance criterion (design note §3.3,
+   * `db-design.md:185`). A test asserting only "zero pushes sent" would pass a
+   * subscriptions-first implementation too; this ordering is what a call-log assertion proves.
+   */
+  async function findPushRecipients(userId: string): Promise<PushSubscriptionRecipient[]> {
+    const optedIn = await deliveries.getPushOptIn(userId);
+    if (!optedIn) return [];
+    return deliveries.listPushSubscriptions(userId);
+  }
+
+  /**
+   * US-032/FR-05, FR-06, FR-08, FR-09, AC-09, AC-10. One `sendPush` call and one
+   * `notification_deliveries` row per subscription per event — no retry loop. A `404`/`410`
+   * (`subscription_gone`) writes the failed row FIRST, then hard-deletes that one
+   * `push_subscriptions` row BY ENDPOINT, never by `user_id` (design note §3.1, C9,
+   * `db-design.md` §1.4). Every subscription is sent concurrently and the whole fan-out is
+   * awaited (design note C16). The endpoint is logged, when it must be, only under the field
+   * name `endpoint` — never `recipient` — so `infra/logger`'s existing redaction catches it
+   * (design note §6.1, C5).
+   */
+  async function recordAndSendPush(input: SendPushInput): Promise<RecordAndSendResult> {
+    const recipients = await findPushRecipients(input.userId);
+    if (recipients.length === 0) return { ok: true, recorded: true };
+
+    const payload = JSON.stringify({ title: input.title, body: input.body });
+
+    const outcomes = await Promise.all(
+      recipients.map(async (recipient) => {
+        const result = await sendPush(recipient, payload);
+        const outcome: 'sent' | 'failed' = result.ok ? 'sent' : 'failed';
+
+        if (!result.ok) {
+          logger.error('push notification send failed', {
+            kind: input.kind,
+            bookingId: input.bookingId,
+            endpoint: recipient.endpoint,
+            reason: result.error,
+          });
+        }
+
+        let recorded = true;
+        try {
+          await deliveries.insertDelivery({
+            bookingId: input.bookingId,
+            userId: input.userId,
+            channel: 'push',
+            kind: input.kind,
+            recipient: recipient.endpoint,
+            outcome,
+            errorDetail: result.ok ? undefined : result.error,
+          });
+        } catch (insertError) {
+          recorded = false;
+          logger.error('push delivery could not be recorded', {
+            kind: input.kind,
+            bookingId: input.bookingId,
+            endpoint: recipient.endpoint,
+            sendOutcome: outcome,
+            insertError: insertError instanceof Error ? insertError.message : String(insertError),
+          });
+        }
+
+        if (!result.ok && result.error === 'subscription_gone') {
+          try {
+            await deliveries.deletePushSubscriptionByEndpoint(recipient.endpoint);
+          } catch (deleteError) {
+            logger.error('gone push subscription could not be deleted', {
+              endpoint: recipient.endpoint,
+              deleteError: deleteError instanceof Error ? deleteError.message : String(deleteError),
+            });
+          }
+        } else if (result.ok) {
+          try {
+            await deliveries.markPushSubscriptionDelivered(recipient.endpoint);
+          } catch (stampError) {
+            logger.error('push subscription delivery stamp failed', {
+              endpoint: recipient.endpoint,
+              stampError: stampError instanceof Error ? stampError.message : String(stampError),
+            });
+          }
+        }
+
+        return result.ok
+          ? { ok: true as const, recorded }
+          : { ok: false as const, error: result.error, recorded };
+      }),
+    );
+
+    const failed = outcomes.find((o) => !o.ok);
+    const allRecorded = outcomes.every((o) => o.recorded);
+    return failed && !failed.ok ? { ok: false, error: failed.error, recorded: allRecorded } : { ok: true, recorded: allRecorded };
+  }
+
+  /**
+   * US-032/FR-02, FR-07, AC-01, AC-03, AC-04. Composes the push's own title/body — reusing
+   * `cancellationCopy`'s actor-clause decision (BR-001.20) but never its `includeRebookInvite`
+   * or the email's assembled string (design note §4.2, §4.3). `kind: undefined` selects the
+   * confirmation wording; anything else takes `cancellationSource`, required in that branch.
+   * Never throws: a failure here must not affect the email this always runs alongside (AC-07,
+   * AC-08) — the try/catch is the whole of that guarantee, and it is deliberately the ONLY
+   * thing standing between a `findPushRecipients`/`sendPush` failure and the caller.
+   */
+  async function sendBookingPush(
+    input:
+      | { kind: 'confirmation'; bookingId: string; userId: string; deskNumber: string; date: OfficeDate }
+      | {
+          kind: 'cancellation';
+          bookingId: string;
+          userId: string;
+          deskNumber: string;
+          date: OfficeDate;
+          cancellationSource: CancellationSource;
+        },
+  ): Promise<void> {
+    try {
+      const dateLabel = formatShortDate(input.date);
+      const title = input.kind === 'confirmation' ? 'Desk booking confirmed' : 'Desk booking cancelled';
+      const actorClause = input.kind === 'cancellation' ? cancellationCopy(input.cancellationSource).actorClause : '';
+      const verb = input.kind === 'confirmation' ? 'is booked' : `was cancelled${actorClause}`;
+      const body = `Your desk ${input.deskNumber} for ${dateLabel} ${verb}.`;
+
+      await recordAndSendPush({
+        channel: 'push',
+        kind: input.kind,
+        bookingId: input.bookingId,
+        userId: input.userId,
+        title,
+        body,
+      });
+    } catch (error) {
+      logger.error('push notification fan-out failed', {
+        kind: input.kind,
+        bookingId: input.bookingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   return {
     recordAndSend,
 
@@ -214,9 +393,13 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
      * should say" (`modules/README.md`), the caller hands over facts, not text (D-01). Every
      * booking that reaches `outcome.kind === 'ok'` gets exactly one call to this (US-028/AC-05);
      * there is no parameter here that could suppress it (AC-04 — booking emails are mandatory).
+     *
+     * US-032/FR-02, C1, C2. The push fan-out is internal to this function — no router or caller
+     * change, and no public `sendBookingPush` — and runs AFTER the email, unconditionally
+     * (never gated on `mail`'s outcome), returning `mail` unchanged either way (AC-07, AC-08).
      */
     async sendBookingConfirmation(input: BookingConfirmationInput): Promise<RecordAndSendResult> {
-      return recordAndSend({
+      const mail = await recordAndSend({
         kind: 'confirmation',
         bookingId: input.bookingId,
         userId: input.userId,
@@ -224,6 +407,16 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
         subject: `Your desk is booked — ${input.deskNumber} on ${input.date}`,
         body: `You're booked at desk ${input.deskNumber} on ${input.date}.`,
       });
+
+      await sendBookingPush({
+        kind: 'confirmation',
+        bookingId: input.bookingId,
+        userId: input.userId,
+        deskNumber: input.deskNumber,
+        date: input.date,
+      });
+
+      return mail;
     },
 
     /**
@@ -233,6 +426,9 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
      * calls this exactly once per cancelled booking (AC-01, AC-03, AC-09); there is no parameter
      * here that could suppress it (AC-08). The actor-naming decision itself is `domain/`'s
      * (`cancellationCopy`, BR-001.20) — this function only assembles the string.
+     *
+     * US-032/FR-02, C1, C2. Same push fan-out discipline as `sendBookingConfirmation` above:
+     * internal, after the email, unconditional, `mail`'s result returned unchanged.
      */
     async sendBookingCancellation(input: BookingCancellationInput): Promise<RecordAndSendResult> {
       const dateLabel = formatShortDate(input.date);
@@ -240,7 +436,7 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
       const rebookInvite = includeRebookInvite ? ' You can book another desk any time.' : '';
       const body = `Your desk ${input.deskNumber} for ${dateLabel} was cancelled${actorClause}.${rebookInvite}`;
 
-      return recordAndSend({
+      const mail = await recordAndSend({
         kind: 'cancellation',
         bookingId: input.bookingId,
         userId: input.userId,
@@ -248,6 +444,17 @@ export function createNotificationsService({ deliveries, send }: NotificationsSe
         subject: `Your desk booking was cancelled — ${input.deskNumber} on ${dateLabel}`,
         body,
       });
+
+      await sendBookingPush({
+        kind: 'cancellation',
+        bookingId: input.bookingId,
+        userId: input.userId,
+        deskNumber: input.deskNumber,
+        date: input.date,
+        cancellationSource: input.cancellationSource,
+      });
+
+      return mail;
     },
 
     /**
@@ -333,4 +540,5 @@ export type NotificationsService = ReturnType<typeof createNotificationsService>
 export const notificationsService: NotificationsService = createNotificationsService({
   deliveries: notificationsRepository,
   send: sendMail,
+  sendPush: sendPushNotification,
 });

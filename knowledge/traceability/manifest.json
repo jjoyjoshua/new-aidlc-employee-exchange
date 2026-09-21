@@ -1496,7 +1496,11 @@
         "AC-09",
         "AC-10"
       ],
-      "tests": [],
+      "tests": [
+        "apps/api/src/infra/webpush/index.spec.ts",
+        "apps/api/src/modules/notifications/notifications.repository.spec.ts",
+        "apps/api/src/modules/notifications/notifications.service.spec.ts"
+      ],
       "screens": [
         "SCR-004"
       ]

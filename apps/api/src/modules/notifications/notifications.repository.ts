@@ -44,6 +44,14 @@ export interface PushSubscriptionRow {
   userAgent: string | undefined;
 }
 
+/** What `listPushSubscriptions` returns (US-032/FR-04) — exactly the three fields
+ *  `infra/webpush.sendPush` needs, an explicit column list rather than `select('*')`. */
+export interface PushSubscriptionRecipient {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
 export interface NotificationsRepository {
   insertDelivery(row: DeliveryRow): Promise<void>;
   /** US-030/D-02. "Write first, then explain" — the SAME discipline `cancelOwnedBooking`/
@@ -70,6 +78,20 @@ export interface NotificationsRepository {
   /** US-031/FR-04. ALL of the account's subscriptions, not just one browser's — AC-03 is
    *  unqualified (design note §4.3). Called AFTER `setPushOptIn(false)`, never before. */
   deletePushSubscriptions(userId: string): Promise<void>;
+
+  /** US-032/FR-04. Read only by `findPushRecipients` (`notifications.service.ts`), and only
+   *  AFTER `getPushOptIn` has already returned true (design note §3.3) — this function itself
+   *  does not check the flag, so calling it directly would breach AC-05's ordering guarantee. */
+  listPushSubscriptions(userId: string): Promise<PushSubscriptionRecipient[]>;
+  /** US-032/FR-09. The ONE reason a `push_subscriptions` row is hard-deleted post-US-031: the
+   *  push service answered 404/410, meaning this subscription no longer exists anywhere
+   *  (`db-design.md` §1.4). Deletes by `endpoint`, never by `user_id` — a 404 names one browser,
+   *  not the whole account. */
+  deletePushSubscriptionByEndpoint(endpoint: string): Promise<void>;
+  /** US-032/FR-09 (design note C19). Stamps `last_success_at` after a successful send. A
+   *  failure to stamp is the caller's to log, not this function's to retry — nothing else reads
+   *  this column. */
+  markPushSubscriptionDelivered(endpoint: string): Promise<void>;
 }
 
 export const notificationsRepository: NotificationsRepository = {
@@ -157,5 +179,30 @@ export const notificationsRepository: NotificationsRepository = {
     const { error } = await supabase().from('push_subscriptions').delete().eq('user_id', userId);
 
     if (error) throw new Error(`push subscription delete failed: ${error.message}`);
+  },
+
+  async listPushSubscriptions(userId) {
+    const { data, error } = await supabase()
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth')
+      .eq('user_id', userId);
+
+    if (error) throw new Error(`push subscription list failed: ${error.message}`);
+    return data as PushSubscriptionRecipient[];
+  },
+
+  async deletePushSubscriptionByEndpoint(endpoint) {
+    const { error } = await supabase().from('push_subscriptions').delete().eq('endpoint', endpoint);
+
+    if (error) throw new Error(`push subscription delete-by-endpoint failed: ${error.message}`);
+  },
+
+  async markPushSubscriptionDelivered(endpoint) {
+    const { error } = await supabase()
+      .from('push_subscriptions')
+      .update({ last_success_at: new Date().toISOString() })
+      .eq('endpoint', endpoint);
+
+    if (error) throw new Error(`push subscription delivery stamp failed: ${error.message}`);
   },
 };
