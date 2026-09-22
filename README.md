@@ -38,7 +38,29 @@ needs it directly. `npm test`, `npm run build` and `npm run typecheck` already d
 npm run build:contracts
 ```
 
-### 1.3 Create the Supabase project and apply the schema
+### 1.3 Get a database
+
+There are two ways to do this. Most people should take the first.
+
+#### Option A — use the existing development database (recommended)
+
+A Supabase project already exists: it is the one this application was developed against, with
+the schema applied and desk fixtures loaded. **Ask the repository author
+([@jjoyjoshua](https://github.com/jjoyjoshua)) for the credentials** — the Project URL, the anon
+key and the service-role key — and paste them into your `.env` files (sections 1.5 and 1.6).
+Nothing else in this section applies: no project to create, no migrations to push, no seed to
+run.
+
+Two things to hold onto once you have them:
+
+- **The credentials are shared and real.** Keep them out of git, out of screenshots and out of
+  chat logs. The service-role key bypasses every RLS policy in the project
+  ([ADR-001](knowledge/decisions/ADR-001-server-mediated-supabase-access.md)).
+- **The data is shared too.** Bookings, desks and accounts you create are visible to everyone
+  else using it, and anything you delete is gone for them as well. If you need to work against
+  data nobody else can disturb, take option B.
+
+#### Option B — create your own Supabase project
 
 1. Create a project at [supabase.com](https://supabase.com) (or start a local stack with
    `npx supabase start`).
@@ -75,6 +97,11 @@ Push notifications need one key pair. Generate it once and paste both halves int
 ```bash
 npx web-push generate-vapid-keys
 ```
+
+On the shared database (option A), ask the author for their pair instead of generating one.
+Browser push subscriptions are stored in `push_subscriptions` and are bound to the public key
+that created them, so a second key pair against the same database makes every existing
+subscription fail to deliver.
 
 ### 1.5 Fill the server `.env`
 
@@ -150,8 +177,10 @@ curl -X POST http://localhost:3000/api/internal/reminders/run -H "Authorization:
 ```
 
 > **First account:** there is no sign-up and no seeded admin — deliberately, since an
-> auto-created admin with a known credential is a security surface of its own. Create the first
-> Admin through the Supabase dashboard or admin API, with a matching `user_profiles` row.
+> auto-created admin with a known credential is a security surface of its own. On the shared
+> database (option A), ask the repository author for a sign-in along with the credentials. On
+> your own project (option B), create the first Admin through the Supabase dashboard or admin
+> API, with a matching `user_profiles` row.
 
 ---
 
